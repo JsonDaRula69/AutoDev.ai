@@ -2,7 +2,7 @@
 
 > **BRANCH:** All work in this plan is conducted on the `pi-foundation` branch. Do NOT push to `main`. The `pi-foundation` branch was created from `main` as a fresh start — all commits land here. `main` is frozen and will not receive any pushes during this work. Upon completion of all sub-plans, `main` will be deprecated and `pi-foundation` will become the new `main` branch (via branch rename or fast-forward merge at the user's discretion).
 
-> **PREREQUISITE:** This plan depends on `.omo/plans/autodev-pi-foundation-1-core.md` being complete. The base extension (T5) must be in place before this plan can execute. This plan can parallelize with Plan 2 (Crew Engine) after Plan 1 completes.
+> **PREREQUISITE:** This plan depends on `.omo/plans/autodev-pi-foundation-1-core.md` being complete. The base extension (T5) must be in place before this plan can execute. This plan runs in parallel with Plan 2 (Crew Engine) using a git worktree — see the PARALLEL EXECUTION STRATEGY below.
 >
 > > **SOURCE OF TRUTH:** During implementation, agents must refer to these resources:
 > > 1. **ARCHITECTURE.md** (root) — the system design specification (§10 Loreguard, §11 Docs Query, §12 Custom Tools, §13 Skills)
@@ -15,8 +15,33 @@
 > > If any source disagrees, ARCHITECTURE.md wins on design, .autodev/reference/ wins on process, and this plan wins on scope.
 
 > **SPLIT FROM:** This is sub-plan 3 of 4 from the master plan `.omo/plans/autodev-pi-foundation.md`. Execute after Plan 1 completes. Can run in parallel with Plan 2.
+
+> **PARALLEL EXECUTION STRATEGY:** This plan runs concurrently with Plan 2 (Crew Engine) using a git worktree to avoid index lock conflicts. Both plans commit to `pi-foundation` — running in the same directory would cause git lock contention.
 >
-> > **CONCURRENT EXECUTION:** Plan 2 (autodev-pi-foundation-2-engine) is running concurrently. Both plans modify files on the same `pi-foundation` branch. To avoid conflicts: (1) Each plan commits ONLY its own module files — Plan 3 touches `extensions/autodev/{loreguard,docs,tools,notepad}/index.ts`, `test/mocks/{embeddings,session-manager}.ts`, `.pi/skills/`, `.autodev/decisions/loreguard.db`, `.autodev/embeddings/vectors.db`, and evidence files. (2) Do NOT commit files owned by Plan 2 (`extensions/autodev/{guardrails,background,delegation}/index.ts`, `test/mocks/pi-session.ts`, `.autodev/config/concurrency.yaml`, `.autodev/active-task.json`). (3) Run `git add` with explicit file paths, never `git add -A` or `git add .`. (4) If a merge conflict occurs, coordinate with the Plan 2 worker — do NOT overwrite their changes.
+> **Setup (before T10 starts):**
+> ```bash
+> # From the main working directory (where Plan 2 is running):
+> git worktree add ../autodev-pi-knowledge -b pi-foundation-3-knowledge pi-foundation
+> cd ../autodev-pi-knowledge
+> bun install  # install deps in the worktree
+> ```
+>
+> **All Plan 3 work (T10, T11, T12) happens in `../autodev-pi-knowledge/`.** The worker operates from this directory for all todos, evidence files, and commits. Evidence path: `../autodev-pi-knowledge/.omo/evidence/`.
+>
+> **Merge back (after Plan 3 completes):**
+> ```bash
+> # From the main working directory:
+> git checkout pi-foundation
+> git merge pi-foundation-3-knowledge  # clean merge — files are disjoint
+> git worktree remove ../autodev-pi-knowledge
+> git branch -d pi-foundation-3-knowledge
+> ```
+>
+> **File disjointness guarantee:** Plan 2 and Plan 3 touch zero overlapping files:
+> - Plan 2: `extensions/autodev/{guardrails,background,delegation}/index.ts`, `test/mocks/pi-session.ts`, `.autodev/config/{concurrency.yaml,active-task.json}`
+> - Plan 3: `extensions/autodev/{loreguard,docs,tools,notepad}/index.ts`, `test/mocks/{embeddings.ts,session-manager.ts}`, `.autodev/decisions/loreguard.db`, `.autodev/embeddings/vectors.db`, `.pi/skills/`
+>
+> **If Plan 2 has already completed** when Plan 3 starts, skip the worktree — run directly on `pi-foundation` in the main directory.
 
 ## TL;DR (For humans)
 
@@ -127,7 +152,7 @@ Critical Path: T5 (from Plan 1) → T10/T11/T12 (all parallel)
 - Commit types: `feat(loreguard)` (T10), `feat(docs)` (T11), `feat(tools)` (T12).
 - Evidence committed alongside code in `.omo/evidence/`.
 - Atomic commits — each todo is independently revertable.
-- All commits land on the `pi-foundation` branch.
+- All commits land on the `pi-foundation-3-knowledge` branch (worktree). After Plan 3 completes, merge into `pi-foundation`. If running sequentially (Plan 2 already done), commit directly to `pi-foundation`.
 
 ## Success criteria
 
