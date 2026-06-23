@@ -5,7 +5,8 @@
  *  1. Validate mutual exclusivity of `category` and `subagent_type`.
  *  2. Route to the right model + system prompt:
  *     - category → look up in category map (built-in + custom config override)
- *     - subagent_type → load agent definition from `.pi/agents/<name>.md`
+ *     - subagent_type → load agent definition from the central
+ *       `~/.AutoDev/agents/<name>.md`
  *  3. Validate the resolved model against `.autodev/config/models.json` allowlist.
  *  4. Enforce anti-re-delegation: the `task` tool is NOT in the spawned
  *     session's tool list, so delegated sessions cannot re-delegate.
@@ -70,7 +71,8 @@ function buildCategoryPrompt(category: CategoryDefinition, userPrompt: string, s
 /**
  * Build the system prompt for a subagent-routed task.
  *
- * Uses the agent's own system prompt (from `.pi/agents/<name>.md` body) as the
+ * Uses the agent's own system prompt (from the central
+ * `~/.AutoDev/agents/<name>.md` body) as the
  * base, with the user's task appended. Skill prompts are appended as a block
  * when provided.
  */
@@ -193,7 +195,7 @@ export async function executeTaskTool(
   } else if (hasSubagent && subagent_type !== undefined) {
     const agent = loadAgent(projectRoot, subagent_type);
     if (agent === undefined) {
-      return err(`unknown subagent_type: "${subagent_type}". No agent file at .pi/agents/${subagent_type}.md.`, {
+      return err(`unknown subagent_type: "${subagent_type}". No agent file at ~/.AutoDev/agents/${subagent_type}.md.`, {
         error: "unknown-subagent",
         subagent_type,
       });

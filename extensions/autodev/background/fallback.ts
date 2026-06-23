@@ -3,10 +3,10 @@
  *
  * Two modes of fallback:
  *
- * - **Proactive**: per-agent `fallback_models` chain loaded from
- *   `.pi/agents/*.md` frontmatter (a `fallback_models` field, comma-separated)
- *   or from `.autodev/config/fallback.json`. When the agent's current model
- *   fails, the next model in the chain takes over.
+ * - **Proactive**: per-agent `fallback_models` chain loaded from the
+ *   central `agents/*.md` frontmatter (a `fallback_models` field,
+ *   comma-separated) or from `.autodev/config/fallback.json`. When the
+ *   agent's current model fails, the next model in the chain takes over.
  *
  * - **Reactive**: on any retryable API error, pick the next available model
  *   from the allowlist (`.autodev/config/models.json`) that has not been
@@ -18,9 +18,10 @@
  * error event arrives.
  */
 import { readFileSync, existsSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
 import type { FallbackConfig } from "./types.js";
 import { classifyError } from "./classifier.js";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 /** Allowlist of approved models (loaded from .autodev/config/models.json). */
 export type ModelAllowlist = readonly string[];
@@ -77,14 +78,28 @@ function parseFallbackModels(raw: string): readonly string[] {
 }
 
 /**
- * Load per-agent fallback chains from `.pi/agents/*.md` frontmatter.
+ * Resolve the central agent definitions directory.
+ *
+ * Agents live at `join(getAgentDir(), "..", "agents")` — the sibling
+ * `agents/` directory of the pi agent config dir. `getAgentDir()` honors
+ * the `PI_CODING_AGENT_DIR` env override for tests.
+ */
+function getCentralAgentsDir(): string {
+  return join(getAgentDir(), "..", "agents");
+}
+
+/**
+ * Load per-agent fallback chains from the central `agents/*.md` frontmatter.
  *
  * Each agent file may declare a `fallback_models` field in its YAML
  * frontmatter (comma-separated model strings). Files without the field
- * are skipped. Missing `.pi/agents/` directory returns an empty config.
+ * are skipped. The `projectRoot` parameter is accepted for API
+ * compatibility but is not used for resolution — agents are a global
+ * per-user resource. Missing central `agents/` directory returns an
+ * empty config.
  */
-export function loadAgentFallbackChains(projectRoot: string): FallbackConfig {
-  const dir = resolve(projectRoot, ".pi/agents");
+export function loadAgentFallbackChains(_projectRoot: string): FallbackConfig {
+  const dir = getCentralAgentsDir();
   if (!existsSync(dir)) return {};
   const chains: Record<string, { fallback_models: readonly string[] }> = {};
   let entries: string[] = [];
@@ -95,7 +110,7 @@ export function loadAgentFallbackChains(projectRoot: string): FallbackConfig {
   }
   for (const name of entries) {
     try {
-      const text = readFileSync(resolve(dir, name), "utf8");
+      const text = readFileSync(join(dir, name), "utf8");
       const fm = parseFrontmatter(text);
       const agentName = fm["name"];
       const raw = fm["fallback_models"];

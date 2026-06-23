@@ -91,6 +91,7 @@ class FakeSpawner implements TaskSpawner {
 // --- Temp project root fixture ----------------------------------------------
 
 let projectRoot: string;
+let savedAgentDirEnv: string | undefined;
 
 beforeEach(() => {
   projectRoot = mkdtempSync(join(tmpdir(), "autodev-delegation-"));
@@ -106,9 +107,20 @@ beforeEach(() => {
       "ollama-cloud/kimi-k2.7-code",
     ]),
   );
+  // Agent resolution reads from the central `~/.AutoDev/agents/` directory
+  // derived via `getAgentDir()`. Redirect `PI_CODING_AGENT_DIR` into the
+  // temp tree so `getAgentDir()` returns `<projectRoot>/agent` and agents
+  // resolve from the sibling `<projectRoot>/agents/` directory.
+  savedAgentDirEnv = process.env["PI_CODING_AGENT_DIR"];
+  process.env["PI_CODING_AGENT_DIR"] = join(projectRoot, "agent");
 });
 
 afterEach(() => {
+  if (savedAgentDirEnv === undefined) {
+    delete process.env["PI_CODING_AGENT_DIR"];
+  } else {
+    process.env["PI_CODING_AGENT_DIR"] = savedAgentDirEnv;
+  }
   rmSync(projectRoot, { recursive: true, force: true });
 });
 
@@ -120,9 +132,10 @@ function writeCategories(map: Record<string, { model: string; description: strin
   );
 }
 
-/** Write a pi agent .md file into the temp project's `.pi/agents/` dir. */
+/** Write a pi agent .md file into the central `agents/` dir (sibling of the
+ * redirected `PI_CODING_AGENT_DIR`). */
 function writeAgent(name: string, model: string, tools: string, body: string): void {
-  const dir = join(projectRoot, ".pi", "agents");
+  const dir = join(projectRoot, "agents");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, `${name}.md`),

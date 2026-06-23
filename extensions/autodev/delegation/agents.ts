@@ -1,16 +1,22 @@
 /**
- * Agent definition loader — parses `.pi/agents/*.md` frontmatter.
+ * Agent definition loader — parses central `~/.AutoDev/agents/*.md` frontmatter.
  *
  * Each pi agent file is Markdown with YAML frontmatter delimited by `---`
  * fences. The frontmatter carries `name`, `description`, `tools` (comma-
  * separated string), and `model` (provider-qualified string). The body after
  * the closing `---` fence is the agent's system prompt.
  *
+ * Agent files are read from the centralized agent directory derived via
+ * `getAgentDir()`: `join(getAgentDir(), "..", "agents")`. The `projectRoot`
+ * parameter on every public function is accepted for API compatibility but
+ * is NOT used for agent resolution — agents are a global, per-user resource.
+ *
  * The delegation module uses this to spawn specific crew agents when
  * `subagent_type` is provided to the `task` tool.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { join } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 /** Parsed agent definition ready for delegation. */
 export interface AgentDefinition {
@@ -53,13 +59,27 @@ function extractBody(text: string): string {
 }
 
 /**
- * Load a single agent definition from `.pi/agents/<name>.md`.
+ * Resolve the central agent definitions directory.
  *
- * Returns `undefined` when the file is missing or has no `model` frontmatter
- * field (the minimum we need to spawn a session).
+ * Agents live at `join(getAgentDir(), "..", "agents")` — i.e. the sibling
+ * `agents/` directory of the pi agent config dir. `getAgentDir()` honors
+ * the `PI_CODING_AGENT_DIR` env override, so tests can redirect resolution
+ * to a temp directory without monkey-patching.
  */
-export function loadAgent(projectRoot: string, name: string): AgentDefinition | undefined {
-  const path = resolve(projectRoot, ".pi/agents", `${name}.md`);
+function getCentralAgentsDir(): string {
+  return join(getAgentDir(), "..", "agents");
+}
+
+/**
+ * Load a single agent definition from the central `agents/<name>.md`.
+ *
+ * The `projectRoot` parameter is accepted for API compatibility but is not
+ * used for resolution — agents are a global per-user resource. Returns
+ * `undefined` when the file is missing or has no `model` frontmatter field
+ * (the minimum we need to spawn a session).
+ */
+export function loadAgent(_projectRoot: string, name: string): AgentDefinition | undefined {
+  const path = join(getCentralAgentsDir(), `${name}.md`);
   if (!existsSync(path)) return undefined;
 
   let text: string;
@@ -83,11 +103,13 @@ export function loadAgent(projectRoot: string, name: string): AgentDefinition | 
 }
 
 /**
- * List all agent names available in `.pi/agents/` (filenames without the
- * `.md` extension). Returns an empty array when the directory is missing.
+ * List all agent names available in the central `agents/` directory
+ * (filenames without the `.md` extension). The `projectRoot` parameter is
+ * accepted for API compatibility but is not used for resolution. Returns
+ * an empty array when the directory is missing.
  */
-export function listAgentNames(projectRoot: string): readonly string[] {
-  const dir = resolve(projectRoot, ".pi/agents");
+export function listAgentNames(_projectRoot: string): readonly string[] {
+  const dir = getCentralAgentsDir();
   if (!existsSync(dir)) return [];
   let entries: string[] = [];
   try {
