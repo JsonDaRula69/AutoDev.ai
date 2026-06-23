@@ -10,10 +10,13 @@
  *   autodev docs rebuild    — reingest docs-corpus/
  *   autodev debate start .. — start a debate
  *   autodev debate status   — show active debate state
+ *   autodev stop-continuation — stop all continuation loops
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { getHeartbeatState, stopHeartbeat } from "./heartbeat.js";
 import { loadRegistry, getActiveProject } from "./projects.js";
+import { enableDebug, disableDebug, getDebugState } from "../debug/index.js";
+import { stopAllLoops } from "../autonomy/continuation.js";
 
 // ---- Command registration ----
 
@@ -44,9 +47,13 @@ export function registerCommands(pi: ExtensionAPI): void {
         case "debate":
           await handleDebate(parts.slice(1), ctx);
           break;
+        case "stop-continuation":
+          stopAllLoops();
+          ctx.ui.notify("All continuation loops stopped.", "info");
+          break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status",
+            "AutoDev subcommands: doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
             "info",
           );
       }
@@ -73,7 +80,48 @@ async function handleDoctor(ctx: ExtensionCommandContext): Promise<void> {
     ctx.ui.notify("Project registry: error loading", "warning");
   }
 
+  const debugState = getDebugState();
+  ctx.ui.notify(`Debug mode: ${debugState.enabled ? "enabled" : "disabled"} (target: ${debugState.target})`, "info");
+
   ctx.ui.notify("Doctor check complete.", "info");
+}
+
+/**
+ * Handle the `--debug` flag for CLI commands.
+ * Parses `--debug on` and `--debug off` from the args string.
+ * Returns the remaining args after stripping the debug flag.
+ */
+export function handleDebugFlag(args: string): string {
+  const parts = args.trim().split(/\s+/);
+  const remaining: string[] = [];
+  let i = 0;
+
+  while (i < parts.length) {
+    const part = parts[i] as string;
+
+    if (part === "--debug") {
+      const value = parts[i + 1] as string | undefined;
+      if (value === "on" || value === "true") {
+        enableDebug();
+        i += 2;
+        continue;
+      }
+      if (value === "off" || value === "false") {
+        disableDebug();
+        i += 2;
+        continue;
+      }
+      // Bare `--debug` without value — enable
+      enableDebug();
+      i += 1;
+      continue;
+    }
+
+    remaining.push(part);
+    i += 1;
+  }
+
+  return remaining.join(" ");
 }
 
 async function handleOnboard(ctx: ExtensionCommandContext): Promise<void> {

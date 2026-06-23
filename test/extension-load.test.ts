@@ -39,11 +39,11 @@ test("extension entry point exports a default function", async () => {
   expect(typeof mod.default).toBe("function");
 });
 
-test("entry point exports MODULE_NAMES with 15 entries", async () => {
+test("entry point exports MODULE_NAMES with 20 entries", async () => {
   const mod = await import(join(ROOT, "extensions", "autodev", "index.ts"));
   expect(mod.MODULE_NAMES).toBeDefined();
   expect(Array.isArray(mod.MODULE_NAMES)).toBe(true);
-  expect(mod.MODULE_NAMES.length).toBe(18);
+  expect(mod.MODULE_NAMES.length).toBe(20);
 });
 
 for (const name of MODULES) {

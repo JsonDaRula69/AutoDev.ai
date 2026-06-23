@@ -57,7 +57,7 @@ export interface GuardrailContext {
 }
 
 /** Secret regex patterns — mirrors guardrails/index.ts.Kept local to avoid a circular import. */
-const SECRET_PATTERNS: readonly RegExp[] = [
+export const SECRET_PATTERNS: readonly RegExp[] = [
   /sk-ant-[A-Za-z0-9_-]{20,}/, // Anthropic API key
   /sk-or-[A-Za-z0-9_-]{20,}/, // OpenRouter API key
   /AIza[0-9A-Za-z_-]{35,}/, // Google API key

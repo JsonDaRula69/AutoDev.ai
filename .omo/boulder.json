@@ -85,7 +85,7 @@
       "plan_name": "autodev-pi-foundation-4-autonomous",
       "status": "active",
       "started_at": "2026-06-23T10:31:32.724Z",
-      "updated_at": "2026-06-23T10:49:34.552Z",
+      "updated_at": "2026-06-23T11:01:23.770Z",
       "session_ids": [
         "opencode:ses_10bf8e038ffeFYKiz9pbhrpNUW"
       ],
@@ -102,8 +102,21 @@
           "agent": "Sisyphus-Junior",
           "category": "quick",
           "started_at": "2026-06-23T10:39:14.854Z",
+          "status": "completed",
+          "updated_at": "2026-06-23T10:50:35.818Z",
+          "ended_at": "2026-06-23T10:50:35.818Z",
+          "elapsed_ms": 680964
+        },
+        "todo:16": {
+          "task_key": "todo:16",
+          "task_label": "16",
+          "task_title": "Build auto-merge, boulder state, and continuation loops",
+          "session_id": "opencode:ses_10bdc871fffeXmDedNgJCdzM90",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "started_at": "2026-06-23T10:55:50.253Z",
           "status": "running",
-          "updated_at": "2026-06-23T10:49:34.552Z"
+          "updated_at": "2026-06-23T11:01:23.770Z"
         }
       }
     }
@@ -111,7 +124,7 @@
   "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-4-autonomous.md",
   "started_at": "2026-06-23T10:31:32.724Z",
   "status": "active",
-  "updated_at": "2026-06-23T10:49:34.552Z",
+  "updated_at": "2026-06-23T11:01:23.770Z",
   "session_ids": [
     "opencode:ses_10bf8e038ffeFYKiz9pbhrpNUW"
   ],
@@ -128,8 +141,21 @@
       "agent": "Sisyphus-Junior",
       "category": "quick",
       "started_at": "2026-06-23T10:39:14.854Z",
+      "status": "completed",
+      "updated_at": "2026-06-23T10:50:35.818Z",
+      "ended_at": "2026-06-23T10:50:35.818Z",
+      "elapsed_ms": 680964
+    },
+    "todo:16": {
+      "task_key": "todo:16",
+      "task_label": "16",
+      "task_title": "Build auto-merge, boulder state, and continuation loops",
+      "session_id": "opencode:ses_10bdc871fffeXmDedNgJCdzM90",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "started_at": "2026-06-23T10:55:50.253Z",
       "status": "running",
-      "updated_at": "2026-06-23T10:49:34.552Z"
+      "updated_at": "2026-06-23T11:01:23.770Z"
     }
   },
   "agent": "atlas"

@@ -5,7 +5,7 @@
  *  - Does not throw when called with a minimal fake ExtensionAPI
  *  - Modules that should register tools actually call registerTool()
  *  - Modules that should register event handlers actually call on()
- *  - Stub modules (lsp, tmux, mcp-integrations, rules-injection) don't register anything
+ *  - All modules are now implemented (no stubs remain)
  */
 import { test, expect } from "bun:test";
 import { join } from "node:path";
@@ -35,21 +35,20 @@ const TOOL_REGISTERING_MODULES = new Set([
   "docs",
   "tools",
   "delegation",
+  "lsp",
+  "tmux",
+  "mcp-integrations",
 ]);
 
 // Modules that should register event handlers via pi.on()
 const EVENT_REGISTERING_MODULES = new Set([
   "guardrails",
   "comment-checker",
+  "rules-injection",
+  "watch-officer-monitor",
 ]);
 
-// Stub modules (no-op until sub-plan 4)
-const STUB_MODULES = new Set([
-  "lsp",
-  "tmux",
-  "mcp-integrations",
-  "rules-injection",
-]);
+// All modules are now implemented — no stubs remain
 
 const ALL_MODULES = [
   "guardrails",
@@ -97,12 +96,24 @@ test("event-registering modules call on()", async () => {
   }
 });
 
-test("stub modules don't register anything", async () => {
-  for (const name of STUB_MODULES) {
+// Modules that don't register tools or events directly (they export state instead)
+const NO_REGISTRATION_MODULES = new Set([
+  "background",
+  "notepad",
+  "intent-gate",
+]);
+
+test("all modules register something or are known no-registration modules", async () => {
+  for (const name of ALL_MODULES) {
     const mod = await import(join(ROOT, "extensions", "autodev", name, "index.ts"));
     const pi = createFakePi();
     mod.register(pi);
-    expect(pi.calls.length).toBe(0);
+    if (NO_REGISTRATION_MODULES.has(name)) {
+      // Known no-registration modules: they export state/utilities instead
+      expect(pi.calls.length).toBe(0);
+    } else {
+      expect(pi.calls.length).toBeGreaterThanOrEqual(1);
+    }
   }
 });
 

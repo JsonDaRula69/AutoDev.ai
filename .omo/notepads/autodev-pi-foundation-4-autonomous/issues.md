@@ -8,3 +8,14 @@
 - ~~`extensions/autodev/discord/__tests__/discord.test.ts` — Multiple `preconnect` property missing on mock fetch. Bun's fetch mock type requires `preconnect`.~~ **FIXED in T14** — All `global.fetch` assignments cast with `as any`.
 
 These are pre-existing issues from T14 (Discord) and T15 (Debate) modules that were implemented before the orchestrator. They are outside T13 scope and should be fixed in their respective todos.
+
+## T16 — Pre-existing Issues Found (2026-06-23)
+
+### Pre-existing type errors in other modules (not in autonomy scope)
+- `extensions/autodev/__tests__/integration-modules.test.ts` — Multiple `Object is possibly 'undefined'` and tuple type errors. These are pre-existing test file issues from T20 (integration modules) that are outside T16 scope.
+- `extensions/autodev/debug/index.ts` — `Property 'sessionId' does not exist on type 'ToolCallEvent'` and `Property 'tool' does not exist on type 'ToolCallEvent'`. These are pre-existing type errors in the debug module (T18) that are outside T16 scope.
+- `extensions/autodev/lsp/index.ts` — Multiple `Property 'details' is missing in type` errors. The LSP tool execute handlers return `{ content: [...] }` without `details` field. Pre-existing from T20.
+- `extensions/autodev/mcp-integrations/index.ts` — Same `details` missing pattern plus `exactOptionalPropertyTypes` issue. Pre-existing from T20.
+- `extensions/autodev/tmux/index.ts` — Same `details` missing pattern. Pre-existing from T20.
+
+These are pre-existing issues from T18 (debug), T20 (integration modules) that are outside T16 scope. They should be fixed in their respective todos.

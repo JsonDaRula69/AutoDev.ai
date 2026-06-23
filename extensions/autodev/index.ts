@@ -26,6 +26,8 @@ import { register as registerWatchOfficerMonitor } from "./watch-officer-monitor
 import { register as registerOrchestrator } from "./orchestrator/index.js";
 import { register as registerDiscord } from "./discord/index.js";
 import { register as registerDebate } from "./debate/index.js";
+import { register as registerAutonomy } from "./autonomy/index.js";
+import { register as registerDebug } from "./debug/index.js";
 
 /** Canonical module registration order. */
 const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: ExtensionAPI) => void }> = [
@@ -47,6 +49,8 @@ const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: Ex
   { name: "watch-officer-monitor", register: registerWatchOfficerMonitor },
   { name: "orchestrator", register: registerOrchestrator },
   { name: "debate", register: registerDebate },
+  { name: "autonomy", register: registerAutonomy },
+  { name: "debug", register: registerDebug },
 ];
 
 export const MODULE_NAMES: readonly string[] = MODULES.map((m) => m.name);
