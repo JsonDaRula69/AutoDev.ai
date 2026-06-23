@@ -15,6 +15,7 @@
 import { resolve } from "node:path";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { suggestLore } from "../loreguard/index.js";
 
 /** Category tag used by ctx_memory for architecture facts. */
 export const MEMORY_CATEGORY_ARCHITECTURE = "ARCHITECTURE";
@@ -81,19 +82,25 @@ export function storeLearning(
   };
 }
 
-/** Store a decision — routed to Loreguard as an ADR draft. */
+/**
+ * Store a decision — writes an ADR draft to Loreguard via `suggest_lore` and
+ * returns a descriptor with `written: true` and the new decision id in the
+ * note. The ADR starts in `draft` status; the caller (or a reviewing agent)
+ * must `ratify_lore` it before it becomes truth.
+ */
 export function storeDecision(
   title: string,
   content: string,
 ): StorageDescriptor {
   const adrContent = `# ADR: ${title}\n\n${content}\n\n## Status\n\nDraft (suggest_lore)\n`;
+  const res = suggestLore(title, adrContent, "fact");
   return {
     kind: "decision",
     backend: "loreguard:adr",
-    target: "loreguard suggest_lore",
+    target: `loreguard decision #${res.id}`,
     content: adrContent,
-    written: false,
-    note: "Call search_lore first; if no conflict, call suggest_lore(content=<adrContent>) for ratification.",
+    written: true,
+    note: `Decision #${res.id} created as draft in Loreguard. Call ratify_lore(id=${res.id}) to submit for review.`,
   };
 }
 

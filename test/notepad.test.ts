@@ -4,10 +4,11 @@
  * Verifies the 5 storage mappings route to the correct backend and that
  * the file-writing backends (verification, problem) actually persist.
  */
-import { test, expect } from "bun:test";
+import { test, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import {
   storeLearning,
   storeDecision,
@@ -17,6 +18,7 @@ import {
   MEMORY_CATEGORY_ARCHITECTURE,
   MEMORY_CATEGORY_CONSTRAINTS,
 } from "../extensions/autodev/notepad/index.js";
+import { setDb, resetDb, createSchema, checkSqliteVersion } from "../extensions/autodev/loreguard/index.js";
 
 let tempRoot: string;
 
@@ -29,6 +31,20 @@ function teardown(): void {
   rmSync(tempRoot, { recursive: true, force: true });
 }
 
+let memDb: Database;
+
+beforeEach(() => {
+  memDb = new Database(":memory:");
+  checkSqliteVersion(memDb);
+  createSchema(memDb);
+  setDb(memDb);
+});
+
+afterEach(() => {
+  resetDb();
+  memDb.close();
+});
+
 test("storeLearning routes to ctx_memory ARCHITECTURE", () => {
   const d = storeLearning("Postgres is the system of record.");
   expect(d.kind).toBe("learning");
@@ -37,13 +53,15 @@ test("storeLearning routes to ctx_memory ARCHITECTURE", () => {
   expect(d.content).toBe("Postgres is the system of record.");
 });
 
-test("storeDecision routes to loreguard ADR and formats an ADR draft", () => {
+test("storeDecision writes a draft ADR to Loreguard via suggest_lore", () => {
   const d = storeDecision("Use Bun as runtime", "Bun ships faster than Node for our workload.");
   expect(d.kind).toBe("decision");
   expect(d.backend).toBe("loreguard:adr");
-  expect(d.written).toBe(false);
+  expect(d.written).toBe(true);
   expect(d.content).toContain("ADR: Use Bun as runtime");
   expect(d.content).toContain("Draft (suggest_lore)");
+  expect(d.target).toMatch(/^loreguard decision #\d+$/);
+  expect(d.note).toContain("ratify_lore");
 });
 
 test("storeIssue routes to ctx_memory CONSTRAINTS", () => {
