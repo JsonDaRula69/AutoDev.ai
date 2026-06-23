@@ -1,20 +1,29 @@
 /**
  * Install module — dependency-injectable install fixes for AutoDev.
  *
- * Runs the non-interactive "install" lifecycle: external tool installation,
- * `.pi/` config file download, Magic Context setup (conditional), and Magic
- * Context doctor check (warning-only). Completion is recorded in the
- * `"install"` state scope so re-runs skip finished work.
+ * Runs the non-interactive "install" lifecycle in three phases:
+ *   1. Install external tools (gh, git, bun) via `installMissingTools`.
+ *   2. Symlink centralized config into `~/.AutoDev/` via `validateAndCreateConfig`
+ *      (also writes `magic-context.jsonc` with AutoDev defaults).
+ *   3. Register the Magic Context pi extension via the non-interactive
+ *      `pi install npm:@cortexkit/pi-magic-context` command and verify that
+ *      `magic-context.jsonc` exists in the agent dir. No interactive wizard
+ *      is invoked and no TTY is required.
+ *
+ * Completion is recorded in the `"install"` state scope so re-runs skip
+ * finished work.
  *
  * This module never interacts with the user, writes credentials, or performs
  * GitHub authentication. It is safe to run in CI and non-interactive contexts.
  */
 import { execSync, type ExecSyncOptions } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { installMissingTools, type Platform } from "./tools.js";
 import { validateAndCreateConfig } from "./config-defaults.js";
 import { markStepCompleted, isStepCompleted } from "./state.js";
+import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
 
 // ---- Types ----
 
@@ -40,14 +49,15 @@ export interface InstallModuleDeps {
 
 // ---- Constants (mirror steps.ts so this module is standalone) ----
 
-const MC_SETUP_CMD = "bunx @cortexkit/magic-context@latest setup --harness pi";
-const MC_SETUP_TIMEOUT_MS = 120_000;
-const MC_DOCTOR_CMD = "bunx @cortexkit/magic-context@latest doctor";
-const MC_DOCTOR_TIMEOUT_MS = 30_000;
+/** Non-interactive Magic Context registration command.
+ * Registers `@cortexkit/pi-magic-context` as a pi extension in the central
+ * `settings.json`. Never opens an interactive wizard. */
+const MC_INSTALL_CMD = "pi install npm:@cortexkit/pi-magic-context";
+const MC_INSTALL_TIMEOUT_MS = 120_000;
 
 /** Step 0 — external tools (gh + git, bun check is harmless and included). */
 const STEP_TOOLS = 0;
-/** Step 3 — `.pi/` config files + Magic Context setup. Marked only after both succeed. */
+/** Step 3 — `.pi/` config files + Magic Context registration. Marked only after both succeed. */
 const STEP_CONFIG_AND_MC = 3;
 
 // ---- Public API ----
@@ -56,15 +66,15 @@ const STEP_CONFIG_AND_MC = 3;
  * Run all install fixes sequentially and return a result per phase.
  *
  * Phases:
- *   1. Install `gh` if missing (via `installMissingTools`).
- *   2. Install `git` if missing (via `installMissingTools`).
- *   3. Download `.pi/` config files via `validateAndCreateConfig`.
- *   4. Run Magic Context setup — ONLY if `.pi/magic-context.jsonc` does not
- *      already declare `harness: "pi"`.
- *   5. Run Magic Context doctor as a warning check (non-fatal).
+ *   1. Install `gh` and `git` if missing (via `installMissingTools`).
+ *   2. Symlink centralized config into `~/.AutoDev/` via `validateAndCreateConfig`
+ *      (also writes `magic-context.jsonc` with AutoDev defaults).
+ *   3. Register the Magic Context pi extension via the non-interactive
+ *      `pi install npm:@cortexkit/pi-magic-context` command and verify
+ *      `magic-context.jsonc` exists in the agent dir.
  *
  * State is recorded in the `"install"` scope: step 0 after tools, step 3 after
- * config files AND Magic Context setup both succeed.
+ * config files AND Magic Context registration both succeed.
  */
 export async function runInstallFixes(deps: InstallModuleDeps): Promise<InstallFixResult[]> {
   const results: InstallFixResult[] = [];
@@ -75,24 +85,20 @@ export async function runInstallFixes(deps: InstallModuleDeps): Promise<InstallF
   const toolsResult = await runToolsPhase(deps, skipCompleted);
   results.push(toolsResult);
 
-  // ---- Phase 3: .pi/ config files ----
+  // ---- Phase 3: centralized config files (symlinks + magic-context.jsonc) ----
   const configResult = await runConfigFilesPhase(deps);
   results.push(configResult);
   const configOk = configResult.ok;
 
-  // ---- Phase 4: Magic Context setup (conditional) ----
+  // ---- Phase 4: Magic Context registration (non-interactive) ----
   const mcSetupResult = await runMagicContextSetupPhase(deps, configOk, skipCompleted);
   results.push(mcSetupResult);
   const mcSetupOk = mcSetupResult.ok;
 
-  // Step 3 is only marked complete when BOTH config files AND MC setup succeed.
+  // Step 3 is only marked complete when BOTH config files AND MC registration succeed.
   if (configOk && mcSetupOk) {
     await markStepCompleted(projectRoot, STEP_CONFIG_AND_MC, "install");
   }
-
-  // ---- Phase 5: Magic Context doctor (warning-only, never fatal) ----
-  const mcDoctorResult = await runMagicContextDoctorPhase(deps);
-  results.push(mcDoctorResult);
 
   return results;
 }
@@ -170,7 +176,7 @@ async function runMagicContextSetupPhase(
     return { name: "magic-context-setup", ok: true, detail: "Already completed (step 3)." };
   }
 
-  // If config file download failed, we cannot reliably proceed with MC setup.
+  // If config file download failed, we cannot reliably proceed with MC registration.
   if (!configOk) {
     return {
       name: "magic-context-setup",
@@ -179,127 +185,57 @@ async function runMagicContextSetupPhase(
     };
   }
 
-  // Pre-check: only run setup if `.pi/magic-context.jsonc` does NOT have
-  // `harness: "pi"` already configured.
-  if (hasMagicContextHarnessPi(projectRoot)) {
-    notify("Magic Context already configured with harness: pi. Skipping setup.", "info");
-    return {
-      name: "magic-context-setup",
-      ok: true,
-      detail: "Already configured (harness: pi detected in magic-context.jsonc).",
-    };
+  // Decision #14: the MC pre-check is a simple "does magic-context.jsonc exist?"
+  // in the central agent dir. T1's validateAndCreateConfig writes AutoDev defaults
+  // there, so this is a verify-only step. If the file is missing (e.g. T1 write
+  // failed or was skipped), write the defaults here as a self-healing fallback.
+  const agentDir = getAgentDir();
+  const mcPath = join(agentDir, "magic-context.jsonc");
+  if (!existsSync(mcPath)) {
+    notify("magic-context.jsonc missing; writing AutoDev defaults...", "info");
+    try {
+      if (!existsSync(agentDir)) mkdirSync(agentDir, { recursive: true });
+      writeFileSync(mcPath, DEFAULT_MAGIC_CONTEXT_JSONC, "utf-8");
+    } catch (e) {
+      return {
+        name: "magic-context-setup",
+        ok: false,
+        detail: `Failed to write magic-context.jsonc: ${(e as Error).message}`,
+      };
+    }
   }
 
-  notify("Setting up Magic Context (bunx @cortexkit/magic-context setup --harness pi)...", "info");
+  // Register the Magic Context pi extension non-interactively. cwd is the
+  // central agent dir so `settings.json` is updated in place. No TTY, no
+  // @clack/prompts wizard.
+  notify(`Running ${MC_INSTALL_CMD} (cwd: ${agentDir})...`, "info");
   try {
-    execFn(MC_SETUP_CMD, { cwd: projectRoot, stdio: "pipe", timeout: MC_SETUP_TIMEOUT_MS }, execSyncOverride);
-    return {
-      name: "magic-context-setup",
-      ok: true,
-      detail: "Magic Context setup completed.",
-    };
+    execFn(MC_INSTALL_CMD, { cwd: agentDir, stdio: "pipe", timeout: MC_INSTALL_TIMEOUT_MS }, execSyncOverride);
   } catch (e) {
     return {
       name: "magic-context-setup",
       ok: false,
-      detail: `Magic Context setup failed: ${(e as Error).message}`,
+      detail: `Magic Context registration failed: ${(e as Error).message}`,
     };
   }
-}
 
-async function runMagicContextDoctorPhase(deps: InstallModuleDeps): Promise<InstallFixResult> {
-  const { projectRoot, notify, execSyncOverride } = deps;
-  notify("Running Magic Context doctor check...", "info");
-  try {
-    execFn(MC_DOCTOR_CMD, { cwd: projectRoot, stdio: "pipe", timeout: MC_DOCTOR_TIMEOUT_MS }, execSyncOverride);
+  // Verify the config file exists after registration.
+  if (!existsSync(mcPath)) {
     return {
-      name: "magic-context-doctor",
-      ok: true,
-      detail: "Magic Context doctor check passed.",
-    };
-  } catch (e) {
-    // Doctor is a warning check, not fatal — return ok=true with a warning note
-    // so the overall install does not fail, but surface the issue.
-    notify(`Magic Context doctor check had issues: ${(e as Error).message}`, "warning");
-    return {
-      name: "magic-context-doctor",
-      ok: true,
-      detail: `Warning: doctor check had issues: ${(e as Error).message}`,
+      name: "magic-context-setup",
+      ok: false,
+      detail: "magic-context.jsonc not found after registration.",
     };
   }
+
+  return {
+    name: "magic-context-setup",
+    ok: true,
+    detail: "Magic Context registered and magic-context.jsonc verified.",
+  };
 }
 
 // ---- Helpers ----
-
-/**
- * Read `.pi/magic-context.jsonc` and check whether it declares
- * `harness: "pi"`. Returns false if the file is missing, unreadable, or does
- * not contain the harness setting. Tolerates JSONC comments/ trailing commas
- * via a lightweight strip before JSON.parse.
- */
-function hasMagicContextHarnessPi(projectRoot: string): boolean {
-  const mcPath = join(projectRoot, ".pi", "magic-context.jsonc");
-  if (!existsSync(mcPath)) return false;
-  try {
-    const raw = readFileSync(mcPath, "utf-8");
-    const stripped = stripJsonc(raw);
-    const parsed = JSON.parse(stripped) as { harness?: string };
-    return parsed.harness === "pi";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Minimal JSONC -> JSON transform: strip `//` line comments and block
- * `/* ... *\/` comments, plus trailing commas before `}` or `]`.
- * Good enough for the magic-context.jsonc schema; not a full JSONC parser.
- */
-function stripJsonc(text: string): string {
-  let out = "";
-  let i = 0;
-  while (i < text.length) {
-    const ch = text[i];
-    const next = text[i + 1];
-    // line comment
-    if (ch === "/" && next === "/") {
-      i += 2;
-      while (i < text.length && text[i] !== "\n") i++;
-      continue;
-    }
-    // block comment
-    if (ch === "/" && next === "*") {
-      i += 2;
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
-      i += 2;
-      continue;
-    }
-    // string literal — copy verbatim (comments inside strings are preserved)
-    if (ch === '"') {
-      out += ch;
-      i++;
-      while (i < text.length) {
-        const c = text[i];
-        out += c;
-        if (c === "\\" && i + 1 < text.length) {
-          out += text[i + 1];
-          i += 2;
-          continue;
-        }
-        if (c === '"') {
-          i++;
-          break;
-        }
-        i++;
-      }
-      continue;
-    }
-    out += ch;
-    i++;
-  }
-  // strip trailing commas before } or ]
-  return out.replace(/,(\s*[}\]])/g, "$1");
-}
 
 function execFn(
   command: string,

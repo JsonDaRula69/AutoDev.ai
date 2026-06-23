@@ -443,3 +443,31 @@ Date: 2026-06-23
 
 - `bun test extensions/autodev/installer/__tests__/config-module.test.ts`: 6 pass, 0 fail.
 - `bun run typecheck`: no errors referencing config-module files.
+
+# T3 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/installer/install-module.ts`: removed Phase 5 (`runMagicContextDoctorPhase`), removed `hasMagicContextHarnessPi` + `stripJsonc` helpers (the JSONC parser was only used by the harness-pi pre-check, which Decision #14 replaces with a simple file-existence check). `runInstallFixes` now returns exactly 3 results: `tools`, `config-files`, `magic-context-setup`. MC setup uses `pi install npm:@cortexkit/pi-magic-context` (non-interactive) with `cwd: getAgentDir()` instead of the prior `bunx @cortexkit/magic-context@latest setup --harness pi` wizard with `cwd: projectRoot`. Added a self-heal fallback: if `magic-context.jsonc` is missing from the agent dir at MC-phase time, it writes `DEFAULT_MAGIC_CONTEXT_JSONC` before registration.
+- New test file `extensions/autodev/installer/__tests__/install-module.test.ts` (5 tests): 3-result happy path, cwd-is-agent-dir + no-wizard, exec-throws failure, self-heal, getAgentDir fallback.
+
+## Key decisions
+
+- **Decision #14 implementation:** the MC pre-check is now "does `join(getAgentDir(), "magic-context.jsonc")` exist?" — no JSONC parsing, no `harness: "pi"` detection. T1's `validateAndCreateConfig` writes the defaults; T3 just verifies (and self-heals if missing). This removes ~62 LOC of `stripJsonc` + `hasMagicContextHarnessPi` that had no other caller.
+- **Self-heal fallback:** if T1's config phase somehow didn't write `magic-context.jsonc` (partial failure, manual deletion), the MC phase writes `DEFAULT_MAGIC_CONTEXT_JSONC` directly rather than failing. This keeps the install resilient without re-introducing the interactive wizard. The self-heal write is early-returned on failure (does not attempt `pi install` if the config file can't be written).
+- **`execSyncOverride` dual-purpose:** the same override serves both `installMissingTools` (Phase 1, expects `ExecFn` returning `string`) and `execFn` (Phase 3 MC install, expects a function returning `Buffer`). Tests pass a single `makeRecordingExec` returning `Buffer.from("")` — tools.ts ignores the return value, install-module wraps it. The `as never` cast on line 122 bridges the type mismatch in production.
+
+## Gotchas
+
+- **Sibling-task typecheck debt:** the branch carries incomplete T4 `doctor.ts` work (references `reopenTty`/`reopenTtyOverride` without importing `tty.ts`). This produces 2 `tsc` errors in `doctor.ts:161` and 2 test failures in `doctor-orchestrator.test.ts`. These are **not T3-introduced** — reverting only `doctor.ts` + `tools.ts` to HEAD makes `bun run typecheck` exit 0 with T3's `install-module.ts` in place. T3 MUST NOT touch `doctor.ts`, so this debt is left for T4 to resolve.
+- **File at the 250-LOC ceiling:** `install-module.ts` is exactly 250 lines after the refactor (was 314). The removal of `stripJsonc` (42 LOC) + `hasMagicContextHarnessPi` (12 LOC) + `runMagicContextDoctorPhase` (21 LOC) offset the added self-heal block. If the next edit adds lines, the file must be split first per the 250-LOC rule. Candidate split: extract `runToolsPhase` + `runConfigFilesPhase` into a `phases.ts`, leaving `runInstallFixes` + `runMagicContextSetupPhase` + `execFn` in `install-module.ts`.
+- **`getAgentDir()` reads `PI_CODING_AGENT_DIR` live** (confirmed in T2 learnings) — tests set the env var in `try/finally` with save/restore and don't need dynamic imports. The fallback test (env unset) cleans up the `magic-context.jsonc` it writes to the real `~/.pi/agent` to avoid polluting the dev machine.
+- **`MC_INSTALL_CMD` vs `MC_SETUP_CMD`:** the constant was renamed from `MC_SETUP_CMD`/`MC_DOCTOR_CMD` to `MC_INSTALL_CMD`. Any external importer of these constants (none found in the repo) would break — they were not exported, so this is safe.
+
+## Verification
+
+- `bun test extensions/autodev/installer/__tests__/install-module.test.ts`: 5 pass, 0 fail.
+- `bun run typecheck` (T3-isolated, sibling files reverted): EXIT 0.
+- Evidence: `.omo/evidence/project-init-centralization/t3-install-module-happy.md`, `t3-install-module-failure.md`.
