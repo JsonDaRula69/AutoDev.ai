@@ -148,16 +148,16 @@ for (const slug of EXPECTED_AGENTS) {
     const fm = agent.frontmatter;
 
     expect(fm["name"]).toBeDefined();
-    expect(fm["name"].length).toBeGreaterThan(0);
+    expect(fm["name"]!.length).toBeGreaterThan(0);
 
     expect(fm["description"]).toBeDefined();
-    expect(fm["description"].length).toBeGreaterThan(0);
+    expect(fm["description"]!.length).toBeGreaterThan(0);
 
     expect(fm["tools"]).toBeDefined();
-    expect(fm["tools"].length).toBeGreaterThan(0);
+    expect(fm["tools"]!.length).toBeGreaterThan(0);
 
     expect(fm["model"]).toBeDefined();
-    expect(fm["model"].length).toBeGreaterThan(0);
+    expect(fm["model"]!.length).toBeGreaterThan(0);
   });
 
   test(`${slug}: frontmatter name matches filename`, () => {
@@ -167,7 +167,7 @@ for (const slug of EXPECTED_AGENTS) {
 
   test(`${slug}: model is in the allowlist`, () => {
     const agent = loadAgent(slug);
-    const model = agent.frontmatter["model"];
+    const model = agent.frontmatter["model"]!;
     expect(ALLOWED_MODELS).toContain(model);
   });
 
@@ -206,7 +206,7 @@ test("every agent uses a model from the allowlist (aggregate check)", () => {
   const violations: string[] = [];
   for (const slug of EXPECTED_AGENTS) {
     const agent = loadAgent(slug);
-    const model = agent.frontmatter["model"];
+    const model = agent.frontmatter["model"]!;
     if (!ALLOWED_MODELS.includes(model)) {
       violations.push(`${slug}: model "${model}" not in allowlist`);
     }

@@ -8,6 +8,8 @@
  * Run with: `bun run test/import-check.ts`
  */
 
+/// <reference path="./declarations.d.ts" />
+
 import {
   createAgentSession,
   SessionManager,
