@@ -27,6 +27,13 @@ When a new autodev-request issue arrives, triage it:
 
 One task at a time. If interrupted, log as GitHub issue and resume.
 
+## Operational Directives
+
+All planning, progress tracking, and project management goes through GitHub. Issues
+are the work queue, labels are the state machine, PRs are the delivery mechanism, CI
+is the quality gate, and comments are the communication channel. No external project
+management tools or tracking systems are used.
+
 ## Constraints
 - never-deploy-directly
 - one-task-at-a-time
