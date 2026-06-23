@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "active_work_id": "autodev-pi-docs-59bc5f29",
+  "active_work_id": "autodev-pi-foundation-1-core-4390c46b",
   "works": {
     "autodev-pi-docs-59bc5f29": {
       "work_id": "autodev-pi-docs-59bc5f29",
@@ -83,85 +83,35 @@
       },
       "ended_at": "2026-06-23T02:57:29.630Z",
       "elapsed_ms": 2096316
+    },
+    "autodev-pi-foundation-1-core-4390c46b": {
+      "work_id": "autodev-pi-foundation-1-core-4390c46b",
+      "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-1-core.md",
+      "plan_name": "autodev-pi-foundation-1-core",
+      "status": "active",
+      "started_at": "2026-06-23T05:21:15.784Z",
+      "updated_at": "2026-06-23T05:21:15.784Z",
+      "session_ids": [
+        "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
+      ],
+      "session_origins": {
+        "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {}
     }
   },
-  "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-docs.md",
-  "started_at": "2026-06-23T02:22:33.314Z",
-  "status": "completed",
-  "updated_at": "2026-06-23T02:57:29.630Z",
+  "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-1-core.md",
+  "started_at": "2026-06-23T05:21:15.784Z",
+  "status": "active",
+  "updated_at": "2026-06-23T05:21:15.784Z",
   "session_ids": [
-    "opencode:ses_10db6a953ffev7xTVGe82yS3d0"
+    "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
   ],
   "session_origins": {
-    "opencode:ses_10db6a953ffev7xTVGe82yS3d0": "direct"
+    "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct"
   },
-  "plan_name": "autodev-pi-docs",
-  "task_sessions": {
-    "todo:1": {
-      "task_key": "todo:1",
-      "task_label": "1",
-      "task_title": "HIGH: STRUCTURE.md agent table roles scrambled (quartermaster/boatswain/navigator)",
-      "session_id": "opencode:ses_10d9a778effeo0K14ss4Y93WEb",
-      "agent": "oracle",
-      "started_at": "2026-06-23T02:26:59.377Z",
-      "ended_at": "2026-06-23T02:53:40.466Z",
-      "elapsed_ms": 1601089,
-      "status": "completed",
-      "updated_at": "2026-06-23T02:53:40.466Z"
-    },
-    "todo:5": {
-      "task_key": "todo:5",
-      "task_label": "5",
-      "task_title": "Cross-reference docs against pi-foundation plan and verify accuracy",
-      "session_id": "opencode:ses_10daf66a7ffepXYBeNI04HVePP",
-      "agent": "Sisyphus-Junior",
-      "category": "deep",
-      "updated_at": "2026-06-23T02:38:23.328Z",
-      "started_at": "2026-06-23T02:38:05.151Z",
-      "status": "completed",
-      "ended_at": "2026-06-23T02:38:23.328Z",
-      "elapsed_ms": 18177
-    },
-    "todo:6": {
-      "task_key": "todo:6",
-      "task_label": "6",
-      "task_title": "Update pi-foundation plan to reference docs as source of truth",
-      "session_id": "opencode:ses_10da7c34effeAkYyImSNM8aq4P",
-      "agent": "Sisyphus-Junior",
-      "category": "writing",
-      "updated_at": "2026-06-23T02:46:24.066Z",
-      "started_at": "2026-06-23T02:46:11.369Z",
-      "status": "completed",
-      "ended_at": "2026-06-23T02:46:24.066Z",
-      "elapsed_ms": 12697
-    },
-    "todo:7": {
-      "task_key": "todo:7",
-      "task_label": "7",
-      "task_title": "Update .autodev/ docs to point to new root-level docs",
-      "session_id": "opencode:ses_10da0802bffe9WYK2z5Xf6296W",
-      "agent": "Sisyphus-Junior",
-      "category": "quick",
-      "updated_at": "2026-06-23T02:48:26.681Z",
-      "started_at": "2026-06-23T02:47:58.794Z",
-      "status": "completed",
-      "ended_at": "2026-06-23T02:48:26.681Z",
-      "elapsed_ms": 27887
-    },
-    "final-wave:f1": {
-      "task_key": "final-wave:f1",
-      "task_label": "F1",
-      "task_title": "Plan compliance audit — verify every doc section matches the approved scope, no scope creep into implementation code, all Must-NOT-Have constraints honored (no OpenCode as runtime, no aspirational features, no AI-slop writing)",
-      "session_id": "opencode:ses_10d97ae56ffeldGHwtaIsEi2QL",
-      "agent": "oracle",
-      "started_at": "2026-06-23T02:50:16.924Z",
-      "status": "completed",
-      "updated_at": "2026-06-23T02:56:51.812Z",
-      "ended_at": "2026-06-23T02:56:51.812Z",
-      "elapsed_ms": 394888
-    }
-  },
-  "agent": "atlas",
-  "ended_at": "2026-06-23T02:57:29.630Z",
-  "elapsed_ms": 2096316
+  "plan_name": "autodev-pi-foundation-1-core",
+  "task_sessions": {},
+  "agent": "atlas"
 }
