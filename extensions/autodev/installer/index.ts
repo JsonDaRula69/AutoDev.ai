@@ -70,6 +70,7 @@ export async function runInstall(opts: InstallOptions): Promise<void> {
       projectRoot,
       authPath,
       execSyncOverride: (cmd, o) => execSync(cmd, o ?? {}) as unknown as string,
+      launchConfigFlow: false,
     });
     for (const check of result.checks) {
       const icon = check.ok ? "✓" : "✗";

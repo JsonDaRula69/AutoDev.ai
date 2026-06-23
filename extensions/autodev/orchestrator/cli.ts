@@ -85,7 +85,12 @@ async function handleDoctor(ctx: ExtensionCommandContext): Promise<void> {
   }
 
   const { runDoctor } = await import("../installer/doctor.js");
-  const result = await runDoctor({ projectRoot, authPath });
+  const result = await runDoctor({
+    projectRoot,
+    authPath,
+    launchConfigFlow: true,
+    notify: (message, level) => ctx.ui.notify(message, level),
+  });
 
   ctx.ui.notify("AutoDev Doctor — Machine Health Check", "info");
   ctx.ui.notify("============================================", "info");
@@ -98,11 +103,11 @@ async function handleDoctor(ctx: ExtensionCommandContext): Promise<void> {
   ctx.ui.notify("", "info");
   ctx.ui.notify(`Results: ${result.passed} passed, ${result.failed} failed`, "info");
 
-  if (result.failed > 0) {
-    ctx.ui.notify("Some checks failed. Running autodev install to fix...", "warning");
-    const { handleInstall } = await import("../installer/index.js");
-    await handleInstall("--non-interactive", ctx);
-  } else {
+  if (result.configFlowLaunched) {
+    ctx.ui.notify("Config flow launched to fix missing components.", "info");
+  } else if (result.failed > 0) {
+    ctx.ui.notify("Some checks failed. Run `autodev install` to fix.", "warning");
+  } else if (result.checks.length > 0) {
     ctx.ui.notify("All machine-level checks passed.", "info");
   }
 }

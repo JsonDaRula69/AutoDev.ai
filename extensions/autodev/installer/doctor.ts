@@ -16,6 +16,8 @@ export interface DoctorResult {
   readonly checks: readonly DoctorCheck[];
   readonly passed: number;
   readonly failed: number;
+  /** Whether doctor launched the config/install flow as a result of its checks. */
+  readonly configFlowLaunched: boolean;
 }
 
 export type DoctorExecFn = (command: string, options?: ExecSyncOptions) => string;
@@ -24,6 +26,22 @@ export interface DoctorDeps {
   readonly projectRoot: string;
   readonly authPath: string;
   readonly execSyncOverride?: DoctorExecFn;
+  /**
+   * When true, doctor takes over the full install flow:
+   *   1. Local install guard — aborts if not a global install.
+   *   2. Fresh-install detection — launches interactive or non-interactive config.
+   *   3. Existing-install health checks — auto-fixes failures.
+   * When false, doctor runs only the health checks (no side effects).
+   * Defaults to false.
+   */
+  readonly launchConfigFlow?: boolean;
+  /** Notify callback used when launching the config flow. */
+  readonly notify?: (message: string, level: "info" | "warning" | "error") => void;
+}
+
+/** Detect whether the current process is a global install (npm_config_global=true). */
+export function isGlobalInstall(): boolean {
+  return process.env.npm_config_global === "true";
 }
 
 export async function isFreshInstall(deps: Pick<DoctorDeps, "projectRoot" | "authPath">): Promise<boolean> {
@@ -42,7 +60,53 @@ export async function isFreshInstall(deps: Pick<DoctorDeps, "projectRoot" | "aut
   return true;
 }
 
+/**
+ * Run health checks. The checks array always contains the same ordered set:
+ * Bun, GitHub CLI, GitHub auth, LLM credentials, Environment vars, Install
+ * state, settings.json, magic-context.jsonc, agents/*.md.
+ *
+ * When `launchConfigFlow` is true, doctor is the orchestrator:
+ *   - Local install guard first (aborts if not global).
+ *   - Fresh install → launch install (interactive or non-interactive).
+ *   - Existing install with failures → launch install to fix.
+ *   - All green → no action.
+ */
 export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
+  const launchConfigFlow = deps.launchConfigFlow ?? false;
+  const notify = deps.notify ?? (() => {});
+
+  // ---- Gate 1: Local install guard (only when orchestrating) ----
+  if (launchConfigFlow && !isGlobalInstall()) {
+    notify("AutoDev was installed as a local dependency.", "warning");
+    notify("AutoDev is a machine-level tool, not a project dependency.", "info");
+    notify("Install it globally instead: bun install -g autodev", "info");
+    return { checks: [], passed: 0, failed: 0, configFlowLaunched: false };
+  }
+
+  // ---- Gate 2: Fresh-install detection (only when orchestrating) ----
+  if (launchConfigFlow) {
+    const fresh = await isFreshInstall({ projectRoot: deps.projectRoot, authPath: deps.authPath });
+    if (fresh) {
+      const nonInteractive = process.stdin.isTTY !== true;
+      if (nonInteractive) {
+        notify("AutoDev detected a fresh installation.", "info");
+        notify("To complete setup, run: autodev install", "info");
+        return { checks: [], passed: 0, failed: 0, configFlowLaunched: false };
+      }
+      notify("AutoDev detected a fresh installation.", "info");
+      notify("Starting interactive setup...", "info");
+      const { runInstall } = await import("./index.js");
+      await runInstall({
+        projectRoot: deps.projectRoot,
+        authPath: deps.authPath,
+        nonInteractive: false,
+        notify,
+      });
+      return { checks: [], passed: 0, failed: 0, configFlowLaunched: true };
+    }
+  }
+
+  // ---- Health checks ----
   const exec: DoctorExecFn = deps.execSyncOverride ?? ((cmd: string, opts?: ExecSyncOptions) =>
     execSync(cmd, opts ?? {}) as unknown as string);
   const checks: DoctorCheck[] = [];
@@ -117,5 +181,21 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
 
   const passed = checks.filter((c) => c.ok).length;
   const failed = checks.length - passed;
-  return { checks, passed, failed };
+
+  // ---- Gate 3: Auto-fix on failure (only when orchestrating) ----
+  let configFlowLaunched = false;
+  if (launchConfigFlow && failed > 0) {
+    notify("Some checks failed. Running autodev install to fix missing components...", "warning");
+    const { runInstall } = await import("./index.js");
+    const nonInteractive = deps.execSyncOverride !== undefined ? true : process.stdin.isTTY !== true;
+    await runInstall({
+      projectRoot: deps.projectRoot,
+      authPath: deps.authPath,
+      nonInteractive,
+      notify,
+    });
+    configFlowLaunched = true;
+  }
+
+  return { checks, passed, failed, configFlowLaunched };
 }
