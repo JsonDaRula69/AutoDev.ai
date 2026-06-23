@@ -1,8 +1,8 @@
 import { existsSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const REPO_OWNER = "autodev-team";
-const REPO_NAME = "autodev";
+const REPO_OWNER = "JsonDaRula69";
+const REPO_NAME = "AutoDev.ai";
 const REPO_BRANCH = "main";
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}`;
 

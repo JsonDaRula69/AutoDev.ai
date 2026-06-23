@@ -126,7 +126,7 @@ test("doctor detects incomplete install state", async () => {
   } finally { cleanupTempDir(dir); }
 });
 
-test.skip("doctor downloads missing config files from repo", async () => {
+test("doctor downloads missing config files from repo", async () => {
   const dir = createTempDir();
   const authPath = join(dir, "auth.json");
   try {
