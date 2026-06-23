@@ -6,6 +6,16 @@
 
 > **SPLIT FROM:** This is sub-plan 1 of 4 from the master plan `.omo/plans/autodev-pi-foundation.md`. Execute this plan first. Plans 2, 3, and 4 depend on this one.
 
+> **SOURCE OF TRUTH:** During implementation, agents must refer to these resources:
+> 1. **ARCHITECTURE.md** (root) — the system design specification
+> 2. **STRUCTURE.md** (root) — the directory map and reference catalog
+> 3. **.autodev/reference/** — immutable specs (workflow-specification.md, onboarding-protocol.md, discord-setup.md)
+> 4. **docs-corpus/pi/** — pi SDK documentation (sdk.md, extensions.md, providers.md, models.md, skills.md, sessions.md, settings.md, compaction.md)
+> 5. **docs-corpus/magic-context/** — Magic Context documentation (README.md, ARCHITECTURE.md, CONFIGURATION.md)
+> 6. **This plan file** — the implementation specification
+>
+> If any source disagrees, ARCHITECTURE.md wins on design, .autodev/reference/ wins on process, and this plan wins on scope.
+
 ## TL;DR (For humans)
 
 **What you'll get:** Core foundation: clean workspace, extract identities, set up project dependencies, port 13 crew agents to pi format, build the base AutoDev extension with all 9 modules (team mode, comment checker, notepad, IntentGate, MCPs, LSP, tmux, rules injection, watch officer monitor), and write Magic Context integration tests with mocks.
