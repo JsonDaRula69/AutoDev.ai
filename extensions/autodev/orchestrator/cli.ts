@@ -10,21 +10,23 @@
  *   autodev docs rebuild    — reingest docs-corpus/
  *   autodev debate start .. — start a debate
  *   autodev debate status   — show active debate state
- *   autodev install           — deployment-time setup (9-step installer)
+ *   autodev install           — machine-level setup (Bun, LLM creds, Magic Context, VoyageAI, Discord)
+ *   autodev init              — project-level setup (GitHub labels, knowledge base, docs)
  *   autodev stop-continuation — stop all continuation loops
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { join } from "node:path";
 import { getHeartbeatState, stopHeartbeat } from "./heartbeat.js";
 import { loadRegistry, getActiveProject } from "./projects.js";
 import { enableDebug, disableDebug, getDebugState } from "../debug/index.js";
 import { stopAllLoops } from "../autonomy/continuation.js";
-import { handleInstall } from "../installer/index.js";
+import { handleInstall, handleInit } from "../installer/index.js";
 
 // ---- Command registration ----
 
 export function registerCommands(pi: ExtensionAPI): void {
   pi.registerCommand("autodev", {
-    description: "AutoDev — autonomous engineering team commands. Subcommands: install, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status",
+    description: "AutoDev — autonomous engineering team commands. Subcommands: install, init, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const parts = trimmed.split(/\s+/);
@@ -52,13 +54,16 @@ export function registerCommands(pi: ExtensionAPI): void {
         case "install":
           await handleInstall(parts.slice(1).join(" "), ctx);
           break;
+        case "init":
+          await handleInit(parts.slice(1).join(" "), ctx);
+          break;
         case "stop-continuation":
           stopAllLoops();
           ctx.ui.notify("All continuation loops stopped.", "info");
           break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: install, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: install, init, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
             "info",
           );
       }
@@ -69,26 +74,37 @@ export function registerCommands(pi: ExtensionAPI): void {
 // ---- Subcommand handlers ----
 
 async function handleDoctor(ctx: ExtensionCommandContext): Promise<void> {
-  ctx.ui.notify("AutoDev Doctor — Health Check", "info");
+  const projectRoot = ctx.cwd ?? process.cwd();
 
-  // Check heartbeat
-  const hb = getHeartbeatState();
-  ctx.ui.notify(`Heartbeat: ${hb.running ? "running" : "stopped"} (${hb.tickCount} ticks)`, "info");
-
-  // Check project registry
+  let authPath: string;
   try {
-    const registry = await loadRegistry();
-    const active = getActiveProject(registry);
-    ctx.ui.notify(`Active project: ${active.name} (${active.repo})`, "info");
-    ctx.ui.notify(`Projects registered: ${registry.projects.length}`, "info");
+    const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
+    authPath = join(getAgentDir(), "auth.json");
   } catch {
-    ctx.ui.notify("Project registry: error loading", "warning");
+    authPath = join(process.env.HOME ?? "~", ".pi", "agent", "auth.json");
   }
 
-  const debugState = getDebugState();
-  ctx.ui.notify(`Debug mode: ${debugState.enabled ? "enabled" : "disabled"} (target: ${debugState.target})`, "info");
+  const { runDoctor } = await import("../installer/doctor.js");
+  const result = await runDoctor({ projectRoot, authPath });
 
-  ctx.ui.notify("Doctor check complete.", "info");
+  ctx.ui.notify("AutoDev Doctor — Machine Health Check", "info");
+  ctx.ui.notify("============================================", "info");
+
+  for (const check of result.checks) {
+    const icon = check.ok ? "✓" : "✗";
+    ctx.ui.notify(`  ${icon} ${check.name}: ${check.detail}`, check.ok ? "info" : "error");
+  }
+
+  ctx.ui.notify("", "info");
+  ctx.ui.notify(`Results: ${result.passed} passed, ${result.failed} failed`, "info");
+
+  if (result.failed > 0) {
+    ctx.ui.notify("Some checks failed. Running autodev install to fix...", "warning");
+    const { handleInstall } = await import("../installer/index.js");
+    await handleInstall("--non-interactive", ctx);
+  } else {
+    ctx.ui.notify("All machine-level checks passed.", "info");
+  }
 }
 
 /**
