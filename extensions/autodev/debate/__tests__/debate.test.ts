@@ -19,7 +19,8 @@
  */
 
 import { test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BackgroundManager } from "../../background/manager.js";
 import {
@@ -96,13 +97,22 @@ class FakeTimerScheduler {
 
 let scheduler: FakeTimerScheduler;
 
-beforeEach(() => {
+// Isolation: writeTranscripts writes to process.cwd()/.autodev/debates. Without
+// chdir isolation, tests rewrite the project repo's tracked templates each run.
+let tempCwd: string;
+const originalCwd = process.cwd();
+
+beforeEach(async () => {
   scheduler = new FakeTimerScheduler();
   resetSessionMocks();
+  tempCwd = await mkdtemp(join(tmpdir(), "autodev-debate-test-"));
+  process.chdir(tempCwd);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  process.chdir(originalCwd);
   scheduler.reset();
+  await rm(tempCwd, { recursive: true, force: true });
 });
 
 function makeManager(): BackgroundManager {
