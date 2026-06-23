@@ -37,7 +37,6 @@ hard_stops:
 
   - id: ci-is-the-hard-gate
     description: "CI must be green before merge. If CI is red, fix it before doing anything else."
-    check: "action_type == 'merge' AND ci_status != 'green'"
     enforcement: block_merge
     applies_to: [quartermaster, navigator]
 

@@ -71,6 +71,7 @@ export async function executeSessionRead(
   if (!target) {
     return {
       content: [{ type: "text", text: `Session not found: ${params.session_id}` }],
+      details: {},
     };
   }
   const sm = deps.open(target.path);

@@ -69,6 +69,7 @@ const defaultSessionFactory: SessionFactory = async (config) => {
     authStorage,
   };
   if (model !== undefined) sessionOpts.model = model;
+  if (config.thinkingLevel !== undefined) sessionOpts.thinkingLevel = config.thinkingLevel;
   const { session } = await createAgentSession(sessionOpts as never);
   return session as unknown as ManagedSession;
 };
@@ -183,7 +184,7 @@ export class BackgroundManager {
         systemPrompt: state.systemPrompt,
         tools: state.tools,
         customTools: state.customTools,
-        thinkingLevel: state.thinkingLevel,
+        ...(state.thinkingLevel !== undefined ? { thinkingLevel: state.thinkingLevel } : {}),
       });
       this.sessions.set(id, session);
       this.breaker.arm(id, state.staleTimeoutMs);

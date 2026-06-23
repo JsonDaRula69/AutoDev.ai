@@ -57,7 +57,7 @@ export interface SpawnConfig {
    * When set, passed to the session factory so the spawned session enables
    * extended thinking.
    */
-  readonly thinkingLevel?: string;
+  readonly thinkingLevel?: string | undefined;
 }
 
 /** Events the manager listens for on a managed session. */
@@ -81,7 +81,7 @@ export interface SessionFactoryConfig {
   readonly systemPrompt: string;
   readonly tools: readonly string[];
   readonly customTools: readonly unknown[];
-  readonly thinkingLevel?: string;
+  readonly thinkingLevel?: string | undefined;
 }
 
 /** Factory that creates a managed session from config. Injectable for tests. */

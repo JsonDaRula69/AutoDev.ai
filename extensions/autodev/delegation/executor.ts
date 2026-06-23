@@ -219,7 +219,7 @@ export async function executeTaskTool(
     systemPrompt,
     tools,
     agentName,
-    thinkingLevel,
+    ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
   };
 
   // 5. Spawn.
