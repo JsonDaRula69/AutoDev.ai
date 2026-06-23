@@ -6,13 +6,12 @@
   "type": "module",
   "packageManager": "bun@1.3.14",
   "bin": {
-    "autodev": "./scripts/postinstall.ts"
+    "autodev": "./scripts/cli.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "import-check": "bun run test/import-check.ts",
-    "postinstall": "bun run scripts/postinstall.ts"
+    "import-check": "bun run test/import-check.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "latest",
