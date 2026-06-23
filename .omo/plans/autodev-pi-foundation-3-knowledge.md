@@ -15,6 +15,8 @@
 > > If any source disagrees, ARCHITECTURE.md wins on design, .autodev/reference/ wins on process, and this plan wins on scope.
 
 > **SPLIT FROM:** This is sub-plan 3 of 4 from the master plan `.omo/plans/autodev-pi-foundation.md`. Execute after Plan 1 completes. Can run in parallel with Plan 2.
+>
+> > **CONCURRENT EXECUTION:** Plan 2 (autodev-pi-foundation-2-engine) is running concurrently. Both plans modify files on the same `pi-foundation` branch. To avoid conflicts: (1) Each plan commits ONLY its own module files — Plan 3 touches `extensions/autodev/{loreguard,docs,tools,notepad}/index.ts`, `test/mocks/{embeddings,session-manager}.ts`, `.pi/skills/`, `.autodev/decisions/loreguard.db`, `.autodev/embeddings/vectors.db`, and evidence files. (2) Do NOT commit files owned by Plan 2 (`extensions/autodev/{guardrails,background,delegation}/index.ts`, `test/mocks/pi-session.ts`, `.autodev/config/concurrency.yaml`, `.autodev/active-task.json`). (3) Run `git add` with explicit file paths, never `git add -A` or `git add .`. (4) If a merge conflict occurs, coordinate with the Plan 2 worker — do NOT overwrite their changes.
 
 ## TL;DR (For humans)
 
