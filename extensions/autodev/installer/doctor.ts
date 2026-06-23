@@ -95,11 +95,10 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
       }
       notify("AutoDev detected a fresh installation.", "info");
       notify("Starting interactive setup...", "info");
-      const { runInstall } = await import("./index.js");
-      await runInstall({
+      const { runInstallFixes } = await import("./install-module.js");
+      await runInstallFixes({
         projectRoot: deps.projectRoot,
         authPath: deps.authPath,
-        nonInteractive: false,
         notify,
       });
       return { checks: [], passed: 0, failed: 0, configFlowLaunched: true };
@@ -185,13 +184,11 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   // ---- Gate 3: Auto-fix on failure (only when orchestrating) ----
   let configFlowLaunched = false;
   if (launchConfigFlow && failed > 0) {
-    notify("Some checks failed. Running autodev install to fix missing components...", "warning");
-    const { runInstall } = await import("./index.js");
-    const nonInteractive = deps.execSyncOverride !== undefined ? true : process.stdin.isTTY !== true;
-    await runInstall({
+    notify("Some checks failed. Running install fixes...", "warning");
+    const { runInstallFixes } = await import("./install-module.js");
+    await runInstallFixes({
       projectRoot: deps.projectRoot,
       authPath: deps.authPath,
-      nonInteractive,
       notify,
     });
     configFlowLaunched = true;

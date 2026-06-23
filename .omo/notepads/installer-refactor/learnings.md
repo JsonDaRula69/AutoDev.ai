@@ -42,3 +42,19 @@
 - TypeScript: `HANDLERS[name]!` non-null assertion needed because `for...of` on `as const` array still types `name` as `string`, not the literal union.
 - All acceptance criteria pass: file exists, typecheck clean (no config-module errors), no forbidden terms, `execSyncOverride` present, `nonInteractive` absent.
 - Evidence at `.omo/evidence/task-4-installer-refactor.md`.
+
+## 2026-06-23 — Install module created, steps.ts deleted (todo 3)
+
+- Created `extensions/autodev/installer/install-module.ts` with `runInstallFixes(deps: InstallModuleDeps): Promise<InstallFixResult[]>`.
+- `InstallModuleDeps` = `{ projectRoot, authPath, notify, execSyncOverride?, fetchOverride? }`.
+- `InstallFixResult` = `{ name: string, ok: boolean, detail: string }`.
+- Fixes run unconditionally (idempotent): (1) gh/git via `installMissingTools` from `tools.ts`, (2) config files via `validateAndCreateConfig` from `config-defaults.ts`, (3) MC setup via `bunx @cortexkit/magic-context@latest setup --harness pi` (120s), (4) MC doctor as warning check (30s).
+- Step recording: tools = step 0, config files + MC setup = step 3 (both under scope `install`).
+- Returns 4 results: "External tools (gh/git)", "Config files", "Magic Context setup", "Magic Context doctor".
+- `ensureGitignore(projectRoot)` called once at start.
+- `steps.ts` deleted via `git rm`.
+- `index.ts` also deleted early (blocked typecheck by importing from deleted `steps.ts`). This is consistent with plan (todo 8 deletes it unconditionally).
+- `doctor.ts` dynamic imports updated from `./index.js` to `./install-module.js`.
+- `orchestrator/cli.ts` import and case branches for `install`/`init` removed.
+- Typecheck passes clean. Grep sweep confirms zero references to removed symbols in non-test source.
+- Evidence at `.omo/evidence/task-3-installer-refactor.md`.

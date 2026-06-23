@@ -10,8 +10,6 @@
  *   autodev docs rebuild    — reingest docs-corpus/
  *   autodev debate start .. — start a debate
  *   autodev debate status   — show active debate state
- *   autodev install           — machine-level setup (Bun, LLM creds, Magic Context, VoyageAI, Discord)
- *   autodev init              — project-level setup (GitHub labels, knowledge base, docs)
  *   autodev stop-continuation — stop all continuation loops
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -20,13 +18,13 @@ import { getHeartbeatState, stopHeartbeat } from "./heartbeat.js";
 import { loadRegistry, getActiveProject } from "./projects.js";
 import { enableDebug, disableDebug, getDebugState } from "../debug/index.js";
 import { stopAllLoops } from "../autonomy/continuation.js";
-import { handleInstall, handleInit } from "../installer/index.js";
+// handleInstall/handleInit removed — installer/index.ts deleted in todo 3
 
 // ---- Command registration ----
 
 export function registerCommands(pi: ExtensionAPI): void {
   pi.registerCommand("autodev", {
-    description: "AutoDev — autonomous engineering team commands. Subcommands: install, init, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status",
+    description: "AutoDev — autonomous engineering team commands. Subcommands: doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const parts = trimmed.split(/\s+/);
@@ -51,19 +49,13 @@ export function registerCommands(pi: ExtensionAPI): void {
         case "debate":
           await handleDebate(parts.slice(1), ctx);
           break;
-        case "install":
-          await handleInstall(parts.slice(1).join(" "), ctx);
-          break;
-        case "init":
-          await handleInit(parts.slice(1).join(" "), ctx);
-          break;
         case "stop-continuation":
           stopAllLoops();
           ctx.ui.notify("All continuation loops stopped.", "info");
           break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: install, init, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
             "info",
           );
       }
