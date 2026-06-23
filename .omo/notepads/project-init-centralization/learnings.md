@@ -752,3 +752,94 @@ Date: 2026-06-23
 - `bun test extensions/autodev/installer/__tests__/init-module.test.ts`: 12 pass, 0 fail.
 - `bun test` (full suite): 539 pass, 0 fail.
 - Evidence: `.omo/evidence/project-init-centralization/t10-onboard-happy.md`, `t10-onboard-failure.md`.
+
+# T13 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/delegation/skills.ts`: rewrote skill resolution to a
+  two-layer model:
+  - `getCentralSkillsDir()` → `join(getAgentDir(), "..", "skills")` (the
+    per-user central store, `~/.AutoDev/skills/` when `PI_CODING_AGENT_DIR`
+    is set by T1's env wiring).
+  - `getProjectSkillsDir(projectRoot)` → `resolve(projectRoot, ".autodev",
+    "skills")` (project-level overrides).
+  - `resolveSkill(projectRoot, name)` now checks the project override
+    FIRST, then falls back to central. Returns `undefined` if neither has
+    the skill.
+  - New `loadAllSkills(projectRoot): readonly SkillEntry[]` merges central
+    skills into a `Map<string, SkillEntry>`, then overlays project skills
+    (same name → project wins). Returns the merged list. `[]` when
+    neither layer exists.
+  - New `SkillEntry` interface: `{ name, content, source: "central" |
+    "project" }`.
+  - New `listSkillDirs(dir)` helper: `readdirSync(dir, { withFileTypes:
+    true })`, filters to directories containing `SKILL.md`.
+  - Removed old `SKILL_SEARCH_PATHS = [".autodev/skills", ".pi/skills"]`
+    constant (replaced by layered resolution).
+  - `stripFrontmatter` and `buildSkillPromptBlock` unchanged in behavior;
+    `buildSkillPromptBlock` still delegates to `resolveSkill`, so it
+    transparently picks up the new layered resolution.
+- New test file `extensions/autodev/delegation/__tests__/skills.test.ts`
+  (14 tests): happy 5-skill central load, source marker, project override
+  (same name wins), project-only add, no-central-dir `[]`, project-only
+  with central missing, `resolveSkill` override + fallback + absent +
+  central-missing, `buildSkillPromptBlock` happy + empty + not-found +
+  project-override body.
+
+## Key decisions
+
+- **Project wins on collision.** `loadAllSkills` uses a `Map<string,
+  SkillEntry>`; central skills are inserted first, then project skills
+  `set` overwrites the entry for the same name. The `source` field
+  records which layer the winning copy came from, so callers can audit
+  provenance. This matches the task spec: "same filename overrides
+  central."
+- **`resolveSkill` checks project first, not central first.** The task
+  spec says project `.autodev/skills/` "adding/overriding" — override
+  semantics mean the project copy must win when both exist. Checking
+  project first and falling back to central is the simplest expression
+  of that. (Note: this differs from the old behavior, which checked
+  `.autodev/skills` first then `.pi/skills` — the order is preserved for
+  the project layer, but the central fallback is now `getAgentDir()`-
+  based instead of `.pi/skills`.)
+- **`loadAllSkills` is additive to the public API.** The existing
+  `resolveSkill` + `buildSkillPromptBlock` remain for name-based lookup.
+  `loadAllSkills` is new for callers that want the full merged set (e.g.
+  a future "list all available skills" UI). It does not replace
+  `resolveSkill`.
+- **`Dirent` type import.** `listSkillDirs` uses `readdirSync(dir, {
+  withFileTypes: true })` which returns `Dirent[]`. Under `tsc --noEmit`
+  with strict settings, the inferred `string[]` annotation caused a
+  type mismatch. Annotated as `readonly import("node:fs").Dirent[]` to
+  satisfy the checker without a top-level import.
+
+## Gotchas
+
+- **Sibling-task test interaction.** The full `bun test` run shows 8
+  failures in `guardrails/__tests__/` and `dispatch.test.ts`/
+  `cli.test.ts`. These are from uncommitted sibling-task changes
+  (`guardrails/index.ts` modified, new test files added) and are NOT
+  caused by T13. Running T13's skills tests + guardrails tests in
+  isolation: 19 pass, 0 fail. T13's MUST NOT constraint forbids touching
+  those files.
+- **`getAgentDir()` reads `PI_CODING_AGENT_DIR` live.** Confirmed in T2
+  learnings; T13 tests use the same `beforeEach`/`afterEach` env-var
+  save/set/restore pattern as T2/T7/T8. Central skills are planted at
+  `<tempRoot>/skills/` (the sibling of `<tempRoot>/agent`), project
+  skills at `<projectRoot>/.autodev/skills/`.
+- **`readdirSync` with `withFileTypes: true` needs a type annotation.**
+  Without `readonly Dirent[]`, `tsc` inferred `string[]` and the
+  `entry.isDirectory()` / `entry.name` accesses failed typecheck. This
+  is a known Bun/Node typing quirk when the array is assigned to a
+  `string[]` variable first.
+
+## Verification
+
+- `bun test extensions/autodev/delegation/__tests__/skills.test.ts`: 14 pass, 0 fail.
+- `bun run typecheck` (T13 scope): no errors in skills.ts or skills.test.ts.
+- `bun test` (full suite): 556 pass, 8 fail (all pre-existing sibling-task, not T13).
+- Pure LOC: `skills.ts` 171, `skills.test.ts` 147 (both healthy).
+- Evidence: `.omo/evidence/project-init-centralization/t13-skills-happy.md`, `t13-skills-failure.md`.
