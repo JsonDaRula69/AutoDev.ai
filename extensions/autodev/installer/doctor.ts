@@ -1,10 +1,12 @@
 import { execSync, type ExecSyncOptions } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { readAuth } from "./auth.js";
 import { readEnv } from "./env.js";
 import { readState } from "./state.js";
 import { validateAndCreateConfig } from "./config-defaults.js";
+import { runInstallFixes, type InstallModuleDeps } from "./install-module.js";
+import { runConfig, type ConfigModuleDeps } from "./config-module.js";
+import { createPrompter, type Prompter } from "./prompts.js";
 
 export interface DoctorCheck {
   readonly name: string;
@@ -27,36 +29,69 @@ export interface DoctorDeps {
   readonly authPath: string;
   readonly execSyncOverride?: DoctorExecFn;
   /**
-   * When true, doctor takes over the full install flow:
-   *   1. Local install guard — aborts if not a global install.
-   *   2. Fresh-install detection — launches interactive or non-interactive config.
-   *   3. Existing-install health checks — auto-fixes failures.
+   * When true, doctor takes over the full install flow: on health-check
+   * failures it runs `runInstallFixes` (always) and `runConfig` with targeted
+   * sub-commands (only in an interactive TTY), then re-runs all checks.
    * When false, doctor runs only the health checks (no side effects).
    * Defaults to false.
    */
   readonly launchConfigFlow?: boolean;
   /** Notify callback used when launching the config flow. */
   readonly notify?: (message: string, level: "info" | "warning" | "error") => void;
+  /** Optional injected prompter (tests). When omitted doctor creates one. */
+  readonly prompter?: Prompter;
+  /** Optional override for global `fetch` used by config file downloads. */
+  readonly fetchOverride?: typeof fetch;
 }
 
-/** Detect whether the current process is a global install (npm_config_global=true). */
-export function isGlobalInstall(): boolean {
-  return process.env.npm_config_global === "true";
-}
-
-export async function isFreshInstall(deps: Pick<DoctorDeps, "projectRoot" | "authPath">): Promise<boolean> {
-  if (existsSync(deps.authPath)) {
+/**
+ * Detect a first run by checking THREE independent signals:
+ *   1. `auth.json` has at least one non-empty credential (resolving `$VAR`
+ *      references against `process.env`).
+ *   2. `.autodev/install-state.json` has any completed steps.
+ *   3. `~/.pi/agent/.env` (resolved via `dirname(authPath)`) has a non-empty
+ *      `OLLAMA_CLOUD_API_KEY`.
+ *
+ * Used ONLY for messaging (welcome vs "something needs fixing"). Never used
+ * for behavioral branching.
+ */
+export async function isFirstRun(deps: Pick<DoctorDeps, "projectRoot" | "authPath">): Promise<boolean> {
+  // Signal 1: auth.json has usable credentials.
+  try {
     const auth = await readAuth(deps.authPath);
-    const hasCreds = Object.values(auth).some((e) => e?.key !== undefined && e.key !== "");
+    const hasCreds = Object.values(auth).some((entry) => {
+      const key = entry?.key ?? "";
+      if (key === "") return false;
+      if (key.startsWith("$")) {
+        const varName = key.slice(1);
+        const resolved = process.env[varName];
+        return resolved !== undefined && resolved !== "";
+      }
+      return true;
+    });
     if (hasCreds) return false;
+  } catch {
+    // unreadable / missing auth.json → treat as no creds (not a first-run signal).
   }
-  const state = await readState(deps.projectRoot, "install");
-  if (state.completedSteps.length > 0) return false;
-  const envPath = join(deps.projectRoot, ".env");
-  if (existsSync(envPath)) {
-    const env = await readEnv(deps.projectRoot);
-    if (env.get("OLLAMA_CLOUD_API_KEY") !== undefined && env.get("OLLAMA_CLOUD_API_KEY") !== "") return false;
+
+  // Signal 2: install-state has completed steps.
+  try {
+    const state = await readState(deps.projectRoot, "install");
+    if (state.completedSteps.length > 0) return false;
+  } catch {
+    // ignore
   }
+
+  // Signal 3: ~/.pi/agent/.env has OLLAMA_CLOUD_API_KEY.
+  const envPath = join(dirname(deps.authPath), ".env");
+  try {
+    const env = await readEnv(deps.projectRoot, envPath);
+    const v = env.get("OLLAMA_CLOUD_API_KEY");
+    if (v !== undefined && v !== "") return false;
+  } catch {
+    // ignore
+  }
+
   return true;
 }
 
@@ -65,48 +100,99 @@ export async function isFreshInstall(deps: Pick<DoctorDeps, "projectRoot" | "aut
  * Bun, GitHub CLI, GitHub auth, LLM credentials, Environment vars, Install
  * state, settings.json, magic-context.jsonc, agents/*.md.
  *
- * When `launchConfigFlow` is true, doctor is the orchestrator:
- *   - Local install guard first (aborts if not global).
- *   - Fresh install → launch install (interactive or non-interactive).
- *   - Existing install with failures → launch install to fix.
- *   - All green → no action.
+ * When `launchConfigFlow` is true, doctor is the orchestrator: on failures it
+ * runs the install module unconditionally, then runs the config module with
+ * targeted sub-commands only in an interactive TTY, then re-runs all checks.
  */
 export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   const launchConfigFlow = deps.launchConfigFlow ?? false;
   const notify = deps.notify ?? (() => {});
 
-  // ---- Gate 1: Local install guard (only when orchestrating) ----
-  if (launchConfigFlow && !isGlobalInstall()) {
-    notify("AutoDev was installed as a local dependency.", "warning");
-    notify("AutoDev is a machine-level tool, not a project dependency.", "info");
-    notify("Install it globally instead: bun install -g autodev", "info");
-    return { checks: [], passed: 0, failed: 0, configFlowLaunched: false };
+  const firstResult = await runHealthChecks(deps);
+  const failed = firstResult.checks.length - firstResult.passed;
+
+  if (!launchConfigFlow || failed === 0) {
+    return firstResult;
   }
 
-  // ---- Gate 2: Fresh-install detection (only when orchestrating) ----
-  if (launchConfigFlow) {
-    const fresh = await isFreshInstall({ projectRoot: deps.projectRoot, authPath: deps.authPath });
-    if (fresh) {
-      const nonInteractive = process.stdin.isTTY !== true;
-      if (nonInteractive) {
-        notify("AutoDev detected a fresh installation.", "info");
-        notify("To complete setup, run: autodev install", "info");
-        return { checks: [], passed: 0, failed: 0, configFlowLaunched: false };
-      }
-      notify("AutoDev detected a fresh installation.", "info");
-      notify("Starting interactive setup...", "info");
-      const { runInstall } = await import("./index.js");
-      await runInstall({
+  // ---- Orchestrator mode: failures present ----
+  const firstRun = await isFirstRun(deps);
+  if (firstRun) {
+    notify("Welcome to AutoDev! Starting first-run setup...", "info");
+  } else {
+    notify("Some health checks failed. Something needs fixing...", "warning");
+  }
+
+  // (1) Install module — always, no prompts, safe in CI.
+  notify("Running install fixes...", "info");
+  const installDeps: InstallModuleDeps = {
+    projectRoot: deps.projectRoot,
+    notify,
+    execSyncOverride: deps.execSyncOverride as never,
+    ...(deps.fetchOverride !== undefined ? { fetchOverride: deps.fetchOverride } : {}),
+  };
+  await runInstallFixes(installDeps);
+
+  // (2) Config module — only in an interactive TTY, with targeted sub-commands.
+  const isTty = process.stdin.isTTY === true;
+  if (isTty) {
+    const subcommands = targetedSubcommands(firstResult.checks);
+    if (subcommands.length > 0) {
+      const prompter = deps.prompter ?? createPrompter();
+      const configDeps: ConfigModuleDeps = {
         projectRoot: deps.projectRoot,
         authPath: deps.authPath,
-        nonInteractive: false,
+        prompter,
         notify,
-      });
-      return { checks: [], passed: 0, failed: 0, configFlowLaunched: true };
+        ...(deps.execSyncOverride !== undefined
+          ? { execSyncOverride: deps.execSyncOverride as never }
+          : {}),
+      };
+      for (const sub of subcommands) {
+        await runConfig(configDeps, sub);
+      }
+      if (deps.prompter === undefined) {
+        prompter.close();
+      }
     }
+  } else {
+    notify(
+      "Non-interactive environment detected. Run `autodev config` in an interactive terminal to set up credentials.",
+      "warning",
+    );
   }
 
-  // ---- Health checks ----
+  // (3) Re-run all health checks to report what's still broken.
+  const rechecked = await runHealthChecks(deps);
+  return {
+    checks: rechecked.checks,
+    passed: rechecked.passed,
+    failed: rechecked.failed,
+    configFlowLaunched: true,
+  };
+}
+
+/**
+ * Map failing health checks to targeted config sub-commands.
+ * Discord is never auto-triggered (it is not a health check).
+ */
+function targetedSubcommands(checks: readonly DoctorCheck[]): string[] {
+  const subs = new Set<string>();
+  for (const c of checks) {
+    if (c.ok) continue;
+    if (c.name === "LLM credentials") subs.add("llm");
+    if (c.name === "GitHub auth") subs.add("github");
+    if (c.name === "Environment vars") {
+      // Env check fails on missing OLLAMA_CLOUD_API_KEY → `llm` writes it.
+      subs.add("llm");
+      if (c.detail.includes("VOYAGE_API_KEY: missing")) subs.add("voyage");
+    }
+  }
+  return Array.from(subs);
+}
+
+/** Run the full health-check set and return a summary. */
+async function runHealthChecks(deps: DoctorDeps): Promise<DoctorResult> {
   const exec: DoctorExecFn = deps.execSyncOverride ?? ((cmd: string, opts?: ExecSyncOptions) =>
     execSync(cmd, opts ?? {}) as unknown as string);
   const checks: DoctorCheck[] = [];
@@ -126,16 +212,36 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
     checks.push({ name: "GitHub CLI", ok: false, detail: "not found" });
   }
 
+  // GitHub auth — verify token validity, not just presence.
+  const ghTokenSet = process.env.GH_TOKEN !== undefined && process.env.GH_TOKEN !== "";
   try {
     exec("gh auth status", { encoding: "utf-8", stdio: "pipe" });
-    checks.push({ name: "GitHub auth", ok: true, detail: "authenticated" });
+    checks.push({
+      name: "GitHub auth",
+      ok: true,
+      detail: ghTokenSet ? "authenticated via GH_TOKEN" : "authenticated",
+    });
   } catch {
-    checks.push({ name: "GitHub auth", ok: false, detail: "not authenticated" });
+    checks.push({
+      name: "GitHub auth",
+      ok: false,
+      detail: ghTokenSet ? "GH_TOKEN invalid or expired" : "not authenticated",
+    });
   }
 
+  // LLM credentials — resolve `$VAR` references against process.env.
   try {
     const auth = await readAuth(deps.authPath);
-    const providers = Object.keys(auth).filter((k) => auth[k]?.key !== "");
+    const providers = Object.keys(auth).filter((k) => {
+      const key = auth[k]?.key ?? "";
+      if (key === "") return false;
+      if (key.startsWith("$")) {
+        const varName = key.slice(1);
+        const resolved = process.env[varName];
+        return resolved !== undefined && resolved !== "";
+      }
+      return true;
+    });
     checks.push({
       name: "LLM credentials",
       ok: providers.length > 0,
@@ -146,7 +252,8 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   }
 
   try {
-    const env = await readEnv(deps.projectRoot);
+    const envPath = join(dirname(deps.authPath), ".env");
+    const env = await readEnv(deps.projectRoot, envPath);
     const hasOllama = env.get("OLLAMA_CLOUD_API_KEY") !== undefined && env.get("OLLAMA_CLOUD_API_KEY") !== "";
     const hasVoyage = env.get("VOYAGE_API_KEY") !== undefined;
     checks.push({
@@ -158,13 +265,16 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
     checks.push({ name: "Environment vars", ok: false, detail: ".env not found" });
   }
 
+  // Install state — aggregate install + config scopes; threshold 6.
   try {
-    const state = await readState(deps.projectRoot, "install");
-    const installStepCount = state.completedSteps.length;
+    const installState = await readState(deps.projectRoot, "install");
+    const configState = await readState(deps.projectRoot, "config");
+    const allSteps = new Set<number>([...installState.completedSteps, ...configState.completedSteps]);
+    const count = allSteps.size;
     checks.push({
       name: "Install state",
-      ok: installStepCount >= 8,
-      detail: `${installStepCount}/8 install steps completed`,
+      ok: count >= 6,
+      detail: `${count}/6 install steps completed`,
     });
   } catch {
     checks.push({ name: "Install state", ok: false, detail: "install-state.json not found" });
@@ -181,21 +291,5 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
 
   const passed = checks.filter((c) => c.ok).length;
   const failed = checks.length - passed;
-
-  // ---- Gate 3: Auto-fix on failure (only when orchestrating) ----
-  let configFlowLaunched = false;
-  if (launchConfigFlow && failed > 0) {
-    notify("Some checks failed. Running autodev install to fix missing components...", "warning");
-    const { runInstall } = await import("./index.js");
-    const nonInteractive = deps.execSyncOverride !== undefined ? true : process.stdin.isTTY !== true;
-    await runInstall({
-      projectRoot: deps.projectRoot,
-      authPath: deps.authPath,
-      nonInteractive,
-      notify,
-    });
-    configFlowLaunched = true;
-  }
-
-  return { checks, passed, failed, configFlowLaunched };
+  return { checks, passed, failed, configFlowLaunched: false };
 }

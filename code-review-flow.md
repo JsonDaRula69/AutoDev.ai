@@ -48,10 +48,11 @@ setup is complete.
 
 ---
 
-### 1.3 `autodev install` — 9-Step Sequential Installer
+### 1.3 `autodev install` — Installer (refactored)
 
-`cli.ts` line 52-53 routes `autodev install` to `handleInstall()` in
-`installer/index.ts`. `runAllSteps()` in `installer/steps.ts` runs 9 steps:
+`cli.ts` routes `autodev install`/`autodev init` through `installer/config-module.ts`
+and `installer/install-module.ts` (the old `installer/index.ts` and `installer/steps.ts`
+were removed in the installer refactor). The historical 9-step sequence ran:
 
 | Step | What it does | Code | Status |
 |------|-------------|------|--------|
@@ -349,7 +350,7 @@ Deployment is entirely manual.
 | F1 | Heartbeat starts before install completes | MEDIUM | `orchestrator/index.ts` | 33-34 |
 | F2 | Step 8 docs rebuild is a no-op | LOW | `cli.ts` | 174-176 |
 | F3 | Step 9 doctor check is superficial | LOW | `cli.ts` | 71-92 |
-| F4 | No `--force` flag for re-installation | LOW | `installer/steps.ts` | (design) |
+| F4 | No `--force` flag for re-installation | LOW | (design — old `installer/steps.ts` removed) | (design) |
 | F7 | No transactional dedup for heartbeat crash recovery | LOW | `heartbeat.ts` | 278-308 |
 | F10 | Dispatch tool list doesn't match Nemo's agent definition | LOW | `dispatch.ts` | 43 |
 | F14 | `stop-continuation` registered twice | INFO | `autonomy/index.ts` + `cli.ts` | 88, 55 |

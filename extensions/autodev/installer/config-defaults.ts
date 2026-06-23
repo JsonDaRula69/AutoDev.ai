@@ -19,9 +19,10 @@ export interface ConfigCheckResult {
   readonly created: boolean;
 }
 
-async function downloadFile(url: string): Promise<string | undefined> {
+async function downloadFile(url: string, fetchOverride?: typeof fetch): Promise<string | undefined> {
   try {
-    const resp = await fetch(url);
+    const fetchFn = fetchOverride ?? fetch;
+    const resp = await fetchFn(url);
     if (!resp.ok) return undefined;
     return await resp.text();
   } catch {
@@ -29,14 +30,17 @@ async function downloadFile(url: string): Promise<string | undefined> {
   }
 }
 
-export async function validateAndCreateConfig(projectRoot: string): Promise<ConfigCheckResult[]> {
+export async function validateAndCreateConfig(
+  projectRoot: string,
+  fetchOverride?: typeof fetch,
+): Promise<ConfigCheckResult[]> {
   const results: ConfigCheckResult[] = [];
   const piDir = join(projectRoot, ".pi");
 
   const settingsPath = join(piDir, "settings.json");
   if (!existsSync(settingsPath)) {
     mkdirSync(piDir, { recursive: true });
-    const content = await downloadFile(`${RAW_BASE}/.pi/settings.json`);
+    const content = await downloadFile(`${RAW_BASE}/.pi/settings.json`, fetchOverride);
     if (content !== undefined) {
       writeFileSync(settingsPath, content, "utf-8");
       results.push({ name: "settings.json", ok: true, detail: "downloaded from repo", created: true });
@@ -50,7 +54,7 @@ export async function validateAndCreateConfig(projectRoot: string): Promise<Conf
   const mcPath = join(piDir, "magic-context.jsonc");
   if (!existsSync(mcPath)) {
     if (!existsSync(piDir)) mkdirSync(piDir, { recursive: true });
-    const content = await downloadFile(`${RAW_BASE}/.pi/magic-context.jsonc`);
+    const content = await downloadFile(`${RAW_BASE}/.pi/magic-context.jsonc`, fetchOverride);
     if (content !== undefined) {
       writeFileSync(mcPath, content, "utf-8");
       results.push({ name: "magic-context.jsonc", ok: true, detail: "downloaded from repo", created: true });
@@ -75,7 +79,7 @@ export async function validateAndCreateConfig(projectRoot: string): Promise<Conf
     let downloaded = 0;
     let failed = 0;
     for (const agent of missing) {
-      const content = await downloadFile(`${RAW_BASE}/.pi/agents/${agent}.md`);
+      const content = await downloadFile(`${RAW_BASE}/.pi/agents/${agent}.md`, fetchOverride);
       if (content !== undefined) {
         writeFileSync(join(agentsDir, `${agent}.md`), content, "utf-8");
         downloaded++;

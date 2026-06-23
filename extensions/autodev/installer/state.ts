@@ -24,11 +24,12 @@ export interface InstallState {
 }
 
 /** Which lifecycle the state file belongs to. */
-export type StateScope = "install" | "init";
+export type StateScope = "install" | "init" | "config";
 
 const STATE_FILES: Record<StateScope, string> = {
   install: ".autodev/install-state.json",
   init: ".autodev/init-state.json",
+  config: ".autodev/config-state.json",
 };
 
 function statePath(projectRoot: string, scope: StateScope): string {

@@ -10,8 +10,7 @@
  *   autodev docs rebuild    — reingest docs-corpus/
  *   autodev debate start .. — start a debate
  *   autodev debate status   — show active debate state
- *   autodev install           — machine-level setup (Bun, LLM creds, Magic Context, VoyageAI, Discord)
- *   autodev init              — project-level setup (GitHub labels, knowledge base, docs)
+ *   autodev config [sub]    — interactive secrets configuration (llm, voyage, discord, github)
  *   autodev stop-continuation — stop all continuation loops
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -20,13 +19,12 @@ import { getHeartbeatState, stopHeartbeat } from "./heartbeat.js";
 import { loadRegistry, getActiveProject } from "./projects.js";
 import { enableDebug, disableDebug, getDebugState } from "../debug/index.js";
 import { stopAllLoops } from "../autonomy/continuation.js";
-import { handleInstall, handleInit } from "../installer/index.js";
 
 // ---- Command registration ----
 
 export function registerCommands(pi: ExtensionAPI): void {
   pi.registerCommand("autodev", {
-    description: "AutoDev — autonomous engineering team commands. Subcommands: install, init, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status",
+    description: "AutoDev — autonomous engineering team commands. Subcommands: config, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const parts = trimmed.split(/\s+/);
@@ -51,11 +49,8 @@ export function registerCommands(pi: ExtensionAPI): void {
         case "debate":
           await handleDebate(parts.slice(1), ctx);
           break;
-        case "install":
-          await handleInstall(parts.slice(1).join(" "), ctx);
-          break;
-        case "init":
-          await handleInit(parts.slice(1).join(" "), ctx);
+        case "config":
+          await handleConfig(parts.slice(1), ctx);
           break;
         case "stop-continuation":
           stopAllLoops();
@@ -63,7 +58,7 @@ export function registerCommands(pi: ExtensionAPI): void {
           break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: install, init, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: config, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
             "info",
           );
       }
@@ -106,7 +101,7 @@ async function handleDoctor(ctx: ExtensionCommandContext): Promise<void> {
   if (result.configFlowLaunched) {
     ctx.ui.notify("Config flow launched to fix missing components.", "info");
   } else if (result.failed > 0) {
-    ctx.ui.notify("Some checks failed. Run `autodev install` to fix.", "warning");
+    ctx.ui.notify("Some checks failed. Run `autodev config` in an interactive terminal, or re-run `autodev doctor`.", "warning");
   } else if (result.checks.length > 0) {
     ctx.ui.notify("All machine-level checks passed.", "info");
   }
@@ -155,6 +150,43 @@ async function handleOnboard(ctx: ExtensionCommandContext): Promise<void> {
   ctx.ui.notify("Use: pi to start an interactive session with the Harbor Master agent.", "info");
   // In a real implementation, this would create a Harbor Master session.
   // For now, we delegate to the user starting pi interactively.
+}
+
+async function handleConfig(parts: string[], ctx: ExtensionCommandContext): Promise<void> {
+  const subSubcommand = parts[0] ?? "";
+
+  if (subSubcommand === "") {
+    ctx.ui.notify("Usage: autodev config <sub-command>", "info");
+    ctx.ui.notify("Sub-commands: llm, voyage, discord, github", "info");
+    ctx.ui.notify("Run `autodev config` with no sub-command to configure all in sequence.", "info");
+    return;
+  }
+
+  const projectRoot = ctx.cwd ?? process.cwd();
+  let authPath: string;
+  try {
+    const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
+    authPath = join(getAgentDir(), "auth.json");
+  } catch {
+    authPath = join(process.env.HOME ?? "~", ".pi", "agent", "auth.json");
+  }
+
+  const { runConfig } = await import("../installer/config-module.js");
+  const { createPrompter } = await import("../installer/prompts.js");
+  const prompter = createPrompter();
+  try {
+    await runConfig(
+      {
+        projectRoot,
+        authPath,
+        prompter,
+        notify: (message, level) => ctx.ui.notify(message, level),
+      },
+      subSubcommand,
+    );
+  } finally {
+    prompter.close();
+  }
 }
 
 async function handleStatus(ctx: ExtensionCommandContext): Promise<void> {

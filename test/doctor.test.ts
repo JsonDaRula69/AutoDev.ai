@@ -122,7 +122,7 @@ test("doctor detects incomplete install state", async () => {
     const result = await runDoctor({ projectRoot: dir, authPath, execSyncOverride: STUB_EXEC });
     const stateCheck = result.checks.find((c) => c.name === "Install state");
     expect(stateCheck?.ok).toBe(false);
-    expect(stateCheck?.detail).toContain("2/8");
+    expect(stateCheck?.detail).toContain("2/6");
   } finally { cleanupTempDir(dir); }
 });
 

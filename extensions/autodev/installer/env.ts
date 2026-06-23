@@ -11,7 +11,7 @@ import { join } from "node:path";
 const ENV_FILE = ".env";
 const GITIGNORE_FILE = ".gitignore";
 
-function envPath(projectRoot: string): string {
+function defaultEnvPath(projectRoot: string): string {
   return join(projectRoot, ENV_FILE);
 }
 
@@ -44,8 +44,11 @@ export function serializeEnv(vars: Map<string, string>): string {
 }
 
 /** Read the current `.env` file, returning a map. Returns empty map if file doesn't exist. */
-export async function readEnv(projectRoot: string): Promise<Map<string, string>> {
-  const path = envPath(projectRoot);
+export async function readEnv(
+  projectRoot: string,
+  envPath?: string,
+): Promise<Map<string, string>> {
+  const path = envPath ?? defaultEnvPath(projectRoot);
   if (!existsSync(path)) return new Map();
   const content = await readFile(path, "utf-8");
   return parseEnv(content);
@@ -56,22 +59,26 @@ export async function setEnvVar(
   projectRoot: string,
   key: string,
   value: string,
+  envPath?: string,
 ): Promise<void> {
-  const vars = await readEnv(projectRoot);
+  const resolved = envPath ?? defaultEnvPath(projectRoot);
+  const vars = await readEnv(projectRoot, resolved);
   vars.set(key, value);
-  await writeFile(envPath(projectRoot), serializeEnv(vars), "utf-8");
+  await writeFile(resolved, serializeEnv(vars), "utf-8");
 }
 
 /** Set multiple key=value pairs at once. */
 export async function setEnvVars(
   projectRoot: string,
   entries: ReadonlyArray<[string, string]>,
+  envPath?: string,
 ): Promise<void> {
-  const vars = await readEnv(projectRoot);
+  const resolved = envPath ?? defaultEnvPath(projectRoot);
+  const vars = await readEnv(projectRoot, resolved);
   for (const [key, value] of entries) {
     vars.set(key, value);
   }
-  await writeFile(envPath(projectRoot), serializeEnv(vars), "utf-8");
+  await writeFile(resolved, serializeEnv(vars), "utf-8");
 }
 
 /** Ensure `.gitignore` includes `.env`. Appends if missing. */

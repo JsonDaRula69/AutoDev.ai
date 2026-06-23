@@ -6,6 +6,8 @@
  * `register()` calls are synchronous and idempotent.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { augmentSystemPrompt } from "./context.js";
 
 import { register as registerGuardrails } from "./guardrails/index.js";
@@ -55,8 +57,46 @@ const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: Ex
 
 export const MODULE_NAMES: readonly string[] = MODULES.map((m) => m.name);
 
-export default function autodevExtension(pi: ExtensionAPI): void {
-  // Context injection: augment the system prompt before each agent turn.
+async function loadAgentEnv(): Promise<void> {
+  let agentDir: string;
+  try {
+    const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
+    agentDir = getAgentDir();
+  } catch {
+    agentDir = join(process.env.HOME ?? "~", ".pi", "agent");
+  }
+  const envPath = join(agentDir, ".env");
+  if (!existsSync(envPath)) return;
+
+  let raw: string;
+  try {
+    raw = readFileSync(envPath, "utf-8");
+  } catch {
+    return;
+  }
+
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+export default async function autodevExtension(pi: ExtensionAPI): Promise<void> {
+  await loadAgentEnv();
+
   pi.on("before_agent_start", async (event, ctx) => {
     const augmented = augmentSystemPrompt(event, ctx.cwd);
     if (augmented !== event.systemPrompt) {
@@ -65,7 +105,6 @@ export default function autodevExtension(pi: ExtensionAPI): void {
     return undefined;
   });
 
-  // Register all 17 modules in canonical order.
   for (const mod of MODULES) {
     mod.register(pi);
   }

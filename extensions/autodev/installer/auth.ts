@@ -16,6 +16,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { setEnvVar } from "./env.js";
 
 /** Shape of a single provider entry in auth.json. */
 export interface AuthEntry {
@@ -57,20 +58,47 @@ export async function setProviderKey(
   await writeAuth(authPath, data);
 }
 
-/** Try to import credentials from an existing auth.json (e.g., from `.opencode/auth.json`). */
+/**
+ * Import credentials from an existing auth.json, transforming them to `$VAR`
+ * references: the actual key is written to `.env` and only a `$VAR` reference
+ * is stored in `auth.json`. Never writes literal key values to `auth.json`.
+ */
 export async function tryImportAuth(
   sourcePath: string,
   targetPath: string,
   provider: string,
+  envVarName?: string,
+  envPath?: string,
+  projectRoot?: string,
 ): Promise<boolean> {
   if (!existsSync(sourcePath)) return false;
   try {
     const source = await readAuth(sourcePath);
     const entry = source[provider];
     if (entry === undefined || entry.type !== "api_key" || entry.key === "") return false;
-    await setProviderKey(targetPath, provider, entry.key);
+
+    const varName = envVarName ?? providerToEnvVar(provider);
+    const resolvedEnvPath = envPath ?? join(targetPath, "..", ".env");
+    const resolvedProjectRoot = projectRoot ?? targetPath;
+
+    await setEnvVar(resolvedProjectRoot, varName, entry.key, resolvedEnvPath);
+    await setProviderKey(targetPath, provider, `$${varName}`);
     return true;
   } catch {
     return false;
   }
+}
+
+export function providerToEnvVar(provider: string): string {
+  const map: Record<string, string> = {
+    "ollama-cloud": "OLLAMA_CLOUD_API_KEY",
+    anthropic: "ANTHROPIC_API_KEY",
+    openai: "OPENAI_API_KEY",
+    deepseek: "DEEPSEEK_API_KEY",
+    google: "GEMINI_API_KEY",
+    mistral: "MISTRAL_API_KEY",
+    groq: "GROQ_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
+  };
+  return map[provider] ?? `${provider.toUpperCase().replace(/-/g, "_")}_API_KEY`;
 }
