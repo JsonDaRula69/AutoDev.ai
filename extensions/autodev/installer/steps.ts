@@ -14,10 +14,11 @@ import { execSync, type ExecSyncOptions } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { readState, markStepCompleted, isStepCompleted } from "./state.js";
+import { readState, markStepCompleted, isStepCompleted, type StateScope } from "./state.js";
 import { setEnvVars, ensureGitignore } from "./env.js";
 import { setProviderKey, tryImportAuth } from "./auth.js";
 import type { Prompter } from "./prompts.js";
+import { installMissingTools } from "./tools.js";
 
 // ---- Types ----
 
@@ -26,6 +27,8 @@ export interface StepContext {
   readonly prompter: Prompter;
   readonly nonInteractive: boolean;
   readonly authPath: string;
+  /** Which state scope this run belongs to ("install" or "init"). */
+  readonly scope: StateScope;
   /** Notify the user (maps to ctx.ui.notify in production). */
   notify: (message: string, level: "info" | "warning" | "error") => void;
   /** Override for execSync (injectable for tests). */
@@ -40,6 +43,85 @@ export interface StepResult {
 }
 
 // ---- Step implementations ----
+
+export async function step0ExternalTools(ctx: StepContext): Promise<StepResult> {
+  if (await isStepCompleted(ctx.projectRoot, 0, ctx.scope)) {
+    return { step: 0, name: "External tools", status: "skipped", message: "Already completed." };
+  }
+
+  const results = installMissingTools(ctx.notify, undefined, ctx.execSyncOverride as never);
+  const failed = results.filter((r) => !r.installed);
+
+  await markStepCompleted(ctx.projectRoot, 0, ctx.scope);
+
+  if (failed.length === 0) {
+    const installed = results.filter((r) => r.installed);
+    return {
+      step: 0,
+      name: "External tools",
+      status: installed.length > 0 ? "ok" : "skipped",
+      message: installed.length > 0
+        ? `Installed: ${installed.map((r) => r.tool).join(", ")}`
+        : "All external tools already present.",
+    };
+  }
+
+  return {
+    step: 0,
+    name: "External tools",
+    status: "error",
+    message: `Failed to install: ${failed.map((r) => r.tool).join(", ")}. ${failed[0]?.message ?? ""}`,
+  };
+}
+
+export async function step0bGhAuth(ctx: StepContext): Promise<StepResult> {
+  if (await isStepCompleted(ctx.projectRoot, -1, ctx.scope)) {
+    return { step: -1, name: "GitHub auth", status: "skipped", message: "Already completed." };
+  }
+
+  try {
+    execSyncFn("gh auth status", { stdio: "pipe", timeout: 10_000 });
+    await markStepCompleted(ctx.projectRoot, -1, ctx.scope);
+    return { step: -1, name: "GitHub auth", status: "ok", message: "Already authenticated." };
+  } catch {
+  }
+
+  if (ctx.nonInteractive) {
+    ctx.notify("GitHub CLI not authenticated. Run `gh auth login` manually.", "warning");
+    await markStepCompleted(ctx.projectRoot, -1, ctx.scope);
+    return {
+      step: -1,
+      name: "GitHub auth",
+      status: "warning",
+      message: "Not authenticated. Run `gh auth login` to fix.",
+    };
+  }
+
+  const shouldAuth = await ctx.prompter.confirm(
+    "GitHub CLI is not authenticated. Run `gh auth login` now?",
+    true,
+  );
+  if (!shouldAuth) {
+    ctx.notify("GitHub auth skipped. Run `gh auth login` later.", "info");
+    await markStepCompleted(ctx.projectRoot, -1, ctx.scope);
+    return { step: -1, name: "GitHub auth", status: "skipped", message: "User declined." };
+  }
+
+  ctx.notify("Launching gh auth login --web...", "info");
+  try {
+    execSyncFn("gh auth login --web", { stdio: "inherit", timeout: 300_000 });
+  } catch (e) {
+    return {
+      step: -1,
+      name: "GitHub auth",
+      status: "error",
+      message: `gh auth login failed: ${(e as Error).message}`,
+    };
+  }
+
+  await markStepCompleted(ctx.projectRoot, -1, ctx.scope);
+  return { step: -1, name: "GitHub auth", status: "ok", message: "GitHub CLI authenticated." };
+}
 
 /**
  * Step 1 — Environment check.
@@ -123,12 +205,26 @@ export async function step2LlmCredentials(ctx: StepContext): Promise<StepResult>
     const piAuthPath = join(process.env.HOME ?? "~", ".pi", "agent", "auth.json");
     const opencodeAuthPath = join(process.env.HOME ?? "~", ".opencode", "auth.json");
 
+    const importableSources = [piAuthPath, opencodeAuthPath].filter((src) => existsSync(src));
+
     let imported = false;
-    for (const src of [piAuthPath, opencodeAuthPath]) {
-      if (await tryImportAuth(src, ctx.authPath, provider)) {
-        ctx.notify(`Imported ${provider} credentials from ${src}.`, "info");
-        imported = true;
-        break;
+    if (importableSources.length > 0) {
+      const sourceList = importableSources.map((s) => `  - ${s}`).join("\n");
+      const shouldImport = await ctx.prompter.confirm(
+        `Found existing auth file(s):\n${sourceList}\nImport ${provider} credentials from these?`,
+        true,
+      );
+      if (shouldImport) {
+        for (const src of importableSources) {
+          if (await tryImportAuth(src, ctx.authPath, provider)) {
+            ctx.notify(`Imported ${provider} credentials from ${src}.`, "info");
+            imported = true;
+            break;
+          }
+        }
+        if (!imported) {
+          ctx.notify(`No ${provider} credentials found in existing auth files.`, "info");
+        }
       }
     }
 
@@ -159,7 +255,7 @@ export async function step2LlmCredentials(ctx: StepContext): Promise<StepResult>
 
 /**
  * Step 3 — Magic Context setup.
- * Run `npx @cortexkit/magic-context@latest setup --harness pi` and doctor check.
+ * Run `bunx @cortexkit/magic-context@latest setup --harness pi` and doctor check.
  */
 export async function step3MagicContext(ctx: StepContext): Promise<StepResult> {
   if (await isStepCompleted(ctx.projectRoot, 3)) {
@@ -168,7 +264,7 @@ export async function step3MagicContext(ctx: StepContext): Promise<StepResult> {
 
   ctx.notify("Setting up Magic Context...", "info");
   try {
-    execSyncFn("npx @cortexkit/magic-context@latest setup --harness pi", {
+    execSyncFn("bunx @cortexkit/magic-context@latest setup --harness pi", {
       cwd: ctx.projectRoot,
       stdio: "pipe",
       timeout: 120_000,
@@ -182,9 +278,8 @@ export async function step3MagicContext(ctx: StepContext): Promise<StepResult> {
     };
   }
 
-  // Run doctor check
   try {
-    execSyncFn("npx @cortexkit/magic-context@latest doctor", {
+    execSyncFn("bunx @cortexkit/magic-context@latest doctor", {
       cwd: ctx.projectRoot,
       stdio: "pipe",
       timeout: 30_000,
@@ -283,7 +378,7 @@ export async function step5Discord(ctx: StepContext): Promise<StepResult> {
  * Create all 8 AutoDev labels via `gh label create --force`.
  */
 export async function step6GitHubLabels(ctx: StepContext): Promise<StepResult> {
-  if (await isStepCompleted(ctx.projectRoot, 6)) {
+  if (await isStepCompleted(ctx.projectRoot, 6, ctx.scope)) {
     return { step: 6, name: "GitHub labels", status: "skipped", message: "Already completed." };
   }
 
@@ -313,7 +408,7 @@ export async function step6GitHubLabels(ctx: StepContext): Promise<StepResult> {
     }
   }
 
-  await markStepCompleted(ctx.projectRoot, 6);
+  await markStepCompleted(ctx.projectRoot, 6, ctx.scope);
 
   if (errors > 0 && created === 0) {
     return {
@@ -338,7 +433,7 @@ export async function step6GitHubLabels(ctx: StepContext): Promise<StepResult> {
  * If `.autodev/reference/` is empty, prompt to run `autodev onboard`.
  */
 export async function step7KnowledgeBase(ctx: StepContext): Promise<StepResult> {
-  if (await isStepCompleted(ctx.projectRoot, 7)) {
+  if (await isStepCompleted(ctx.projectRoot, 7, ctx.scope)) {
     return { step: 7, name: "Knowledge base", status: "skipped", message: "Already completed." };
   }
 
@@ -359,7 +454,7 @@ export async function step7KnowledgeBase(ctx: StepContext): Promise<StepResult> 
     }
   }
 
-  await markStepCompleted(ctx.projectRoot, 7);
+  await markStepCompleted(ctx.projectRoot, 7, ctx.scope);
   return {
     step: 7,
     name: "Knowledge base",
@@ -375,7 +470,7 @@ export async function step7KnowledgeBase(ctx: StepContext): Promise<StepResult> 
  * Run `autodev docs rebuild`.
  */
 export async function step8DocsRebuild(ctx: StepContext): Promise<StepResult> {
-  if (await isStepCompleted(ctx.projectRoot, 8)) {
+  if (await isStepCompleted(ctx.projectRoot, 8, ctx.scope)) {
     return { step: 8, name: "Docs rebuild", status: "skipped", message: "Already completed." };
   }
 
@@ -391,7 +486,7 @@ export async function step8DocsRebuild(ctx: StepContext): Promise<StepResult> {
     };
   }
 
-  await markStepCompleted(ctx.projectRoot, 8);
+  await markStepCompleted(ctx.projectRoot, 8, ctx.scope);
   return { step: 8, name: "Docs rebuild", status: "ok", message: "Docs corpus indexed." };
 }
 
@@ -400,7 +495,7 @@ export async function step8DocsRebuild(ctx: StepContext): Promise<StepResult> {
  * Run `autodev doctor` to verify everything works.
  */
 export async function step9Doctor(ctx: StepContext): Promise<StepResult> {
-  if (await isStepCompleted(ctx.projectRoot, 9)) {
+  if (await isStepCompleted(ctx.projectRoot, 9, ctx.scope)) {
     return { step: 9, name: "Doctor check", status: "skipped", message: "Already completed." };
   }
 
@@ -417,59 +512,87 @@ export async function step9Doctor(ctx: StepContext): Promise<StepResult> {
     };
   }
 
-  await markStepCompleted(ctx.projectRoot, 9);
+  await markStepCompleted(ctx.projectRoot, 9, ctx.scope);
   return { step: 9, name: "Doctor check", status: "ok", message: "Health verification passed." };
 }
 
-// ---- Runner ----
+// ---- Runners ----
 
-/** All 9 steps in order. */
-export const ALL_STEPS: ReadonlyArray<(ctx: StepContext) => Promise<StepResult>> = [
+/** Machine-level install steps (1-5 + doctor). Run once per machine. */
+export const INSTALL_STEPS: ReadonlyArray<(ctx: StepContext) => Promise<StepResult>> = [
+  step0ExternalTools,
+  step0bGhAuth,
   step1BunCheck,
   step2LlmCredentials,
   step3MagicContext,
   step4VoyageAi,
   step5Discord,
-  step6GitHubLabels,
-  step7KnowledgeBase,
-  step8DocsRebuild,
   step9Doctor,
 ];
 
-export const STEP_NAMES: readonly string[] = [
+/** Project-level init steps (6-8). Run once per project. */
+export const INIT_STEPS: ReadonlyArray<(ctx: StepContext) => Promise<StepResult>> = [
+  step6GitHubLabels,
+  step7KnowledgeBase,
+  step8DocsRebuild,
+];
+
+export const INSTALL_STEP_NAMES: readonly string[] = [
+  "External tools",
+  "GitHub auth",
   "Bun check",
   "LLM credentials",
   "Magic Context",
   "VoyageAI key",
   "Discord",
-  "GitHub labels",
-  "Knowledge base",
-  "Docs rebuild",
   "Doctor check",
 ];
 
-/** Run all 9 steps sequentially, collecting results. Does NOT abort on partial failure. */
-export async function runAllSteps(ctx: StepContext): Promise<StepResult[]> {
+export const INIT_STEP_NAMES: readonly string[] = [
+  "GitHub labels",
+  "Knowledge base",
+  "Docs rebuild",
+];
+
+/**
+ * Run a set of steps sequentially, collecting results.
+ * Does NOT abort on partial failure — each step runs regardless of prior errors.
+ */
+async function runSteps(
+  steps: ReadonlyArray<(ctx: StepContext) => Promise<StepResult>>,
+  names: readonly string[],
+  ctx: StepContext,
+): Promise<StepResult[]> {
   const results: StepResult[] = [];
-  for (let i = 0; i < ALL_STEPS.length; i++) {
-    const step = ALL_STEPS[i]!;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i]!;
     try {
       const result = await step(ctx);
       results.push(result);
       if (result.status === "error") {
-        ctx.notify(`Step ${i + 1} (${STEP_NAMES[i]}): ${result.message}`, "error");
+        ctx.notify(`Step ${result.step} (${names[i]}): ${result.message}`, "error");
       } else if (result.status === "warning") {
-        ctx.notify(`Step ${i + 1} (${STEP_NAMES[i]}): ${result.message}`, "warning");
+        ctx.notify(`Step ${result.step} (${names[i]}): ${result.message}`, "warning");
       } else if (result.status === "ok") {
-        ctx.notify(`Step ${i + 1} (${STEP_NAMES[i]}): ${result.message}`, "info");
+        ctx.notify(`Step ${result.step} (${names[i]}): ${result.message}`, "info");
       }
     } catch (e) {
       const msg = `Unexpected error in step ${i + 1}: ${(e as Error).message}`;
       ctx.notify(msg, "error");
-      results.push({ step: i + 1, name: STEP_NAMES[i] ?? `Step ${i + 1}`, status: "error", message: msg });
+      results.push({ step: i + 1, name: names[i] ?? `Step ${i + 1}`, status: "error", message: msg });
     }
   }
   return results;
+}
+
+/** Run machine-level install steps. */
+export async function runInstallSteps(ctx: StepContext): Promise<StepResult[]> {
+  return runSteps(INSTALL_STEPS, INSTALL_STEP_NAMES, ctx);
+}
+
+/** Run project-level init steps. */
+export async function runInitSteps(ctx: StepContext): Promise<StepResult[]> {
+  return runSteps(INIT_STEPS, INIT_STEP_NAMES, ctx);
 }
 
 // ---- Helpers ----

@@ -1,35 +1,25 @@
-/**
- * Installer module — `autodev install` CLI command handler.
- *
- * Exports `handleInstall()` which is called from the orchestrator CLI handler.
- * Walks through 9 deployment steps: Bun check, LLM credentials, Magic Context,
- * VoyageAI key, Discord, GitHub labels, knowledge base seeding, docs rebuild,
- * and doctor verification.
- *
- * Supports `--non-interactive` flag for CI/automation.
- */
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { createPrompter } from "./prompts.js";
-import { runAllSteps, type StepContext } from "./steps.js";
+import { runInstallSteps, runInitSteps, type StepContext } from "./steps.js";
 import { ensureGitignore } from "./env.js";
+import { runDoctor } from "./doctor.js";
+import { execSync } from "node:child_process";
 import { join } from "node:path";
 
-export async function handleInstall(args: string, ctx: ExtensionCommandContext): Promise<void> {
-  const nonInteractive = args.includes("--non-interactive");
-  const projectRoot = ctx.cwd ?? process.cwd();
+export interface InstallOptions {
+  readonly projectRoot: string;
+  readonly authPath: string;
+  readonly nonInteractive: boolean;
+  readonly notify: (message: string, level: "info" | "warning" | "error") => void;
+}
 
-  ctx.ui.notify("AutoDev Installer — Setting up your environment", "info");
-  ctx.ui.notify("============================================", "info");
+export async function runInstall(opts: InstallOptions): Promise<void> {
+  const { nonInteractive, projectRoot, authPath, notify } = opts;
+
+  notify("AutoDev Installer — Machine Setup", "info");
+  notify("============================================", "info");
 
   await ensureGitignore(projectRoot);
-
-  let authPath: string;
-  try {
-    const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
-    authPath = join(getAgentDir(), "auth.json");
-  } catch {
-    authPath = join(process.env.HOME ?? "~", ".pi", "agent", "auth.json");
-  }
 
   const prompter = createPrompter();
 
@@ -38,18 +28,17 @@ export async function handleInstall(args: string, ctx: ExtensionCommandContext):
     prompter,
     nonInteractive,
     authPath,
-    notify: (message, level) => {
-      ctx.ui.notify(message, level);
-    },
+    scope: "install",
+    notify,
   };
 
   try {
-    const results = await runAllSteps(stepCtx);
+    const results = await runInstallSteps(stepCtx);
 
-    ctx.ui.notify("", "info");
-    ctx.ui.notify("============================================", "info");
-    ctx.ui.notify("Installation Summary", "info");
-    ctx.ui.notify("============================================", "info");
+    notify("", "info");
+    notify("============================================", "info");
+    notify("Installation Summary", "info");
+    notify("============================================", "info");
 
     let ok = 0;
     let skipped = 0;
@@ -58,22 +47,135 @@ export async function handleInstall(args: string, ctx: ExtensionCommandContext):
 
     for (const r of results) {
       const icon = r.status === "ok" ? "✓" : r.status === "skipped" ? "→" : r.status === "warning" ? "⚠" : "✗";
-      ctx.ui.notify(`  ${icon} Step ${r.step}: ${r.name} — ${r.message}`, r.status === "error" ? "error" : "info");
+      notify(`  ${icon} Step ${r.step}: ${r.name} — ${r.message}`, r.status === "error" ? "error" : "info");
       if (r.status === "ok") ok++;
       else if (r.status === "skipped") skipped++;
       else if (r.status === "warning") warnings++;
       else errors++;
     }
 
-    ctx.ui.notify("", "info");
-    ctx.ui.notify(`Results: ${ok} ok, ${skipped} skipped, ${warnings} warnings, ${errors} errors`, "info");
+    notify("", "info");
+    notify(`Results: ${ok} ok, ${skipped} skipped, ${warnings} warnings, ${errors} errors`, "info");
 
     if (errors > 0) {
-      ctx.ui.notify("Some steps failed. Check the messages above and re-run `autodev install` to retry.", "warning");
+      notify("Some steps failed. Check the messages above and re-run `autodev install` to retry.", "warning");
+      return;
+    }
+
+    notify("Machine setup complete! Run `autodev init` in your project directory to configure it.", "info");
+
+    notify("", "info");
+    notify("Running post-install health check...", "info");
+    const result = await runDoctor({
+      projectRoot,
+      authPath,
+      execSyncOverride: (cmd, o) => execSync(cmd, o ?? {}) as unknown as string,
+    });
+    for (const check of result.checks) {
+      const icon = check.ok ? "✓" : "✗";
+      notify(`  ${icon} ${check.name}: ${check.detail}`, check.ok ? "info" : "error");
+    }
+    notify("", "info");
+    notify(`Health check: ${result.passed} passed, ${result.failed} failed`, "info");
+  } finally {
+    prompter.close();
+  }
+}
+
+export async function runInit(opts: InstallOptions): Promise<void> {
+  const { nonInteractive, projectRoot, authPath, notify } = opts;
+
+  notify("AutoDev Init — Project Setup", "info");
+  notify("============================================", "info");
+
+  const prompter = createPrompter();
+
+  const stepCtx: StepContext = {
+    projectRoot,
+    prompter,
+    nonInteractive,
+    authPath,
+    scope: "init",
+    notify,
+  };
+
+  try {
+    const results = await runInitSteps(stepCtx);
+
+    notify("", "info");
+    notify("============================================", "info");
+    notify("Project Init Summary", "info");
+    notify("============================================", "info");
+
+    let ok = 0;
+    let skipped = 0;
+    let warnings = 0;
+    let errors = 0;
+
+    for (const r of results) {
+      const icon = r.status === "ok" ? "✓" : r.status === "skipped" ? "→" : r.status === "warning" ? "⚠" : "✗";
+      notify(`  ${icon} Step ${r.step}: ${r.name} — ${r.message}`, r.status === "error" ? "error" : "info");
+      if (r.status === "ok") ok++;
+      else if (r.status === "skipped") skipped++;
+      else if (r.status === "warning") warnings++;
+      else errors++;
+    }
+
+    notify("", "info");
+    notify(`Results: ${ok} ok, ${skipped} skipped, ${warnings} warnings, ${errors} errors`, "info");
+
+    if (errors > 0) {
+      notify("Some steps failed. Check the messages above and re-run `autodev init` to retry.", "warning");
     } else {
-      ctx.ui.notify("AutoDev installation complete! Run `autodev doctor` to verify.", "info");
+      notify("Project setup complete! Run `autodev onboard` to seed the knowledge base.", "info");
     }
   } finally {
     prompter.close();
   }
+}
+
+function resolveAuthPath(): string {
+  try {
+    const { getAgentDir } = require("@earendil-works/pi-coding-agent") as {
+      getAgentDir: () => string;
+    };
+    return join(getAgentDir(), "auth.json");
+  } catch {
+    return join(process.env.HOME ?? "~", ".pi", "agent", "auth.json");
+  }
+}
+
+function autoNonInteractive(argsNonInteractive: boolean): boolean {
+  if (argsNonInteractive) return true;
+  if (process.stdin.isTTY !== true) return true;
+  if (process.env.CI !== undefined) return true;
+  return false;
+}
+
+export async function handleInstall(args: string, ctx: ExtensionCommandContext): Promise<void> {
+  const argsNonInteractive = args.includes("--non-interactive");
+  const nonInteractive = autoNonInteractive(argsNonInteractive);
+  const projectRoot = ctx.cwd ?? process.cwd();
+  const authPath = resolveAuthPath();
+
+  await runInstall({
+    projectRoot,
+    authPath,
+    nonInteractive,
+    notify: (message, level) => ctx.ui.notify(message, level),
+  });
+}
+
+export async function handleInit(args: string, ctx: ExtensionCommandContext): Promise<void> {
+  const argsNonInteractive = args.includes("--non-interactive");
+  const nonInteractive = autoNonInteractive(argsNonInteractive);
+  const projectRoot = ctx.cwd ?? process.cwd();
+  const authPath = resolveAuthPath();
+
+  await runInit({
+    projectRoot,
+    authPath,
+    nonInteractive,
+    notify: (message, level) => ctx.ui.notify(message, level),
+  });
 }

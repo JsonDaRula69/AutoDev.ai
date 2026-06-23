@@ -1,177 +1,570 @@
-# AutoDev pi-foundation Plans 1-3: Remaining Code Review Issues
+# Code Review: Plans 1-4 Completion
 
-> **Date:** 2026-06-23
-> **Branch:** `pi-foundation`
-> **Status:** Post-fix verification. `tsc --noEmit` passes clean (0 errors). `bun test` passes 293/293. 20 of 29 original findings resolved. This document lists the 9 remaining issues only.
+> Comprehensive line-by-line code review and completion check against all 4 plan
+> files. Conducted after Plans 1 (Core), 2 (Engine), 3 (Knowledge), and 4
+> (Autonomous) were marked complete.
+
+**Review date**: 2026-06-23
+**Scope**: All extension modules, agent files, test files, config files, build config
+**Method**: Read each file, cross-reference against plan specifications and ARCHITECTURE.md
+**Test suite**: 479 pass / 0 fail / 1748 expect() calls — `tsc --noEmit` clean
 
 ---
 
-## Major Bugs (3 remaining)
+## BLOCKERS (Runtime failures in production)
 
-### M1 — Circuit breaker "event wins" spec NOT enforced
+### B1 — `one-task-at-a-time` DSL check blocks completing the active task
 
 | Field | Value |
 |-------|-------|
-| **File** | `extensions/autodev/background/circuit-breaker.ts`, `manager.ts` |
-| **Severity** | MAJOR |
+| **File** | `.autodev/config/guardrails.yaml` |
+| **Rule ID** | `one-task-at-a-time` |
+| **Line** | 62 |
+| **Severity** | BLOCKER |
 
-Plan says: "If a final event arrives concurrently with trip, the event wins — idempotent notify, no double-abort."
+**What's wrong:**
 
-The double-abort IS prevented (via `isTerminal` guard on both paths). But "event wins" is NOT enforced — whichever runs first wins. If the stale timer fires, the trip completes synchronously and marks the task terminal BEFORE any abort-induced event arrives in a microtask. The event is then discarded via the `isTerminal` check.
+The `check:` field evaluates `active_tasks >= 1` in the DSL evaluator BEFORE the
+fallback handler runs (guardrails/index.ts lines 412-423). When an active task
+exists and a `todowrite` call tries to COMPLETE it (not start a new one), the
+DSL evaluates:
 
-In single-threaded JS, there's no true concurrency, so "concurrent" means ordered by the event loop. The current implementation is "first-to-run wins" which is NOT "event wins."
+```
+active_tasks >= 1  →  1 >= 1  →  true
+```
 
-**Fix:** To make the event always win, the trip would need to defer or check for pending events. One approach: in `onCircuitBreakerTrip`, before calling `finishTask`, check if the session has already emitted a terminal event (via a flag set in `handleEvent`).
+This returns `{ block: true, reason: "one-task-at-a-time" }` immediately, and
+the fallback never executes. The fallback is the only code path that recognizes
+"the active task is being completed, so it should be allowed." The result: the
+crew can never complete a task through `todowrite`.
+
+**Why tests didn't catch this:**
+
+The test YAML in `test/guardrails.test.ts` (lines 82-126) defines
+`one-task-at-a-time` WITHOUT a `check:` field:
+
+```yaml
+hard_stops:
+  - id: one-task-at-a-time
+    description: "One task at a time"
+    enforcement: block_new_task
+```
+
+No `check:` means the DSL evaluator skips it (`expr.trim() === ""`), so the
+fallback always handles it. Tests pass because they test the fallback directly.
+The production YAML adds `check: "active_tasks >= 1"`, which changes the
+behavior path but is not covered by tests.
+
+**Why it was missed in the code review fixes plan:**
+
+The previous round (code-review-fixes plan) removed `check:` fields from
+`follow-the-plan` and `never-deploy-directly` for exactly this reason — the DSL
+evaluator cannot express the nuanced intent the fallback encodes. The same
+treatment was needed for `one-task-at-a-time` but was overlooked.
+
+**Fix:**
+
+Remove the `check:` field from `one-task-at-a-time` in `guardrails.yaml`.
+The fallback handler owns this rule's intent:
+
+```yaml
+  - id: one-task-at-a-time
+    description: "One task at a time. Only one task can be in_progress (active) at a time."
+    enforcement: block_new_task
+    # No check: — the fallback handles the richer logic that allows completing
+    # the active task while blocking new in_progress when one already exists.
+    # The DSL evaluator cannot express "block unless the active task is being
+    # completed", so the check field is removed and the fallback owns this rule.
+```
 
 ---
 
-### M2 — `never-deploy-directly` blocks Navigator too
+## MEDIUM (Functional gaps)
+
+### B2 — Reference docs not injected into agent context
 
 | Field | Value |
 |-------|-------|
-| **Files** | `.autodev/config/guardrails.yaml`, `extensions/autodev/guardrails/index.ts:522-528` |
-| **Severity** | MAJOR |
+| **File** | `extensions/autodev/context.ts` |
+| **Line** | 150-170 (around `loadMemoryFiles`) |
+| **Severity** | MEDIUM |
 
-Plan says "block direct deploy actions by any agent other than the Navigator."
+**What's wrong:**
 
-The YAML `applies_to` list correctly excludes `navigator`, but the hardcoded fallback at lines 522-528 blocks ALL deploy bash commands regardless of which agent is running — it never checks agent identity. The `applies_to` config is dead at the code level.
+ARCHITECTURE.md §28 (Context Injection) specifies that `.autodev/reference/`
+docs should be injected into every agent session as "immutable technical truth":
 
-If only non-Navigator agents trigger the guardrail (because the dispatch system respects `applies_to`), behavior is correct. But the guardrail engine itself doesn't enforce `applies_to`, so any agent running a deploy bash command is blocked.
+> `.autodev/reference/` docs injected as virtual context (immutable technical truth).
 
-**Fix:** Enforce `applies_to` in the guardrail engine by checking the current agent against the rule's `applies_to` list before blocking, or set `agent` from session context and check `agent === 'navigator'` in the fallback handler.
+The actual implementation in `context.ts` only loads AGENTS.md, CONTEXT.md, and
+`.autodev/memory/*.md`. There is no code path that reads from `.autodev/reference/`.
+
+**Impact:**
+
+Agents don't automatically see the four reference specs:
+- `onboarding-protocol.md` — Harbor Master interview protocol
+- `workflow-specification.md` — Dispatch state machine, guardrails, label lifecycle
+- `discord-setup.md` — Discord bridge configuration
+- `README.md` — Reference directory overview
+
+These files are accessible via `search_docs` (if indexed) or grep, but they are
+not automatically present in agent context at session startup. The architecture
+spec is explicit about injection, not just discoverability.
+
+**Fix:**
+
+Add a `loadReferenceFiles()` function alongside `loadMemoryFiles()` and include
+the reference block in the augmented system prompt. Structure similar to the
+memory loader:
+
+```typescript
+function loadReferenceFiles(root: string): string {
+  const refDir = resolve(root, ".autodev", "reference");
+  if (!existsSync(refDir)) return "";
+  const files = readdirSync(refDir)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
+  if (files.length === 0) return "";
+
+  const sections = files.map((name) => {
+    const content = readOptional(resolve(root, ".autodev", "reference", name));
+    if (content === undefined) return undefined;
+    return `<!-- autodev-reference: ${name} -->\n${content}`;
+  }).filter(Boolean);
+
+  if (sections.length === 0) return "";
+  return `\n\n# Reference Docs (Immutable Truth)\n\n${sections.join("\n\n")}\n`;
+}
+```
+
+Then include it in the `augmentSystemPrompt` return:
+
+```typescript
+const memoryBlock = loadMemoryFiles(root);
+const referenceBlock = loadReferenceFiles(root);
+const result = [event.systemPrompt];
+if (memoryBlock) result.push(memoryBlock);
+if (referenceBlock) result.push(referenceBlock);
+return { systemPrompt: result.join("") };
+```
 
 ---
 
-### M8 — `look_at` tool does NO multimodal analysis
+### B5 — Race condition in notepad registration prevents Loreguard routing
 
 | Field | Value |
 |-------|-------|
-| **File** | `extensions/autodev/tools/handlers.ts:130-160` |
-| **Severity** | MAJOR |
+| **File** | `extensions/autodev/notepad/index.ts` |
+| **Lines** | 39-46, 235-255 |
+| **Severity** | MEDIUM |
 
-Plan says "analyze media files (images, PDFs) using pi's multimodal capabilities." The implementation reads the file to verify existence, determines the MIME type, then returns a placeholder string `"Analyzing <path> (<mime>) for: <goal>"`. No multimodal analysis occurs. The tool is a file-existence checker with a formatted string.
+**What's wrong:**
 
-**Fix:** Return the file as image content blocks (base64-encoded with MIME type) to the model for multimodal processing, or integrate with pi's multimodal API to pass the file content to the vision-capable model.
+The `register()` function has a race condition that permanently disables the Loreguard decision routing path:
+
+```typescript
+// 1. Async dynamic import started (promise is void'd — runs in background)
+void initSuggestLore();
+
+// 2. Synchronous check: search_lore IS registered at this point
+const active = pi.getActiveTools();
+searchLoreAvailable = Array.isArray(active) && active.includes("search_lore");
+// → searchLoreAvailable = true ✓
+
+// 3. But suggestLoreImpl is undefined (dynamic import hasn't resolved yet)
+if (suggestLoreImpl === undefined) {
+    searchLoreAvailable = false;  // ← ALWAYS fires, overrides the true
+}
+```
+
+Then `initSuggestLore()` resolves asynchronously and sets `suggestLoreImpl`, but **never re-sets `searchLoreAvailable = true`**. The flag stays `false` permanently.
+
+**Impact:**
+
+Every single call to `storeDecision()` takes the fallback path (`ctx_memory:ARCHITECTURE`) instead of routing to Loreguard ADRs. This subverts the entire purpose of the notepad system — decisions are never written as draft ADRs through `suggest_lore`, so they never enter the draft→ratified lifecycle.
+
+The fallback path is functional (it works), but the primary route (Loreguard ADRs) is dead code. The test path works because `setSuggestLoreImpl()` + `setSearchLoreAvailable(true)` are synchronous.
+
+**Fix:**
+
+In `initSuggestLore()`, re-set `searchLoreAvailable` when the import succeeds:
+
+```typescript
+async function initSuggestLore(): Promise<void> {
+  try {
+    const mod = await import("../loreguard/index.js");
+    suggestLoreImpl =
+      typeof mod.suggestLore === "function"
+        ? (mod.suggestLore as typeof suggestLoreImpl)
+        : undefined;
+    // If loreguard imports successfully and search_lore was registered,
+    // re-enable the loreguard routing path that was disabled by the
+    // suggestLoreImpl === undefined check in register().
+    if (suggestLoreImpl !== undefined) {
+      searchLoreAvailable = true;
+    }
+  } catch {
+    suggestLoreImpl = undefined;
+  }
+}
+```
+
+This ensures that after the async import resolves, the flag that was erroneously forced to `false` during synchronous registration is re-set to `true`.
 
 ---
 
-## Minor Bugs (6 remaining)
-
-### m2 — `todowrite` test name contradicts assertion
+### B6 — Watch Officer plan scope reader constructs broken file path
 
 | Field | Value |
 |-------|-------|
-| **File** | `test/tools.test.ts:86` |
-| **Severity** | MINOR |
+| **File** | `extensions/autodev/watch-officer-monitor/index.ts` |
+| **Line** | 51 |
+| **Severity** | MEDIUM |
 
-Test named `"todowrite rejects an empty todo array is accepted (no-op)"` asserts `isError: falsy`. The name says "rejects" but the assertion accepts. Misleading test name.
+**What's wrong:**
 
-**Fix:** Rename to `"todowrite accepts an empty todo array as a no-op"`.
+The `readPlanScope()` function constructs a path to the active plan file but assumes `active_plan` is just a plan name (e.g., `"autodev-pi-foundation"`) when it is actually a full absolute path.
+
+In `boulder.ts`, `createBoulderState()` stores `active_plan` as:
+
+```typescript
+// planPath = join(plansDir, f) = "/Users/.../.omo/plans/foo.md"
+active_plan: planPath,
+```
+
+Then `readPlanScope()` does:
+
+```typescript
+const activePlan = readActivePlan(projectRoot);
+// activePlan = "/Users/.../.omo/plans/foo.md"
+const planPath = resolve(projectRoot, ".omo", "plans", `${activePlan}.md`);
+// planPath = "/Users/.../.omo/plans//Users/.../.omo/plans/foo.md.md"
+```
+
+**Impact:**
+
+`readPlanScope()` always either returns `undefined` (the path doesn't exist) or throws (if somehow it did exist). The Watch Officer's plan deviation detection is entirely broken:
+
+- `readPlanScope()` returns `undefined`
+- `isWithinPlanScope()` always returns `true` (no active plan → no scope check)
+- **Every plan deviation goes undetected**
+
+**Root cause:**
+
+The code was written assuming `active_plan` was a bare filename like `"plan-name"` but it's actually a full path like `"/Users/.../plan-name.md"`. The `createBoulderState` function stores `planPath` (the full path), and there's no normalization.
+
+**Fix:**
+
+Handle both possible path formats — if `activePlan` already looks like an absolute file path, use it directly:
+
+```typescript
+function readPlanScope(projectRoot: string): string | undefined {
+  const activePlan = readActivePlan(projectRoot);
+  if (!activePlan) return undefined;
+  // activePlan may be a full path (from createBoulderState) or a bare name.
+  const planPath = existsSync(activePlan)
+    ? activePlan
+    : resolve(projectRoot, ".omo", "plans", `${activePlan}.md`);
+  if (!existsSync(planPath)) return undefined;
+  try {
+    return readFileSync(planPath, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+```
 
 ---
 
-### m4 — Loreguard doc comment says "five pi tools" but registers 6
+## LOW (Documentation / comment issues)
+
+### B3 — Missing Navigator exemption comment on `never-deploy-directly`
 
 | Field | Value |
 |-------|-------|
-| **File** | `extensions/autodev/loreguard/index.ts:6, 131` |
-| **Severity** | MINOR |
+| **File** | `extensions/autodev/guardrails/index.ts` |
+| **Line** | ~523 |
+| **Severity** | LOW |
 
-`archive_lore` was added as a 6th tool, but the header comment at line 6 and the registration comment at line 131 still say "five pi tools" / "five Loreguard tools" while listing/registering 6.
+**What's wrong:**
 
-**Fix:** Change "five" to "six" in both comments.
+The code review fixes plan's M2 fix required a comment explaining that agent
+identity is not available in `tool_call` events, so the Navigator exemption
+for `never-deploy-directly` cannot be enforced at the guardrail level. This
+comment was never added.
+
+Looking at line 523:
+
+```typescript
+// never-deploy-directly: block bash deploy-like commands.
+if (hardStopIds.has("never-deploy-directly") && event.toolName === "bash") {
+```
+
+No mention of the Navigator exemption limitation.
+
+**Fix:**
+
+Add the explaining comment:
+
+```typescript
+// never-deploy-directly: block bash deploy-like commands.
+// NOTE: Agent identity (Navigator exemption) is not available in the
+// tool_call event — all agents are blocked from deploy actions by this
+// hard stop. T13 dispatch can pass agent identity to the guardrail
+// context if per-agent exemptions are needed in the future.
+```
 
 ---
 
-### m5 — `isPathInPlan` matching is too lenient
+### B4 — Stale evidence path in guardrails YAML description
 
 | Field | Value |
 |-------|-------|
-| **File** | `extensions/autodev/guardrails/index.ts:353-358` |
-| **Severity** | MINOR |
+| **File** | `.autodev/config/guardrails.yaml` |
+| **Rule ID** | `evidence-or-it-didnt-happen` |
+| **Line** | 26 |
+| **Severity** | LOW |
 
-`p.endsWith(normalized) || normalized.endsWith(p)` means writing to `bar/foo.ts` matches plan path `foo.ts`. Additionally, `collectPlannedPaths` regex matches any backtick-quoted word (including non-paths like "pending", "read", "completed"). This makes `follow-the-plan` overly permissive — writes to files not explicitly in the plan can pass.
+**What's wrong:**
 
-**Fix:** Use exact path matching or basename+directory matching rather than bare suffix matching. Filter `collectPlannedPaths` to only extract strings that look like file paths (contain a `.` or `/`).
+The rule description says:
+
+```
+Every change that touches runtime behavior must be proven on a real surface.
+Write proof to .autodev/evidence/ before committing.
+```
+
+But the actual code uses `.omo/evidence/` (the pi-foundation convention). The
+path `.autodev/evidence/` is the legacy OmO path. This mismatch is confusing
+for anyone reading the config trying to understand where evidence files go.
+
+**Fix:**
+
+Update the description to reference the correct path:
+
+```
+Write proof to .omo/evidence/ before committing.
+```
 
 ---
 
-### m6 — Guardrail YAML `description:` parser captures trailing quote
+## CONTRADICTIONS & INCONSISTENCIES (Design concerns)
+
+### C1 — Agent identity body vs role description mismatch (operations agents)
 
 | Field | Value |
 |-------|-------|
-| **File** | `extensions/autodev/guardrails/evaluator.ts` |
-| **Severity** | MINOR |
+| **Files** | `.pi/agents/{quartermaster,boatswain,navigator,watch-officer}.md` |
+| **Severity** | INFO |
 
-Greedy `(.*)` in the description regex includes the trailing `"` from quoted YAML values. Descriptions display with a trailing quote in warning messages. Cosmetic.
+**What's wrong:**
 
-**Fix:** Change the description regex to use non-greedy `.*?` like the `check:` field regex, or strip trailing quotes after capture.
+The 4 operations agents share the Engineer identity body verbatim:
+
+> You are the Engineer, the systems integrity officer on a self-sustaining
+> engineering team. Your function is verification: you run the tests, you
+> watch the CI, you confirm that what was built actually works.
+
+But their YAML descriptions describe different specialities:
+
+| Agent | Description says |
+|-------|------------------|
+| quartermaster | "GitHub operations specialist — manages label transitions, monitors CI, creates/manages issues, computes EVM metrics" |
+| boatswain | "QA gates. Test execution and evidence validation before review." |
+| navigator | "Deployment readiness. Coordinates deployment and verifies health post-merge." |
+| watch-officer | "Health monitoring, self-healing, and escalation routing. 4-tier fault management." |
+
+The watch-officer adds a **Proactive Monitoring** section that partly corrects
+this. The other three have no role-specific preamble before the shared body.
+A quartermaster will see "run tests and verify CI" as its main self-concept
+while its actual job is label management and board sync — a system-prompt
+mismatch that may cause the agent to self-identify incorrectly.
+
+This is by-design per ARCHITECTURE.md §4 (the Engineer identity block is
+shared), but it creates a real prompt-incoherence issue. The watch-officer
+addressed it; the others should too.
+
+**Recommendation:**
+
+Add role-specific preamble sections for quartermaster, boatswain, and navigator
+before the shared Engineer body. Each should describe the agent's actual role:
+
+- **quartermaster**: GitHub operations, label gates, EVM metrics, board sync
+- **boatswain**: Evidence validation, QA gate enforcement
+- **navigator**: Deployment coordination, post-deploy health verification
+
+Keep the Engineer body as the shared "operating principles" section. Follow
+the watch-officer pattern: preamble → shared body → constraints/capabilities.
 
 ---
 
-### m8 — No ONNX fallback branching test
+### C2 — Unused model in models.json allowlist
 
 | Field | Value |
 |-------|-------|
-| **File** | `test/docs.test.ts` |
-| **Severity** | MINOR |
+| **File** | `.autodev/config/models.json` |
+| **Severity** | INFO |
 
-Plan requires "Local ONNX fallback works when VOYAGE_API_KEY is unset." All tests use mock embeddings and never exercise the real `embed()` function's VoyageAI vs ONNX branching. The mock bypasses it entirely.
+The allowlist contains 5 models. One is not referenced by any agent:
 
-**Fix:** Add a test that calls `embed()` with `VOYAGE_API_KEY` unset and verifies it routes to `onnxEmbed` (or mock the ONNX path and verify it's called).
+| Model | In allowlist | Used by |
+|-------|:---:|:--------|
+| `ollama-cloud/glm-5.2:cloud` | ✅ | nemo, aronnax, harbor-master, metis, conseil |
+| `ollama-cloud/deepseek-v4-pro` | ✅ | oracle, momus |
+| `ollama-cloud/kimi-k2.7-code` | ✅ | ned-land |
+| `ollama-cloud/deepseek-v4-flash` | ✅ | explore, quartermaster, boatswain, navigator, watch-officer |
+| `ollama-cloud/glm-5.1:cloud` | ✅ | **Not referenced by any agent** |
+
+`glm-5.1:cloud` is dead config. Either remove it or add a comment documenting
+it as a fallback reserve (it is the next model the reactive fallback would try
+if `glm-5.2:cloud` were exhausted).
 
 ---
 
-### m9 — `evidenceExists` checks for ANY file, not task-specific
+### C3 — Static import inconsistency in `boulder.ts`
 
 | Field | Value |
 |-------|-------|
-| **File** | `extensions/autodev/guardrails/index.ts:238` |
-| **Severity** | MINOR |
+| **File** | `extensions/autodev/autonomy/boulder.ts` |
+| **Lines** | 14, 266 |
+| **Severity** | INFO |
 
-`evidenceExists(projectRoot)` checks for any `.md` or `.txt` in `.omo/evidence/`. If ANY evidence file exists, ALL commits are allowed, even if the evidence isn't for the current task. The plan doesn't specify per-task evidence matching, so this is arguably acceptable, but it's a loose check.
+**What's wrong:**
 
-**Fix:** Accept an optional task ID parameter and check for evidence files matching the current task (e.g. `task-N-*.md` pattern).
+Line 14 imports specific functions from `node:fs/promises`:
+```typescript
+import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
+```
+
+But line 266 dynamically imports the same module to access `stat`:
+```typescript
+const stat = await import("node:fs/promises").then((m) => m.stat(pf.path));
+```
+
+This works but is inconsistent. `stat` should be included in the static import:
+
+```typescript
+import { readFile, writeFile, readdir, mkdir, stat } from "node:fs/promises";
+```
+
+And line 266 simplified to:
+```typescript
+const fileStat = await stat(pf.path);
+```
+
+Wait, `stat` would shadow the outer scope if used directly. So it should be
+aliased in the import:
+```typescript
+import { readFile, writeFile, readdir, mkdir, stat as statFile } from "node:fs/promises";
+```
 
 ---
 
-## Test Quality Gaps (still present)
+### C4 — `stop-continuation` command registered twice
 
-### `skills.test.ts` — still existence-only
+| Field | Value |
+|-------|-------|
+| **Files** | `extensions/autodev/autonomy/index.ts` (line 88), `extensions/autodev/orchestrator/cli.ts` (line 55) |
+| **Severity** | INFO |
 
-7 tests check file existence + frontmatter shape. A SKILL.md with lorem ipsum >100 chars passes. Zero content verification — no test checks that `autodev-triage` actually describes triage, references Nemo, or mentions Cynefin.
+**What's wrong:**
 
-### `magic-context-integration.test.ts` — circular mock tests remain
+`stop-continuation` is registered in two places:
+1. `autonomy/index.ts` — as a standalone `pi.registerCommand("stop-continuation", ...)`
+2. `orchestrator/cli.ts` — as a subcommand `autodev stop-continuation`
 
-~12 tests assert that mocks return hardcoded values the mocks were configured to return. `storeLearning` returns `written: false` (nothing was written) and the test accepts this as success.
+Both work — the first is a top-level command, the second is a subcommand under
+`autodev`. Both call `stopAllLoops()`. This is not a bug but it's duplicative
+and may confuse developers.
 
-### Critical missing coverage still unaddressed
+**Recommendation:**
 
-1. **`edit` tool with secrets in `newText`** — only `write` tested for `no-secrets-in-code`
-2. **Loreguard FTS5 injection / special characters / empty query** — FTS5 is a documented attack surface
-3. **`session_search` 50-session limit** — no test with >50 sessions
-4. **Skills content correctness** — lorem ipsum passes
-5. **End-to-end guardrail flow** — `register()` → `pi.on("tool_call")` → handler → block never exercised
-6. **Circuit breaker race condition** — event arriving during trip
-7. **Fallback exhausted** — all models tried, what happens?
+Pick one registration point. The orchestrator CLI handler (`autodev stop-continuation`) is the canonical location since all other stopping is accessed through `autodev` subcommands. Remove the standalone registration in `autonomy/index.ts`.
 
 ---
 
-## Summary
+### C5 — Fragile global require mock in autonomy test
 
-| Category | Total | Remaining |
-|----------|-------|-----------|
-| Critical | 3 | 0 |
-| Major | 12 | 3 (M1, M2, M8) |
-| Minor | 9 | 6 (m2, m4, m5, m6, m8, m9) |
-| Inconsistencies | 5 | 0 (all acknowledged) |
-| **Total** | **29** | **9** |
+| Field | Value |
+|-------|-------|
+| **File** | `extensions/autodev/autonomy/__tests__/autonomy.test.ts` |
+| **Lines** | 14-15, 28-30, 33-35 |
+| **Severity** | INFO |
 
-| Build check | Result |
-|-------------|--------|
-| `bun test` | 293 pass, 0 fail |
-| `tsc --noEmit` | 0 errors |
-| `@opencode-ai` imports | 0 |
-| `oh-my-openagent` in package.json | 0 |
+**What's wrong:**
 
-Plans 1-3 and code-review-fixes are 100% checkbox-complete. Plan 4 (autonomous) is 0/10 — next phase, not in scope.
+The test replaces `require("node:child_process").execSync` globally to mock
+`gh` CLI output:
+
+```typescript
+const mockExecSync = mock<(args: string) => string>(() => "");
+const originalExecSync = require("node:child_process").execSync;
+
+beforeEach(() => {
+  (require("node:child_process") as any).execSync = mockExecSync;
+});
+
+afterEach(() => {
+  (require("node:child_process") as any).execSync = originalExecSync;
+});
+```
+
+This works on Bun (which provides `require()` as a global even in ESM modules),
+but is fragile — it mutates a cached module's exports globally. If:
+- Bun changes its module caching behavior
+- The `execSync` binding is inlined at import time
+- A second test file imports from `node:child_process` between tests
+
+...the mock may not take effect or may leak across test files. The module-level
+`require()` inside `merge.ts` (line 226) and `heartbeat.ts` (line 179) means
+the mock works for those specific call sites, but the mechanism is fragile.
+
+**Recommendation (not a blocker):**
+
+Refactor the `ghExec()` helper into a small utility module and inject it rather
+than relying on global require mocking. The current approach works for now but
+creates a maintenance risk.
+
+---
+
+## VERIFICATION SUMMARY
+
+### Verified correct
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| TypeScript type check | ✅ PASS | `tsc --noEmit` exit code 0 |
+| All 479 tests | ✅ PASS | 0 failures, 1748 expect() calls |
+| Agent model assignments | ✅ Match ARCHITECTURE.md §4 | All 13 agents checked |
+| Extension module structure | ✅ Correct | 20 modules, each with `register(pi)` export |
+| Context injection mechanism | ✅ Correct | Uses `before_agent_start` event (per memory #511) |
+| Comment checker | ✅ Correct | Reads disk, strips slop, rewrites back |
+| Notepad fallout logic (M11) | ✅ Correct | Falls back to `ctx_memory` correctly when `search_lore` unavailable |
+| Session_read truncation (M9) | ✅ Correct | No stale `.slice(0, 2000)` on line 85 |
+| Session schemas | ✅ Correct | `name`, `description`, `model` as plain strings, no missing required fields |
+| thinkingLevel propagation | ✅ Correct | Conditional spread in both executor and background manager |
+| Anti-re-delegation | ✅ Correct | `task` tool filtered from spawned sessions, spawned agents cannot re-delegate |
+| Heartbeat double-start guard | ✅ Correct | `startHeartbeat()` checks existing timer before creating new one |
+| Guardrail evaluation order | ✅ Correct | DSL first, fallback second — allows richer fallback for nuanced rules |
+| Active-task cleanup | ✅ Correct | Non-active completion doesn't clear `active-task.json` |
+| Loreguard auto-ratify | ✅ Correct | 3 approvals AND zero rejections required |
+| Loreguard archive | ✅ Complete | `archive_lore` tool, search excludes archived by default |
+| Debug mode | ✅ Complete | 29 tests, event wiring, heartbeat integration, auto-init from env var |
+| MCP integrations | ✅ Complete | Context7 (2 tools) + Grep.app (1 tool) registered |
+| Auto-merge pipeline | ✅ Complete | 4-gate check in `auto_merge_pr` tool |
+| Boulder state | ✅ Complete | Resume/init modes, progress calculation, continuation prompt |
+| Continuation loops | ✅ Complete | Ralph loop, ULW stub, todo enforcer, `stop-continuation` |
+| Plan 4 integration modules | ✅ Complete | LSP (6 tools), tmux, MCP integrations, rules-injection, watch-officer monitor |
+
+### Priority action items
+
+| # | Severity | File | Issue | Fix effort |
+|---|----------|------|-------|------------|
+| B1 | **BLOCKER** | `.autodev/config/guardrails.yaml` | DSL check `active_tasks >= 1` blocks completing the active task — crew can never finish via `todowrite` | 2 lines |
+| B2 | **MEDIUM** | `extensions/autodev/context.ts` | Reference docs `.autodev/reference/` never injected into agent context despite ARCHITECTURE.md spec | ~30 lines |
+| B5 | **MEDIUM** | `extensions/autodev/notepad/index.ts` | Race condition in `register()` always disables Loreguard routing — all decisions go to `ctx_memory` fallback | 3 lines |
+| B6 | **MEDIUM** | `extensions/autodev/watch-officer-monitor/index.ts` | `readPlanScope()` constructs double-nested path — plan deviation detection entirely broken | 5 lines |
+| B3 | LOW | `extensions/autodev/guardrails/index.ts` | Missing Navigator exemption comment on `never-deploy-directly` fallback | 3 lines |
+| B4 | LOW | `.autodev/config/guardrails.yaml` | Stale evidence path `.autodev/evidence/` should be `.omo/evidence/` | 1 line |
+| C1 | INFO | `.pi/agents/{quartermaster,boatswain,navigator}.md` | Agent identity body doesn't match role description for 3 operations agents | ~20 lines each |
+| C4 | INFO | `autonomy/index.ts` + `orchestrator/cli.ts` | `stop-continuation` registered twice (standalone + subcommand) | 5 lines |

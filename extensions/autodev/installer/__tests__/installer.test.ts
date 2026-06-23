@@ -276,6 +276,7 @@ test("step1BunCheck: succeeds when bun is available (non-interactive)", async ()
       prompter: null as any,
       nonInteractive: true,
       authPath: join(dir, "auth.json"),
+      scope: "install",
       notify: mock(() => {}),
     });
     // Bun should be available in the test environment
@@ -453,6 +454,7 @@ test("step7KnowledgeBase: warns when reference dir is empty", async () => {
       prompter: null as any,
       nonInteractive: true,
       authPath: join(dir, "auth.json"),
+      scope: "init",
       notify: mock(() => {}),
     });
     expect(result.status).toBe("warning");
@@ -473,6 +475,7 @@ test("step7KnowledgeBase: ok when reference dir has files", async () => {
       prompter: null as any,
       nonInteractive: true,
       authPath: join(dir, "auth.json"),
+      scope: "init",
       notify: mock(() => {}),
     });
     expect(result.status).toBe("ok");
@@ -490,7 +493,7 @@ test("step2LlmCredentials: interactive prompts for credentials", async () => {
   const { step2LlmCredentials } = await import("../steps.js");
   const dir = createTempDir();
   const mockPrompter = new MockPrompter();
-  mockPrompter.answers = ["ollama-cloud", "sk-interactive-test"];
+  mockPrompter.answers = ["ollama-cloud", "n", "sk-interactive-test"];
 
   try {
     const result = await step2LlmCredentials({
@@ -498,15 +501,54 @@ test("step2LlmCredentials: interactive prompts for credentials", async () => {
       prompter: mockPrompter,
       nonInteractive: false,
       authPath: join(dir, "auth.json"),
+      scope: "install",
       notify: mock(() => {}),
     });
     expect(result.status).toBe("ok");
 
-    // Verify auth.json was written
     const { readAuth } = await import("../auth.js");
     const auth = await readAuth(join(dir, "auth.json"));
     expect(auth["ollama-cloud"]!.key).toBe("sk-interactive-test");
   } finally {
+    cleanupTempDir(dir);
+  }
+});
+
+test("step2LlmCredentials: interactive imports from existing auth file when user says yes", async () => {
+  const { MockPrompter } = await import("../prompts.js");
+  const { step2LlmCredentials } = await import("../steps.js");
+  const { setProviderKey } = await import("../auth.js");
+  const dir = createTempDir();
+  const sourceAuthPath = join(dir, "source-auth.json");
+  const targetAuthPath = join(dir, "auth.json");
+
+  await setProviderKey(sourceAuthPath, "ollama-cloud", "sk-imported-key");
+
+  const origHome = process.env.HOME;
+  process.env.HOME = dir;
+  mkdirSync(join(dir, ".pi", "agent"), { recursive: true });
+  writeFileSync(join(dir, ".pi", "agent", "auth.json"), readFileSync(sourceAuthPath));
+
+  const mockPrompter = new MockPrompter();
+  mockPrompter.answers = ["ollama-cloud", "y"];
+
+  try {
+    const result = await step2LlmCredentials({
+      projectRoot: dir,
+      prompter: mockPrompter,
+      nonInteractive: false,
+      authPath: targetAuthPath,
+      scope: "install",
+      notify: mock(() => {}),
+    });
+    expect(result.status).toBe("ok");
+    expect(result.message).toContain("configured");
+
+    const { readAuth } = await import("../auth.js");
+    const auth = await readAuth(targetAuthPath);
+    expect(auth["ollama-cloud"]!.key).toBe("sk-imported-key");
+  } finally {
+    process.env.HOME = origHome;
     cleanupTempDir(dir);
   }
 });
@@ -656,10 +698,10 @@ test("steps are skipped when already completed (install-state resume)", async ()
 });
 
 // ---------------------------------------------------------------------------
-// runAllSteps integration test
+// runInstallSteps integration test
 // ---------------------------------------------------------------------------
 
-test("runAllSteps runs all steps and collects results", async () => {
+test("runInstallSteps runs all install steps and collects results", async () => {
   const origBunVersion = process.env.BUN_VERSION;
   const origOllama = process.env.OLLAMA_CLOUD_API_KEY;
   const origVoyage = process.env.VOYAGE_API_KEY;
@@ -673,50 +715,41 @@ test("runAllSteps runs all steps and collects results", async () => {
   process.env.DISCORD_CHANNEL_ID = "channel-test";
   process.env.DISCORD_LIAISON_CHANNEL_ID = "liaison-test";
 
-  const { runAllSteps } = await import("../steps.js");
+  const { runInstallSteps } = await import("../steps.js");
   const dir = createTempDir();
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "test", private: true }));
   try {
-    const results = await runAllSteps({
+    const results = await runInstallSteps({
       projectRoot: dir,
       prompter: null as any,
       nonInteractive: true,
       authPath: join(dir, "auth.json"),
+      scope: "install",
       notify: mock(() => {}),
     });
 
-    // Should have 9 results
-    expect(results.length).toBe(9);
+    expect(results.length).toBe(8);
 
-    // Step 1: Bun check should be ok (bun is available)
-    expect(results[0]!.status).toBe("ok");
+    expect(results[0]!.step).toBe(0);
 
-    // Step 2: LLM credentials should be ok (env var set)
-    expect(results[1]!.status).toBe("ok");
+    expect(results[1]!.step).toBe(-1);
 
-    // Step 3: Magic Context may fail (npx not available in test), but should not crash
-    // It could be error or warning
-    expect(results[2]!.step).toBe(3);
+    expect(results[2]!.step).toBe(1);
+    expect(results[2]!.status).toBe("ok");
 
-    // Step 4: VoyageAI should be ok
+    expect(results[3]!.step).toBe(2);
     expect(results[3]!.status).toBe("ok");
 
-    // Step 5: Discord should be ok
-    expect(results[4]!.status).toBe("ok");
+    expect(results[4]!.step).toBe(3);
 
-    // Step 6: GitHub labels may fail (gh not available), but should not crash
-    expect(results[5]!.step).toBe(6);
+    expect(results[5]!.step).toBe(4);
+    expect(results[5]!.status).toBe("ok");
 
-    // Step 7: Knowledge base should warn (empty)
-    expect(results[6]!.status).toBe("warning");
+    expect(results[6]!.step).toBe(5);
+    expect(results[6]!.status).toBe("ok");
 
-    // Step 8: Docs rebuild may fail (autodev not available), but should not crash
-    expect(results[7]!.step).toBe(8);
+    expect(results[7]!.step).toBe(9);
 
-    // Step 9: Doctor may fail (autodev not available), but should not crash
-    expect(results[8]!.step).toBe(9);
-
-    // Verify .env was created with all vars
     const { readEnv } = await import("../env.js");
     const env = await readEnv(dir);
     expect(env.get("OLLAMA_CLOUD_API_KEY")).toBe("sk-test-all-steps");

@@ -216,10 +216,10 @@ This ensures no issue is lost. A problem is still a problem, even if it was pre-
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
 
-- [ ] F1. Verify scope — heartbeat (with multi-project polling), dispatch, Discord, debate, auto-merge, boulder, continuation, debug, installer, 5 integration modules filled in. Confirm all pre-existing issues from every todo's evidence file have been addressed or explicitly deferred.
-- [ ] F2. Code quality — heartbeat logic, dispatch state machine, debate session isolation, merge gate logic, installer flow
-- [ ] F3. Manual QA — mock GitHub issue → triage → plan → implement → review → merge pipeline (mocked), Discord mock, debate mock, installer mock
-- [ ] F4. Code-vs-plan compliance audit — for each todo (T13-T20), read the actual implemented code and compare line-by-line against the plan's "What to do", "Must NOT do", and "Acceptance criteria" sections. Verify every acceptance criterion is met by actual code (not just by tests passing). Flag any acceptance criterion that is unimplemented, partially implemented, or contradicts the plan. Read the actual files — do not trust test output alone. Output a per-todo compliance table: {todo, criterion, status (MET/UNMET/PARTIAL), evidence (file:line or test name)}. All criteria must be MET before the plan is declared complete.
+- [x] F1. Verify scope — heartbeat (with multi-project polling), dispatch, Discord, debate, auto-merge, boulder, continuation, debug, installer, 5 integration modules filled in. Confirm all pre-existing issues from every todo's evidence file have been addressed or explicitly deferred.
+- [x] F2. Code quality — heartbeat logic, dispatch state machine, debate session isolation, merge gate logic, installer flow
+- [x] F3. Manual QA — mock GitHub issue → triage → plan → implement → review → merge pipeline (mocked), Discord mock, debate mock, installer mock
+- [x] F4. Code-vs-plan compliance audit — for each todo (T13-T20), read the actual implemented code and compare line-by-line against the plan's "What to do", "Must NOT do", and "Acceptance criteria" sections. Verify every acceptance criterion is met by actual code (not just by tests passing). Flag any acceptance criterion that is unimplemented, partially implemented, or contradicts the plan. Read the actual files — do not trust test output alone. Output a per-todo compliance table: {todo, criterion, status (MET/UNMET/PARTIAL), evidence (file:line or test name)}. All criteria must be MET before the plan is declared complete.
 
 ## Commit strategy
 

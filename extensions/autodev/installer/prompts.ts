@@ -7,6 +7,8 @@
  */
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
+import { openSync } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 
 export interface Prompter {
   /** Ask an open-ended question and return the answer. */
@@ -19,11 +21,40 @@ export interface Prompter {
 
 /** Create a real prompter backed by stdin/stdout readline. */
 export function createPrompter(): Prompter {
-  const rl = createInterface({
-    input: processStdin,
-    output: processStdout,
-  });
+  if (processStdin.isTTY === true) {
+    const rl = createInterface({
+      input: processStdin,
+      output: processStdout,
+    });
+    return createPrompterFromRl(rl);
+  }
+  return createTtyPrompter();
+}
+
+function createTtyPrompter(): Prompter {
+  let ttyFd: number | undefined;
+  try {
+    ttyFd = openSync("/dev/tty", "r+");
+  } catch {
+    ttyFd = undefined;
+  }
+
+  if (ttyFd === undefined) {
+    return createNoTtyPrompter();
+  }
+
+  const input = createReadStream("/dev/tty", { fd: ttyFd });
+  const output = createWriteStream("/dev/tty", { fd: ttyFd });
+  const rl = createInterface({ input, output });
   return createPrompterFromRl(rl);
+}
+
+function createNoTtyPrompter(): Prompter {
+  return {
+    prompt: async (_question: string): Promise<string> => "",
+    confirm: async (_question: string, defaultYes = true): Promise<boolean> => defaultYes,
+    close: () => {},
+  };
 }
 
 /** Create a prompter from an existing readline interface (injectable for tests). */
