@@ -27,6 +27,15 @@ export { loadAgent, listAgentNames, type AgentDefinition } from "./agents.js";
 export { TaskSchema, type TaskToolInput } from "./schemas.js";
 
 export function register(pi: ExtensionAPI): void {
+  // TODO: wire thinkingLevel through SpawnConfig so category-level
+  // thinkingLevel (e.g. "xhigh" for ultrabrain) reaches the pi SDK's
+  // setThinkingLevel(). Currently declared on CategoryDefinition but
+  // not plumbed — it's a capability enhancement, not a hard requirement.
+  console.warn(
+    "[autodev/delegation] thinkingLevel is declared on CategoryDefinition but not yet wired through SpawnConfig. " +
+      "The ultrabrain category has thinkingLevel='xhigh' that will be ignored until this is plumbed.",
+  );
+
   pi.registerTool({
     name: "task",
     label: "Spawn Agent Task",

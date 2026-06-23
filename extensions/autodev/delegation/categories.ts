@@ -17,6 +17,13 @@ import { resolve } from "node:path";
 export interface CategoryDefinition {
   readonly model: string;
   readonly description: string;
+  /**
+   * Optional thinking level for the pi SDK's `setThinkingLevel()`.
+   * Currently declared here for capability discovery but NOT wired through
+   * the spawn pipeline (SpawnConfig lacks a thinkingLevel field).
+   * TODO: wire thinkingLevel through SpawnConfig.
+   */
+  readonly thinkingLevel?: string;
 }
 
 /** Map of category name → definition. */
@@ -50,6 +57,7 @@ const BUILTIN_CATEGORIES: Readonly<Record<string, CategoryDefinition>> = {
   ultrabrain: {
     model: "ollama-cloud/deepseek-v4-pro",
     description: "Strongest reasoning model for architecture, review, and hard problems.",
+    thinkingLevel: "xhigh",
   },
   "visual-engineering": {
     model: "ollama-cloud/glm-5.2:cloud",

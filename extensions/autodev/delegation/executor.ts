@@ -147,6 +147,7 @@ export async function executeTaskTool(
 
   // load_skills is accepted (type-validated by the schema) but NOT injected
   // into the system prompt. We reference it to satisfy noUnusedLocals.
+  // TODO(T12): inject skill prompts
   void load_skills;
 
   // 1. Mutual exclusivity: exactly one of category / subagent_type must be set.
