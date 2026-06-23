@@ -662,3 +662,45 @@ Date: 2026-06-23
 - `bun test` (full suite): 527 pass, 0 fail.
 - `bun run typecheck`: tsc --noEmit EXIT 0.
 - Evidence: `.omo/evidence/project-init-centralization/t8-init-dirs-happy.md`, `t8-init-dirs-failure.md`.
+
+# T9 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/installer/init-module.ts`: extended `runInit()` with steps 6-9.
+  - Step 6: `loadRegistry()` → `addProject({name, path, repo})` → `setActiveProject(name)` → `saveRegistry()`. Hard-fails (throws) if registry write fails. Uses `guessRepo()` (already in module) for repo derivation.
+  - Step 7: `runStep7Doc()` shared helper for AGENTS.md and CONTEXT.md. Checks if file exists in project root; if not, copies from `<packageRoot>/.autodev/reference/templates/<file>` if available, else writes inline fallback (`FALLBACK_AGENTS_MD` / `FALLBACK_CONTEXT_MD`).
+  - Step 8: `gh auth status` pre-check → `gh repo view <repo>` → `gh repo create <name> --private --source=.` if missing. Skips labels if repo just created.
+  - Step 9: `gh label list --json name` → diff against 8 required labels → `gh label create <name> --color <hex> --description "<desc>"` for each missing. Best-effort (warns per-label failure, continues).
+- `runSteps8to9()` returns `{results, ran}` — the `ran` flag is false when gh auth fails (skipped), so `runInit` does NOT mark state step 9. This is the key asymmetry: step 9 is only marked when the gh steps actually executed.
+- State steps: 6+7 (registry+docs) = step 8; 8+9 (repo+labels) = step 9.
+- Fast path now checks all four state steps (6, 7, 8, 9) + marker.
+- Imported `loadRegistry`, `addProject`, `setActiveProject`, `saveRegistry` from `../orchestrator/projects.js`.
+- `REQUIRED_LABELS` constant: 8 labels with hex colors and descriptions matching the AutoDev workflow spec.
+- Tests: 5 new T9 tests + 5 existing T8 tests updated (result count 5→10, added `withAgentDir` + `makeGhExec` helpers, `PI_CODING_AGENT_DIR` isolation).
+
+## Key decisions
+
+- **Step 6 hard-fails (throws), all other steps return `{ok: false}` and continue.** A broken registry means AutoDev can't track the project — no point proceeding to docs/repo/labels. Implemented as `throw new Error(...)` in `runInit` after `runStep6Registry` returns `!ok`.
+- **`runSteps8to9` returns `ran: boolean`.** When gh auth fails, the steps are skipped (results are `{ok: true, detail: "Skipped..."}`) but `ran: false`. `runInit` only marks state step 9 if `ran && allOk`. This prevents a skipped-due-to-auth run from being treated as "complete" on the next invocation.
+- **Inline fallbacks for AGENTS.md/CONTEXT.md.** The notepad confirmed `.autodev/reference/templates/` doesn't exist. Step 7 checks `<packageRoot>/.autodev/reference/templates/<file>` first (forward-compat: if T1 or a future task seeds templates there), else writes the inline fallback strings. The fallback AGENTS.md includes the standing-orders header pointer + placeholder sections for project/conventions/build. CONTEXT.md has placeholder sections for brief/architecture/tech-stack/active-context.
+- **`REQUIRED_LABELS` colors.** Chose distinct hex colors following GitHub's label conventions: yellow (request), green (planned), blue (in-progress), purple (review), teal (ready), dark-purple (merged), red (blocked), light-blue (rejected). Descriptions match the workflow spec.
+- **`gh repo create <name> --private --source=.`.** Uses the repo name (last segment of owner/repo) and `--private` per the task spec. Does NOT pass `--push` (the task spec only says create; pushing is a separate concern).
+
+## Gotchas
+
+- **T8 tests needed `PI_CODING_AGENT_DIR` isolation.** Without it, `runStep6Registry` writes to the real `~/.pi/agent/../projects.json` (or `~/.AutoDev/projects.json` if T1's env is set), polluting the dev machine. Added `withAgentDir(tmpRoot)` helper that sets/restores `PI_CODING_AGENT_DIR` to a temp dir, matching the T1-T7 pattern.
+- **T8 test result counts changed 5→10.** Steps 6-9 add 5 results (registry, agents-md, context-md, repo-check, labels). Updated all T8 tests to expect 10 and verify the new names are present.
+- **`makeGhExec` replaces `makeGitExec` for T8 tests.** The new mock handles both git and gh commands. T8 tests that don't care about gh pass `{authed: false}` so steps 8-9 are skipped (no gh calls, no registry pollution from label creation). The idempotent test passes `{authed: true, existingLabels: REQUIRED_LABELS}` so all labels exist and no create calls are made.
+- **File size: `init-module.ts` is 464 pure LOC.** Over the 250 ceiling. T9's MUST NOT constraint ("Do NOT touch files outside init-module.ts, its tests, and evidence") forbids the split. Marked `allow: SIZE_OK - T9 task constraints forbid touching files outside init-module.ts; split into steps-helpers deferred to post-merge follow-up.` Post-merge follow-up: extract steps 1-5 into `init-steps-structure.ts`, steps 6-9 into `init-steps-registry-gh.ts`, leaving `init-module.ts` as the orchestrator.
+- **`readFileSync` import added.** Initially only imported `cpSync`, `existsSync`, `mkdirSync`, `writeFileSync` from `node:fs`. Added `readFileSync` for potential future use, but actually it's not used — removed. Only `cpSync`, `existsSync`, `mkdirSync`, `writeFileSync` are needed.
+- **`execOverride ?? execSync` pattern.** Steps 8-9 use `const exec = execOverride ?? execSync` at the top of `runSteps8to9`, then pass `exec` down to `runStep8Repo` and `runStep9Labels`. This avoids threading the override through every function signature. The `guessRepo` helper still takes `execOverride?` directly for backward compat with step 4.
+
+## Verification
+
+- `bun test extensions/autodev/installer/__tests__/init-module.test.ts`: 10 pass, 0 fail.
+- `bun test` (full suite): 532 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit EXIT 0.
+- Evidence: `.omo/evidence/project-init-centralization/t9-init-gh-happy.md`, `t9-init-gh-failure.md`.
