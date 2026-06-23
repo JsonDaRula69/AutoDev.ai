@@ -1,12 +1,93 @@
 import { execSync, type ExecSyncOptions } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { readAuth } from "./auth.js";
 import { readEnv } from "./env.js";
 import { readState } from "./state.js";
 import { validateAndCreateConfig } from "./config-defaults.js";
 import { runInstallFixes, type InstallModuleDeps } from "./install-module.js";
 import { runConfig, type ConfigModuleDeps } from "./config-module.js";
+import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
 import { createPrompter, type Prompter } from "./prompts.js";
+import { reopenTty, type ReopenTtyDeps } from "./tty.js";
+
+const MC_DOCTOR_CMD = "bunx @cortexkit/magic-context@latest doctor";
+const MC_DOCTOR_TIMEOUT_MS = 30_000;
+const MC_DOCTOR_EXEC_OPTS: ExecSyncOptions = {
+  encoding: "utf-8",
+  stdio: "pipe",
+  timeout: MC_DOCTOR_TIMEOUT_MS,
+};
+
+/**
+ * Write AutoDev defaults to `magic-context.jsonc` in the central agent dir.
+ *
+ * Used as the retry hook when the MC doctor fails on its first attempt:
+ * writing the defaults resolves the common case where the file is missing or
+ * misconfigured. Reuses the JSONC block from T1's `magic-context-defaults.ts`
+ * so a single source of truth governs the default content.
+ *
+ * No-op (and reports ok=false with the error message) if the write itself
+ * fails — the caller decides whether to retry.
+ */
+export function writeMagicContextDefaults(agentDir: string): { ok: boolean; detail: string } {
+  const mcPath = join(agentDir, "magic-context.jsonc");
+  try {
+    if (!existsSync(agentDir)) mkdirSync(agentDir, { recursive: true });
+    writeFileSync(mcPath, DEFAULT_MAGIC_CONTEXT_JSONC, "utf-8");
+    return { ok: true, detail: "defaults written" };
+  } catch (e) {
+    return { ok: false, detail: `defaults write failed: ${(e as Error).message}` };
+  }
+}
+
+/**
+ * Run the Magic Context doctor as a standing health check, with a single
+ * retry that writes AutoDev defaults to `magic-context.jsonc` before the
+ * second attempt. Resolves the common "missing or empty config" failure mode
+ * without surfacing it as a hard failure.
+ *
+ * - First attempt succeeds → `ok: true, detail: "healthy"`.
+ * - First attempt fails → `writeMagicContextDefaults(getAgentDir())` runs
+ *   once, then the doctor runs again.
+ *   - Second succeeds → `ok: true, detail: "healthy (after defaults written)"`.
+ *   - Second fails → `ok: false, detail: "MC doctor failed after retry: ..."`.
+ */
+function runMagicContextCheck(exec: DoctorExecFn): DoctorCheck {
+  const firstErr = tryMcDoctor(exec);
+  if (firstErr === null) {
+    return { name: "Magic Context", ok: true, detail: "healthy" };
+  }
+
+  const writeResult = writeMagicContextDefaults(getAgentDir());
+  if (!writeResult.ok) {
+    return {
+      name: "Magic Context",
+      ok: false,
+      detail: `MC doctor failed; ${writeResult.detail}; first error: ${firstErr}`,
+    };
+  }
+
+  const secondErr = tryMcDoctor(exec);
+  if (secondErr === null) {
+    return { name: "Magic Context", ok: true, detail: "healthy (after defaults written)" };
+  }
+  return {
+    name: "Magic Context",
+    ok: false,
+    detail: `MC doctor failed after retry: ${secondErr}`,
+  };
+}
+
+function tryMcDoctor(exec: DoctorExecFn): string | null {
+  try {
+    exec(MC_DOCTOR_CMD, MC_DOCTOR_EXEC_OPTS);
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
 
 export interface DoctorCheck {
   readonly name: string;
@@ -42,6 +123,12 @@ export interface DoctorDeps {
   readonly prompter?: Prompter;
   /** Optional global package root for symlink-based config defaults (tests). */
   readonly packageRoot?: string;
+  /**
+   * Override for `reopenTty()` used when `process.stdin` is not a TTY but a
+   * controlling terminal may still be reachable via `/dev/tty`. Tests inject
+   * a fake here to simulate the happy/failure paths without a real TTY.
+   */
+  readonly reopenTtyOverride?: ReopenTtyDeps;
 }
 
 /**
@@ -96,9 +183,13 @@ export async function isFirstRun(deps: Pick<DoctorDeps, "projectRoot" | "authPat
 }
 
 /**
- * Run health checks. The checks array always contains the same ordered set:
+ * Run 10 health checks. The checks array always contains the same ordered set:
  * Bun, GitHub CLI, GitHub auth, LLM credentials, Environment vars, Install
- * state, settings.json, magic-context.jsonc, agents/*.md.
+ * state, settings.json, magic-context.jsonc, agents/*.md, Magic Context.
+ *
+ * The 10th check (Magic Context) shells out to the MC doctor with a single
+ * retry: on first failure it writes AutoDev defaults to `magic-context.jsonc`
+ * in the central agent dir, then re-runs the doctor.
  *
  * When `launchConfigFlow` is true, doctor is the orchestrator: on failures it
  * runs the install module unconditionally, then runs the config module with
@@ -156,10 +247,31 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
       }
     }
   } else {
-    notify(
-      "Non-interactive environment detected. Run `autodev config` in an interactive terminal to set up credentials.",
-      "warning",
-    );
+    // Non-interactive stdin: try reopening /dev/tty so an interactive user
+    // sitting in front of a piped-stdin shell can still answer prompts.
+    const reopened = reopenTty(deps.reopenTtyOverride);
+    if (reopened !== null) {
+      notify("stdin is non-interactive; opened /dev/tty for prompts.", "info");
+      const subcommands = targetedSubcommands(firstResult.checks);
+      const configDeps: ConfigModuleDeps = {
+        projectRoot: deps.projectRoot,
+        authPath: deps.authPath,
+        prompter: reopened,
+        notify,
+        ...(deps.execSyncOverride !== undefined
+          ? { execSyncOverride: deps.execSyncOverride as never }
+          : {}),
+      };
+      for (const sub of subcommands) {
+        await runConfig(configDeps, sub);
+      }
+      reopened.close();
+    } else {
+      notify(
+        "Non-interactive environment detected and no controlling terminal available. Run `autodev config` in an interactive terminal to set up credentials.",
+        "warning",
+      );
+    }
   }
 
   // (3) Re-run all health checks to report what's still broken.
@@ -288,6 +400,8 @@ async function runHealthChecks(deps: DoctorDeps): Promise<DoctorResult> {
       detail: cr.created ? `${cr.detail} (created)` : cr.detail,
     });
   }
+
+  checks.push(runMagicContextCheck(exec));
 
   const passed = checks.filter((c) => c.ok).length;
   const failed = checks.length - passed;

@@ -503,3 +503,60 @@ Date: 2026-06-23
 - `bun test` (full suite): 517 pass, 0 fail.
 - `bun run typecheck`: 0 new errors from T5 changes (pre-existing doctor.ts errors unchanged).
 - Pure LOC: `tools.ts` 199 (healthy), `tools.test.ts` 200 (warning band edge, one cohesive SUT).
+
+# T15 — /dev/tty reopen for doctor-to-config interactive transition
+
+Date: 2026-06-23
+
+## What changed
+
+- New `extensions/autodev/installer/tty.ts` exports `reopenTty(deps)` and
+  `withReopenedTty(deps, fn)`. It opens `/dev/tty` (Unix) or `\\.\CONIN$`
+  (Windows) via `openSync(..., "r+")`, creates read/write streams from the fd,
+  builds a readline interface, and returns a `Prompter` via
+  `createPrompterFromRl`. Returns `null` on any failure (no controlling
+  terminal, CI, stream-creation error).
+- `doctor.ts` orchestrator-mode non-interactive branch now calls
+  `reopenTty(deps.reopenTtyOverride)` before falling back to the warn-and-skip
+  path. On success it runs `runConfig` with the reopened prompter; on `null`
+  it emits the existing warning.
+- `DoctorDeps.reopenTtyOverride?: ReopenTtyDeps` added for test injection.
+- `ReopenTtyDeps.prompterOverride?: Prompter` lets doctor integration tests
+  inject a `MockPrompter` directly, bypassing stream/interface creation.
+- New tests: `__tests__/tty.test.ts` (5 unit tests), `__tests__/doctor-orchestrator.test.ts` (2 integration tests).
+
+## Key decisions
+
+- `reopenTty` is a standalone helper (not inlined in `prompts.ts`) because the
+  `/dev/tty` reopen logic is orthogonal to prompter construction — `prompts.ts`
+  already had a private `createTtyPrompter` doing similar work, but doctor
+  needs the `null`-on-failure signal to decide between "run config" and
+  "warn and skip". The helper returns `null` (not a no-op prompter) so the
+  caller can branch.
+- `prompterOverride` in `ReopenTtyDeps` is the test seam: after `openSync`
+  succeeds, if `prompterOverride` is set, `reopenTty` returns it directly
+  instead of creating streams. This avoids needing to fake the readline
+  layer in doctor integration tests.
+- Windows `\\.\CONIN$` raw-mode may throw EPERM; config prompts only use
+  `rl.question()` (line mode), so this is acceptable per the task spec.
+
+## Coordination with T4
+
+- T4 (parallel task) added a 10th health check (`runMagicContextCheck`) to
+  `doctor.ts` in the same uncommitted working tree. The two changesets are
+  in different sections of the file (T4: lines 14-93 + line 404; T15: import
+  line, DoctorDeps field, orchestrator non-interactive branch lines 242-268).
+  No conflict.
+- Pre-existing test failure: `test/doctor.test.ts` "doctor passes all checks
+  on a fully configured machine" fails because T4's `runMagicContextCheck`
+  shells out to `bunx @cortexkit/magic-context@latest doctor` but the test's
+  `STUB_EXEC` doesn't handle that command. This is T4's test debt (T4 must
+  update `STUB_EXEC`), NOT T15's. T15 must not touch health-check code per
+  task constraints.
+
+## Verification
+
+- `bun test extensions/autodev/installer/__tests__/tty.test.ts`: 5 pass, 0 fail.
+- `bun test extensions/autodev/installer/__tests__/doctor-orchestrator.test.ts`: 2 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit exit 0.
+- `bun test` (full suite): 516 pass, 1 fail (the T4 pre-existing failure described above).
