@@ -3,6 +3,16 @@
 > **BRANCH:** All work in this plan is conducted on the `pi-foundation` branch. Do NOT push to `main`. The `pi-foundation` branch was created from `main` as a fresh start — all commits land here. `main` is frozen and will not receive any pushes during this work. Upon completion of all sub-plans, `main` will be deprecated and `pi-foundation` will become the new `main` branch (via branch rename or fast-forward merge at the user's discretion).
 
 > **PREREQUISITE:** This plan depends on `.omo/plans/autodev-pi-foundation-1-core.md`, `.omo/plans/autodev-pi-foundation-2-engine.md`, and `.omo/plans/autodev-pi-foundation-3-knowledge.md` being complete. The base extension (T5), guardrails (T7), background agent manager (T8), category system (T9), Loreguard (T10), docs query (T11), and custom tools/skills (T12) must all be in place before this plan can execute.
+>
+> > **SOURCE OF TRUTH:** During implementation, agents must refer to these resources:
+> > 1. **ARCHITECTURE.md** (root) — the system design specification (§3 Crew Dispatch, §14 Heartbeat, §15 Discord, §16 Debate, §17 Auto-Merge, §18 Boulder, §19 Continuation, §30 CLI, §31 Debug, §32 Multi-Project)
+> > 2. **STRUCTURE.md** (root) — the directory map and reference catalog
+> > 3. **.autodev/reference/** — immutable specs (workflow-specification.md for dispatch state machine, debate protocol, guardrails, labels; onboarding-protocol.md for Harbor Master; discord-setup.md for Discord config)
+> > 4. **docs-corpus/pi/** — pi SDK documentation (extensions.md for events, sdk.md for createAgentSession, settings.md, rpc.md)
+> > 5. **docs-corpus/magic-context/** — Magic Context documentation
+> > 6. **This plan file** — the implementation specification
+> >
+> > If any source disagrees, ARCHITECTURE.md wins on design, .autodev/reference/ wins on process, and this plan wins on scope.
 
 > **SPLIT FROM:** This is sub-plan 4 of 4 from the master plan `.omo/plans/autodev-pi-foundation.md`. Execute last — after Plans 1, 2, and 3.
 
@@ -20,7 +30,7 @@ This plan implements the design described in the following documents. If this pl
 | Document | What it specifies | Key sections |
 |----------|-------------------|--------------|
 | `README.md` | User-facing design: crew roles, quick start, workflow, configuration, coexistence | §How It Works (pipeline), §Configuration (.pi/ + .autodev/) |
-| `ARCHITECTURE.md` | Developer-facing system design: 34 sections covering every component | §3 Crew Dispatch Model, §14 Heartbeat, §15 Discord, §16 Debate, §17 Auto-Merge, §18 Boulder, §19 Continuation, §30 CLI Commands, §31 Debug Mode, §32 Multi-Project Support |
+| `ARCHITECTURE.md` | Developer-facing system design: 35 sections covering every component | §3 Crew Dispatch Model, §14 Heartbeat, §15 Discord, §16 Debate, §17 Auto-Merge, §18 Boulder, §19 Continuation, §30 CLI Commands, §31 Debug Mode, §32 Multi-Project Support |
 | `STRUCTURE.md` | Directory map and reference catalog: where every file lives | §1 Project Layout (directory tree) |
 | `ROADMAP.md` | Future waves: features NOT in this plan | §Near-term (hashline, notifications, CLI commands, think mode, inter-agent communication), §Medium-term (MCP OAuth, CodeGraph, babysitter), §Long-term (single binary) |
 
@@ -61,6 +71,18 @@ This plan implements the design described in the following documents. If this pl
 - **Must NOT hardcode credentials — always prompt or read from env vars.**
 - **Must NOT push to `main`.** All work is on the `pi-foundation` branch. `main` is frozen. No commits, no pushes to `main` during this work. Upon completion, `main` will be deprecated and `pi-foundation` becomes the new `main`.
 
+## Mock Strategy (No Building in Place)
+
+This plan follows the "no building in place" approach: tests use mocks, not real pi sessions, GitHub API calls, or external services. Real verification happens at deployment time via the installer (T19).
+
+- **T13 (Heartbeat + dispatch)**: Tests mock `gh` CLI output (issues, PRs, labels). Tests mock `createAgentSession` to verify dispatch routing. No real GitHub API calls.
+- **T14 (Discord)**: Tests mock Discord REST API (fetch responses). No real Discord bot token needed. Verify message routing logic with mock payloads.
+- **T15 (Debate)**: Tests mock `createAgentSession` for each of the 5 sessions (proposer, opposer, 3 judges). Mock sessions return predetermined arguments. Verify phase transitions, session isolation, and transcript file creation.
+- **T16 (Auto-merge + boulder + continuation)**: Tests mock `gh pr checks`, `gh pr merge`, and `gh issue edit` (label transitions). Mock boulder.json state for resume tests. Mock session events for continuation loop tests.
+- **T17 (Multi-project)**: Tests mock 2 project configs and verify session scoping. No real GitHub repos needed.
+- **T18 (Debug mode)**: Tests verify logging is off by default, on when env var set, and secrets are redacted. Use a temp log file.
+- **T19 (Installer)**: This is the ONLY todo that performs real verification. The installer runs real `bun install`, real Magic Context setup, and real `autodev doctor`. But in tests, mock the interactive prompts and external services. The actual installer is tested end-to-end at deployment time, not during development.
+
 ## Dependency matrix
 
 | Todo | Depends on | Blocks | Can parallelize with |
@@ -83,7 +105,7 @@ Critical Path: T13 → T16
 - [ ] 13. Build heartbeat, crew dispatch, and CLI commands
   What to do: Build the autonomous orchestrator — the main loop. (a) Heartbeat timer: `setInterval` (default 5 min) that polls GitHub for new `autodev-request` issues across ALL configured project repositories via `gh issue list --label autodev-request --state open --json`. Also checks stalled PRs (autodev-ci-running label > 30 min). Also checks for blocked issues. Uses `gh` CLI. State persisted to .autodev/work-items/. (b) Crew dispatch: for each new issue, create a pi AgentSession for Nemo, dispatch the issue text for triage. Nemo classifies (Simple/Complicated/Complex/Chaotic via Cynefin) and routes: Simple → Ned Land (task category=quick); Complicated+ → Aronnax (plan, then Ned Land implements). Track state transitions via GitHub labels (autodev-request → autodev-planned → autodev-in-progress → autodev-review → autodev-ready → autodev-merged). (c) CLI commands via pi.registerCommand(): `autodev onboard` (launch Harbor Master session), `autodev doctor` (health check: agents loaded, guardrails active, Magic Context healthy, Loreguard DB accessible, docs corpus indexed), `autodev status` (current work items, heartbeat state), `autodev docs query/rebuild`, `autodev debate start/status`.
   Must NOT do: Do NOT poll GitHub more frequently than configured (rate limits). Do NOT create duplicate sessions for the same issue. Do NOT skip label transitions — every state change must update the GitHub label. Do NOT block the heartbeat on a single issue — process issues concurrently.
-  Parallelization: Wave 4 | Blocked by: T7, T8, T9 | Blocks: T14, T15, T16
+  Parallelization: Wave 4 | Blocked by: T7, T8, T9, T10, T11, T12 (all from Plans 1-3) | Blocks: T14, T15, T16, T17, T19
   References: Pi registerCommand(): `pi.registerCommand("autodev", { description, handler })`. Pi createAgentSession(): same as T8. GitHub labels from .autodev/reference/workflow-specification.md section 2.3. `gh` CLI: `gh issue list --label autodev-request --state open --json number,title,body`. `gh pr merge --squash --delete-head`. Cynefin framework from .autodev/reference/workflow-specification.md section 3.1. Harbor Master onboarding from .autodev/reference/onboarding-protocol.md.
   Design refs: ARCHITECTURE.md §3 Crew Dispatch Model, ARCHITECTURE.md §14 Heartbeat, ARCHITECTURE.md §30 CLI Commands
   Acceptance criteria: Heartbeat starts and polls GitHub (mock `gh` output in test). A mock `autodev-request` issue → Nemo session created → triage result returned → label transitioned to autodev-planned. CLI commands are registered and their handlers exist: `autodev doctor`, `autodev onboard`, `autodev status`, `autodev docs`, `autodev debate`. `autodev doctor` runs a health check (mocked). `autodev status` shows heartbeat state and work items. Heartbeat stops on `autodev status --stop` or process exit. (Real session verification is a deployment-time activity handled by the installer T19.)
@@ -147,7 +169,7 @@ Critical Path: T13 → T16
   Must NOT do: Do NOT hardcode credentials — always prompt or read from env vars. Do NOT skip the doctor check at the end. Do NOT make the installer mandatory for development — developers use `bun install` directly.
   Parallelization: Wave 4b | Blocked by: T13 | Blocks: nothing | Can parallelize with: T14, T15, T16, T17, T18
   References: ARCHITECTURE.md §30 CLI Commands. Pi registerCommand(). GitHub labels from .autodev/reference/workflow-specification.md section 2.3. Magic Context setup: npx @cortexkit/magic-context@latest setup --harness pi.
-  Design refs: ARCHITECTURE.md §30 CLI Commands
+  Design refs: ARCHITECTURE.md §30 CLI Commands. NOTE: T19 is the only todo that performs real verification (bun install, Magic Context setup, doctor check). All other todos use mocks during development. T19 bridges development and deployment.
   Acceptance criteria: `autodev install` command exists and is registered. Running it (in a test env) prompts for credentials, sets up config files, creates GitHub labels, and runs doctor. A `--non-interactive` flag reads from env vars. Evidence: `.omo/evidence/task-19-autodev-pi-foundation.txt`.
   QA scenarios: happy — installer runs end to end, config files created, labels created, doctor passes. Failure — installer crashes (no error handling); or credentials hardcoded (security); or doctor check skipped. Evidence: `.omo/evidence/task-19-autodev-pi-foundation.txt`.
   Commit: Y | feat(installer): autodev install command for deployment-time setup
