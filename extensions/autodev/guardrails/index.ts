@@ -27,6 +27,7 @@
  *  - suggest-debate
  */
 import type { ExtensionAPI, ToolCallEvent } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { evaluateExpression, type GuardrailContext } from "./evaluator.js";
@@ -191,14 +192,55 @@ export function parseGuardrailsYaml(text: string): GuardrailsConfig {
   return { hard_stops: hardStops, soft_stops: softStops };
 }
 
-/** Load guardrails.yaml from the project root. Returns empty config if missing. */
+/**
+ * Hardcoded default guardrails config — used when neither central
+ * `~/.AutoDev/config/guardrails.yaml` nor project
+ * `.autodev/config/guardrails.yaml` exists. Mirrors the rule IDs in the
+ * immutable reference YAML so the engine still enforces when no config file
+ * is present.
+ */
+export const DEFAULT_GUARDRAILS_CONFIG: GuardrailsConfig = {
+  hard_stops: [
+    { id: "never-deploy-directly", description: "", check: "", enforcement: "block_action" },
+    { id: "no-secrets-in-code", description: "", check: "action_type == 'write' AND contains_secrets(diff)", enforcement: "block_commit" },
+    { id: "one-task-at-a-time", description: "", check: "active_tasks >= 1", enforcement: "block_new_task" },
+    { id: "evidence-or-it-didnt-happen", description: "", check: "action_type == 'commit' AND NOT evidence_exists", enforcement: "block_commit" },
+    { id: "follow-the-plan", description: "", check: "", enforcement: "block_action" },
+    { id: "ci-is-the-hard-gate", description: "", check: "", enforcement: "block_merge" },
+    { id: "never-approve-own-work", description: "", check: "action_type == 'review' AND reviewer == implementer", enforcement: "block_action" },
+    { id: "never-modify-reference-docs", description: "", check: "action_type == 'write' AND path_starts_with('.autodev/reference/')", enforcement: "block_write" },
+    { id: "never-modify-debate-transcripts", description: "", check: "action_type == 'write' AND path_starts_with('.autodev/debates/')", enforcement: "block_write" },
+  ],
+  soft_stops: [
+    { id: "suggest-review", description: "", check: "", enforcement: "warn" },
+    { id: "warn-scope", description: "", check: "", enforcement: "warn" },
+    { id: "flag-missing-evidence", description: "", check: "action_type == 'review' AND NOT evidence_file_exists", enforcement: "warn" },
+    { id: "warn-no-premortem", description: "", check: "", enforcement: "warn" },
+    { id: "suggest-debate", description: "", check: "", enforcement: "warn" },
+  ],
+};
+
+/**
+ * Load guardrails config with central-then-project-then-defaults resolution.
+ *
+ * Precedence (file-level override, NOT deep merge):
+ *   1. Project  `<projectRoot>/.autodev/config/guardrails.yaml`  (if present)
+ *   2. Central  `~/.AutoDev/config/guardrails.yaml`              (if present)
+ *   3. Hardcoded `DEFAULT_GUARDRAILS_CONFIG`
+ *
+ * The central dir is derived from `getAgentDir()` (`join(getAgentDir(), "..", "config")`),
+ * honoring `PI_CODING_AGENT_DIR`.
+ */
 export function loadGuardrailsConfig(projectRoot: string): GuardrailsConfig {
-  const path = resolve(projectRoot, ".autodev/config/guardrails.yaml");
-  if (!existsSync(path)) {
-    return { hard_stops: [], soft_stops: [] };
+  const projectPath = resolve(projectRoot, ".autodev/config/guardrails.yaml");
+  if (existsSync(projectPath)) {
+    return parseGuardrailsYaml(readFileSync(projectPath, "utf8"));
   }
-  const text = readFileSync(path, "utf8");
-  return parseGuardrailsYaml(text);
+  const centralPath = join(getAgentDir(), "..", "config", "guardrails.yaml");
+  if (existsSync(centralPath)) {
+    return parseGuardrailsYaml(readFileSync(centralPath, "utf8"));
+  }
+  return DEFAULT_GUARDRAILS_CONFIG;
 }
 
 /** Read active-task.json if it exists. */

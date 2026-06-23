@@ -843,3 +843,40 @@ Date: 2026-06-23
 - `bun test` (full suite): 556 pass, 8 fail (all pre-existing sibling-task, not T13).
 - Pure LOC: `skills.ts` 171, `skills.test.ts` 147 (both healthy).
 - Evidence: `.omo/evidence/project-init-centralization/t13-skills-happy.md`, `t13-skills-failure.md`.
+
+# T12 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/guardrails/index.ts`: imported `getAgentDir` from `@earendil-works/pi-coding-agent`. Added `DEFAULT_GUARDRAILS_CONFIG` (9 hard stops + 5 soft stops mirroring the immutable reference YAML rule IDs + check expressions). Rewrote `loadGuardrailsConfig(projectRoot)` with 3-tier resolution: project `.autodev/config/guardrails.yaml` (file-level override, checked first) → central `join(getAgentDir(), "..", "config", "guardrails.yaml")` → `DEFAULT_GUARDRAILS_CONFIG`.
+- `extensions/autodev/orchestrator/dispatch.ts`: imported `getAgentDir`, `readFileSync`, `existsSync`, `resolve`, `join`. Added `DispatchRule`, `DispatchRulesConfig` interfaces, `DEFAULT_DISPATCH_CONFIG` (6 dispatch rules mirroring the reference route table), `parseDispatchYaml(text)` minimal focused parser for the `dispatch_rules:` list shape, and `loadDispatchConfig(projectRoot)` with the same 3-tier resolution.
+- New test files: `extensions/autodev/guardrails/__tests__/guardrails.test.ts` (5 tests), `extensions/autodev/orchestrator/__tests__/dispatch.test.ts` (5 tests). Both use the `PI_CODING_AGENT_DIR` env-var isolation pattern (set in `beforeEach`, restored in `afterEach`) to redirect `getAgentDir()` into a temp central tree.
+- Evidence: `.omo/evidence/project-init-centralization/t12-engines-happy.md`, `t12-engines-failure.md`.
+
+## Key decisions
+
+- **Precedence is project > central > defaults, NOT central > project.** The task spec says "First check central; if project exists, use it instead." This means project is the override. Implementation checks project first (early return), then central, then defaults. The "both exist → project wins" and "no deep merge" tests pin this.
+- **File-level override, NOT deep merge.** Per MUST NOT. When project config exists, it replaces central entirely — verified by the "no deep merge" test where project with empty `hard_stops` yields zero hard stops even though central had one.
+- **`DEFAULT_*_CONFIG` is an exported const, not a function.** Tests assert `cfg === DEFAULT_GUARDRAILS_CONFIG` for the no-config case, proving the fallback is a stable reference returned directly (not a fresh object each call). This makes the defaults test a referential-equality check, not just a shape check.
+- **Central path via `join(getAgentDir(), "..", "config", <file>)`.** Consistent with T2 (agents at `join(getAgentDir(), "..", "agents")`) and T7 (registry at `join(getAgentDir(), "..", "projects.json")`). When `PI_CODING_AGENT_DIR=~/.AutoDev/agent`, central config resolves to `~/.AutoDev/config/`.
+- **Minimal YAML parser for dispatch-rules.yaml.** Mirrors the guardrails parser approach. Parses only the `dispatch_rules:` list (trigger/from/to/condition/evidence/route). Ignores `state_machine:` and other top-level sections — the dispatch engine doesn't use the state machine at runtime; it uses the route table. The parser detects non-`dispatch_rules` top-level keys (`^[a-z_]+:\s*$` at column 0) and skips them.
+
+## Gotchas
+
+- **`exactOptionalPropertyTypes: true` requires `| undefined` on optional interface props.** `DispatchRule.evidence?: string` rejected the parser's `{ evidence: string | undefined }` intermediate object. Fix: `evidence?: string | undefined` (and same for `route`). This is the strict-mode rule documented in the TS reference; the guardrails `HardStopRule` didn't hit this because its `check`/`enforcement` are required `string`, not optional.
+- **`register()` behavior improvement, not a regression.** Before T12, `loadGuardrailsConfig(process.cwd())` returned empty config `{ hard_stops: [], soft_stops: [] }` when no project config existed — meaning NO rules were enforced. After T12, it returns central or `DEFAULT_GUARDRAILS_CONFIG` — rules ARE enforced. This is strictly better. The existing `test/guardrails.test.ts` always plants a project config, so it sees no change.
+- **Pre-existing failures are sibling-task debt.** 13 failures in `init-module.test.ts`, `doctor-orchestrator.test.ts`, `cli.test.ts` (T8/T9/T10/cmdDoctor) — all in untracked test files for incomplete sibling tasks. T12-scoped tests: 79 pass, 0 fail. Clean tree (stashing T12): 311 pass, 0 fail (but doesn't include untracked sibling test files).
+- **`parseDispatchYaml` route sub-map parsing.** The `route:` key introduces a nested map (`simple: ned_land`, etc.). The parser collects `key: value` pairs into `current.route` while `current.route` is defined. The regex `^\s+([a-z_]+):\s*(\S+)\s*$` is intentionally narrow (lowercase + underscore keys, no quotes) to avoid matching `from:`/`to:`/`condition:` which are parsed earlier in the `if` chain.
+- **Dispatch `DEFAULT_DISPATCH_CONFIG` route is `Record<string,string>`.** The reference YAML's `route:` has 4 keys (simple/complicated/complex/chaotic). The hardcoded default includes all 4. The `route` field is optional on `DispatchRule` — rules without a route (e.g. `plan_complete`) omit it.
+
+## Verification
+
+- `bun test extensions/autodev/guardrails/__tests__/guardrails.test.ts`: 5 pass, 0 fail.
+- `bun test extensions/autodev/orchestrator/__tests__/dispatch.test.ts`: 5 pass, 0 fail.
+- `bun test test/guardrails.test.ts` (regression): 49 pass, 0 fail.
+- `bun test` (T12-scoped: guardrails + dispatch + orchestrator + existing guardrails): 79 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit EXIT 0.
+- Pure LOC: `guardrails/index.ts` 719 (pre-existing, over 250 ceiling — T12 MUST NOT forbids split; carried smell), `dispatch.ts` 222 (healthy), `guardrails.test.ts` 121 (healthy), `dispatch.test.ts` 156 (healthy).
+- Evidence: `.omo/evidence/project-init-centralization/t12-engines-happy.md`, `t12-engines-failure.md`.
