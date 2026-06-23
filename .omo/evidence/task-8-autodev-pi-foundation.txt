@@ -1,0 +1,134 @@
+Task 8: Background Agent Manager + Model Fallback Chains
+=======================================================
+
+## Files Created/Modified
+
+### Created
+- extensions/autodev/background/types.ts     — shared types (TaskState, ManagedSession, SessionFactory, etc.)
+- extensions/autodev/background/classifier.ts — classifyError() error classifier
+- extensions/autodev/background/fallback.ts    — resolveFallbackModel() + config loading
+- extensions/autodev/background/manager.ts      — BackgroundManager class (spawn, concurrency, circuit breaker, parent-wake)
+- .autodev/config/concurrency.yaml              — { ollama-cloud: { max: 5 } }
+- test/mocks/pi-session.ts                      — mockCreateAgentSession + mockSessionRegistry
+- test/background.test.ts                       — 17 tests
+
+### Modified
+- extensions/autodev/background/index.ts        — replaced stub register() body, exports getBackgroundManager() + re-exports
+
+## Verification Output
+
+```
+bun test v1.3.13 (bf2e2cec)
+
+test/background.test.ts:
+(pass) spawn 3 concurrent sessions and all complete [8.81ms]
+(pass) spawn session with bad model falls back to configured fallback model [10.85ms]
+(pass) circuit breaker trips after stale timeout (fake timers) [5.65ms]
+(pass) parent session notified when child completes [2.41ms]
+(pass) concurrency limit enforced — 6th task queued when limit is 5 [7.65ms]
+(pass) error classifier: 429 is retryable [0.36ms]
+(pass) error classifier: 401 is fatal
+(pass) error classifier: 403 is fatal [0.30ms]
+(pass) error classifier: 503 is retryable [0.53ms]
+(pass) error classifier: timeout message is retryable
+(pass) error classifier: context overflow is fatal [0.76ms]
+(pass) error classifier: unknown error is non-retryable [1.97ms]
+(pass) resolveFallbackModel returns proactive chain model for configured agent [0.58ms]
+(pass) resolveFallbackModel returns reactive allowlist model when no proactive chain [0.15ms]
+(pass) resolveFallbackModel returns undefined for non-retryable errors
+(pass) resolveFallbackModel skips already-tried models
+(pass) loadFallbackConfig loads from project root [4.88ms]
+
+ 17 pass
+ 0 fail
+ 52 expect() calls
+Ran 17 tests across 1 file. [146.00ms]
+```
+
+## Full Suite (no regressions)
+
+```
+ 134 pass
+ 0 fail
+ 302 expect() calls
+Ran 134 tests across 7 files. [1116.00ms]
+```
+
+## tsc --noEmit
+
+```
+EXIT: 0 — zero errors
+```
+
+## Coverage Summary
+
+| Feature | Test | Status |
+|---|---|---|
+| Spawn 3 concurrent → all complete | test 1 | PASS |
+| Bad model → fallback to configured fallback model | test 2 | PASS |
+| Hanging session → circuit breaker trips (fake timers) | test 3 | PASS |
+| Parent notified when child completes | test 4 | PASS |
+| Concurrency limit: 6th queued when limit is 5 | test 5 | PASS |
+| Error classifier: 429 retryable | test 6a | PASS |
+| Error classifier: 401 fatal | test 6b | PASS |
+| Error classifier: 403 fatal | test 6c | PASS |
+| Error classifier: 503 retryable | test 6d | PASS |
+| Error classifier: timeout retryable | test 6e | PASS |
+| Error classifier: context-overflow fatal | test 6f | PASS |
+| Error classifier: unknown → non-retryable | test 6g | PASS |
+| Fallback: proactive chain resolves | test 7a | PASS |
+| Fallback: reactive allowlist resolves | test 7b | PASS |
+| Fallback: undefined for non-retryable | test 7c | PASS |
+| Fallback: skips already-tried models | test 7d | PASS |
+| loadFallbackConfig loads from project root | test 7e | PASS |
+
+## Architecture
+
+### background/types.ts
+Shared types: TaskState (mutable record), TaskStatus (pending/running/completed/error/cancelled),
+ManagedSession (subscribe/abort/dispose), SessionFactory (injectable), ConcurrencyConfig,
+FallbackConfig, ErrorClassification, providerKeyOf(), isTerminal().
+
+### background/classifier.ts
+classifyError(error) → { retryable, reason }. Retryable: 429, 500, 502, 503, 504, timeout messages.
+Fatal: 401, 403, context-overflow messages. Unknown → non-retryable (safe default).
+
+### background/fallback.ts
+resolveFallbackModel({ agentName, error, currentModel, triedModels, config }) → FallbackResolution | undefined.
+Proactive: agent's fallback_models chain from .pi/agents frontmatter or .autodev/config/fallback.json.
+Reactive: next untried model from .autodev/config/models.json allowlist.
+loadFallbackConfig(projectRoot) merges frontmatter + config-file chains + allowlist.
+
+### background/manager.ts
+BackgroundManager class:
+- spawn(config) → taskId. Tracks in Map<taskId, TaskState>.
+- Concurrency: per-provider-key counter. Max from concurrency.yaml (default 5). Queue overflow.
+- Circuit breaker: sliding-window timer (setTimer injectable for fake timers). Reset on every event.
+  Trips after staleTimeoutMs (default 180000). On trip: abort session, mark error, notify parent.
+  Idempotent — event wins over concurrent trip (no double-abort, no double-notify).
+- Parent-wake: onParentWake callback fires on terminal transition.
+- Error handling: on retryable error, resolve fallback, abort+dispose current session,
+  update model, re-spawn. On fatal error, surface error (no fallback).
+- cancel(id) → abort+dispose+mark cancelled.
+- dispose() → clear all timers + dispose all sessions.
+
+### background/index.ts
+register(pi) — eagerly initializes manager singleton.
+getBackgroundManager() — T9 imports this.
+resetBackgroundManager(options) — test-only singleton reset.
+Re-exports: BackgroundManager, classifyError, resolveFallbackModel, loadFallbackConfig, types.
+
+### test/mocks/pi-session.ts
+MockSession class — controllable event emission via emit(). Tracks aborted/disposed.
+mockCreateAgentSession() → SessionFactory mock (bun:test mock()).
+mockSessionRegistry — array of all sessions created in current test.
+resetSessionMocks() — clears registry between tests.
+
+### .autodev/config/concurrency.yaml
+```yaml
+ollama-cloud:
+  max: 5
+```
+
+## Commit
+feat(orchestration): background agent manager + model fallback chains
