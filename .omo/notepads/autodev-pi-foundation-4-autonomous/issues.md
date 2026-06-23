@@ -19,3 +19,15 @@ These are pre-existing issues from T14 (Discord) and T15 (Debate) modules that w
 - `extensions/autodev/tmux/index.ts` — Same `details` missing pattern. Pre-existing from T20.
 
 These are pre-existing issues from T18 (debug), T20 (integration modules) that are outside T16 scope. They should be fixed in their respective todos.
+
+## T19 — Pre-existing Issues Found (2026-06-23)
+
+### Pre-existing type errors in other modules (not in installer scope)
+- `extensions/autodev/debate/index.ts:195` — `Property 'join' does not exist on type 'string'`. The `path` variable is typed as `string` but `.join()` is called on it. This was noted in T13 and remains unfixed.
+- `extensions/autodev/__tests__/integration-modules.test.ts` — Multiple `Object is possibly 'undefined'` and tuple type errors. Pre-existing from T20.
+- `extensions/autodev/debug/index.ts` — `Property 'sessionId' does not exist on type 'ToolCallEvent'` and `Property 'tool' does not exist on type 'ToolCallEvent'`. Pre-existing from T18.
+- `extensions/autodev/lsp/index.ts` — Multiple `Property 'details' is missing in type` errors. Pre-existing from T20.
+- `extensions/autodev/mcp-integrations/index.ts` — Same `details` missing pattern plus `exactOptionalPropertyTypes` issue. Pre-existing from T20.
+- `extensions/autodev/tmux/index.ts` — Same `details` missing pattern. Pre-existing from T20.
+
+These are pre-existing issues outside T19 scope. They should be fixed in their respective todos or in a dedicated cleanup pass.

@@ -10,6 +10,7 @@
  *   autodev docs rebuild    — reingest docs-corpus/
  *   autodev debate start .. — start a debate
  *   autodev debate status   — show active debate state
+ *   autodev install           — deployment-time setup (9-step installer)
  *   autodev stop-continuation — stop all continuation loops
  */
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -17,12 +18,13 @@ import { getHeartbeatState, stopHeartbeat } from "./heartbeat.js";
 import { loadRegistry, getActiveProject } from "./projects.js";
 import { enableDebug, disableDebug, getDebugState } from "../debug/index.js";
 import { stopAllLoops } from "../autonomy/continuation.js";
+import { handleInstall } from "../installer/index.js";
 
 // ---- Command registration ----
 
 export function registerCommands(pi: ExtensionAPI): void {
   pi.registerCommand("autodev", {
-    description: "AutoDev — autonomous engineering team commands. Subcommands: doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status",
+    description: "AutoDev — autonomous engineering team commands. Subcommands: install, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const parts = trimmed.split(/\s+/);
@@ -47,13 +49,16 @@ export function registerCommands(pi: ExtensionAPI): void {
         case "debate":
           await handleDebate(parts.slice(1), ctx);
           break;
+        case "install":
+          await handleInstall(parts.slice(1).join(" "), ctx);
+          break;
         case "stop-continuation":
           stopAllLoops();
           ctx.ui.notify("All continuation loops stopped.", "info");
           break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: install, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
             "info",
           );
       }

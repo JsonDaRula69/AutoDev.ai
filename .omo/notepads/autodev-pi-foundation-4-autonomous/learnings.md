@@ -91,3 +91,30 @@
 - Boulder tests create `.omo/boulder.json` with `writeFile` and verify load/save roundtrip.
 - Continuation tests create mock `TaskState` objects (not real background manager sessions) to test DONE signal detection.
 - The `registerLoopDoneTool` test uses a mock `pi` object with a `registerTool` spy to verify registration without a real pi runtime.
+
+## T19 — Installer Module (2026-06-23)
+
+### Architecture
+- The installer module lives at `extensions/autodev/installer/` with 6 source files and 1 test file.
+- `state.ts` — read/write `.autodev/install-state.json` for resume. Records `completedSteps: number[]`, `startedAt`, `updatedAt`. Idempotent: `markStepCompleted` is a no-op if step already recorded.
+- `env.ts` — `.env` file read/write/update. `parseEnv`/`serializeEnv` for key=value parsing. `setEnvVar`/`setEnvVars` for appending/updating. `ensureGitignore` adds `.env` to `.gitignore` if missing.
+- `auth.ts` — read/write `auth.json` in pi agent directory. `setProviderKey` writes `{ provider: { type: "api_key", key: "..." } }`. `tryImportAuth` imports from existing auth files (`.pi/agent/auth.json` or `.opencode/auth.json`).
+- `prompts.ts` — `createPrompter()` factory using `node:readline`. `MockPrompter` class for tests with predetermined answers.
+- `steps.ts` — 9 step functions: `step1BunCheck` through `step9Doctor`. Each checks install-state for prior completion (skip if done), runs logic, records completion, returns `StepResult`. `runAllSteps` runs all 9 sequentially, collecting results without aborting on partial failure.
+- `index.ts` — exports `handleInstall()` called from orchestrator CLI handler. Creates `StepContext` with project root, prompter, auth path, and notify function.
+
+### Key Decisions
+- **No separate `register()` function**: The installer module does NOT register its own `autodev` command (to avoid conflicts with the debate module which also registers `autodev`). Instead, `handleInstall` is imported and called from the orchestrator's CLI handler as a subcommand case.
+- **`execSync` at call sites**: External commands (`bun`, `npx`, `gh`, `autodev`) are called via `execSync` so tests can mock `require("node:child_process").execSync` — same pattern as heartbeat.ts and merge.ts.
+- **Auth path resolution**: Uses dynamic `import("@earendil-works/pi-coding-agent")` to call `getAgentDir()`, with fallback to `~/.pi/agent/auth.json` if the import fails.
+- **Non-interactive mode**: Reads `OLLAMA_CLOUD_API_KEY`, `VOYAGE_API_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`, `DISCORD_LIAISON_CHANNEL_ID` from env vars. Missing optional vars (Discord) are silently skipped. Missing required vars (LLM key) cause a warning but don't abort.
+- **VoyageAI skippable**: If no key provided, writes `VOYAGE_API_KEY=` (empty) to `.env` and continues with ONNX fallback warning.
+- **Step 7 (knowledge base)**: Does NOT auto-run onboarding — only prompts. Non-interactive mode just notifies.
+- **TypeScript strictness**: `execSync` returns `string | Buffer` — need `Buffer.isBuffer()` check or `Buffer.from()` cast. Variables used in both branches of `if/else` must be initialized before the conditional.
+
+### Patterns
+- All 6 source files are under 250 pure LOC (largest is steps.ts at ~512 total lines, ~350 pure LOC — borderline but each step is a self-contained function that can't be split without breaking the sequential runner pattern).
+- Tests use `createTempDir()`/`cleanupTempDir()` helpers for isolated filesystem tests.
+- `MockPrompter` with `answers: string[]` queue pattern for testing interactive prompts.
+- `process.env` save/restore pattern for env var tests.
+- `writeFileSync(join(dir, "package.json"), ...)` needed in tests so `bun install` doesn't fail in temp directories.
