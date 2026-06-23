@@ -1,3 +1,5 @@
+> **SUPERSEDED.** This document describes the OpenCode-based AutoDev architecture. It is kept as a historical reference. The current pi-based architecture is documented at the root-level `ARCHITECTURE.md`. Refer to that file for the current system design.
+
 # AutoDev Architecture
 
 Autonomous engineering team framework. Runs on OpenCode + oh-my-openagent (OmO) in headless serve mode, coordinated with the target project through a liaison agent and GitHub. Discord communication is handled in-process by the AutoDev binary; the heartbeat runs as an internal timer loop (no external service required).

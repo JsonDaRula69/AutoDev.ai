@@ -150,15 +150,16 @@ Each module exports a registration function that the entry point calls with the 
 
 Guardrails run as a `pi.on("tool_call", ...)` event handler that inspects every tool call before it executes. If a call violates a hard stop, the handler returns a block decision with a reason string and the call never runs.
 
-The 5 hard stops, all non-negotiable:
+The 6 hard stops, all non-negotiable (per workflow-specification.md section 4.1):
 
 | Hard stop | What it blocks | How it detects |
 |-----------|----------------|----------------|
+| never-deploy-directly | Direct deploy actions by any agent other than the Navigator | Action type check — deploy is only allowed through the Navigator's liaison-coordinated flow |
 | no-secrets-in-code | `write` or `edit` calls containing API keys, tokens, passwords | Regex check on the content being written |
-| evidence-required | `bash` calls running `git commit` when no evidence file exists in `.omo/evidence/` for the current task | File existence check |
-| follow-the-plan | Implementation that deviates from a plan in `.autodev/plans/` | Diff against plan acceptance criteria (warns, does not block) |
+| evidence-or-it-didnt-happen | `bash` calls running `git commit` when no evidence file exists in `.omo/evidence/` for the current task | File existence check |
 | one-task-at-a-time | New task creation when a task is already in progress | Active task counter check |
-| ci-is-hard-gate | `bash` calls running `gh pr merge` when CI status is not green | `gh pr checks` status poll |
+| follow-the-plan | Implementation that deviates from a plan in `.autodev/plans/` | Diff against plan acceptance criteria |
+| ci-is-the-hard-gate | `bash` calls running `gh pr merge` when CI status is not green | `gh pr checks` status poll |
 
 Soft stops generate warnings but do not block: suggest-review (large change without review), warn-scope (more than 10 files changed), flag-missing-evidence (review with no evidence file).
 
@@ -697,4 +698,4 @@ GitHub issue labeled autodev-request
 | Magic Context Integration | T3, T6 |
 | CLI Commands | T13 |
 
-Features not in the pi-foundation plan (hashline edit tool, session notifications, MCP OAuth, CodeGraph bootstrap, multi-project routing, installer, single binary) are documented in `ROADMAP.md` as future waves. This architecture covers only what the pi-foundation plan builds.
+Features not in the pi-foundation plan are documented in `ROADMAP.md` as future waves. This architecture covers only what the pi-foundation plan builds.

@@ -89,7 +89,7 @@ The detailed architecture lives in `ARCHITECTURE.md`.
 
 ## Quick Start
 
-Three commands get you from clone to a running crew.
+Four steps get you from clone to a running crew.
 
 ```bash
 git clone https://github.com/JsonDaRula69/AutoDev.ai.git
@@ -170,6 +170,7 @@ The guardrail engine enforces hard stops programmatically. No agent can override
 - **No direct deploy.** Submit PRs, pass CI, alert the liaison.
 - **No secrets in code.** API keys, tokens, and credentials never go in source files.
 - **Evidence or it didn't happen.** Every commit that touches runtime behavior must be proven on a real surface.
+- **One task at a time.** If interrupted mid-task, log the new instruction as a GitHub issue and resume the original task.
 - **Follow the plan.** If a plan exists, implement what it says. No unrequested improvements.
 - **CI is the hard gate.** No merge unless CI is green.
 

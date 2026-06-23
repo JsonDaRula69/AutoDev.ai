@@ -1,3 +1,5 @@
+> **SUPERSEDED.** This document describes the OpenCode-based setup process. It is kept as a historical reference. The current pi-based setup is documented at the root-level `README.md` §Quick Start and §Configuration. Refer to that file for current setup instructions.
+
 # AutoDev Setup Guide
 
 Step-by-step instructions to deploy the AutoDev team framework.

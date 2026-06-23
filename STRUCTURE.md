@@ -49,6 +49,9 @@
     evidence/            # Proof artifacts before committing
     skills/              # AutoDev skill definitions (source for .pi/skills/)
     decisions/           # ADR source files + loreguard.db
+    work-items/          # Heartbeat state persistence
+    debates/             # Debate transcripts
+    embeddings/          # Vector store (vectors.db)
     research/            # Research notes
     memory/              # Bootstrap context (Tier 1)
     plans/               # Implementation plans
@@ -109,7 +112,7 @@ This directory is **immutable truth**. Never modify these files. Always check re
 Contents:
 
 - **`onboarding-protocol.md`**: Harbor Master interview protocol. Six phases, proficiency axis, open-ended questions, Harbor Log format.
-- **`workflow-specification.md`**: Dispatch state machine, debate protocol, guardrails (5 hard stops, soft stops), label lifecycle, agent identity system.
+- **`workflow-specification.md`**: Dispatch state machine, debate protocol, guardrails (6 hard stops, soft stops), label lifecycle, agent identity system.
 - **`discord-setup.md`**: Discord bridge configuration. Channel IDs, bot token, slash commands, reply polling.
 - **`README.md`**: Reference directory overview. Index of the other three files.
 
@@ -160,9 +163,9 @@ The 13 agents:
 | `momus` | Satyr/Critic: push back, find edge cases | Momus |
 | `metis` | Strategist: surface hidden intentions, detect slop | Metis |
 | `harbor-master` | Onboarding: dockside conversationalist | Harbor Master |
-| `quartermaster` | Operations: QA gates, label enforcement | Engineer (shared) |
-| `boatswain` | Operations: deployment readiness | Engineer (shared) |
-| `navigator` | Operations: stage-gate enforcement | Engineer (shared) |
+| `quartermaster` | Operations: stage-gate label enforcement | Engineer (shared) |
+| `boatswain` | Operations: QA gates, evidence validation | Engineer (shared) |
+| `navigator` | Operations: deployment readiness, health verification | Engineer (shared) |
 | `watch-officer` | Operations: self-healing, health monitoring | Engineer (shared) |
 | `explore` | Investigator: map codebase, report findings | Explore |
 
@@ -185,7 +188,7 @@ AutoDev ships four custom skills:
 | `autodev-review` | PR opened | Oracle reviews the PR before any human sees it |
 | `autodev-deploy` | PR merged | Alert liaison, coordinate deployment verification |
 
-A fifth skill, `autodev-onboard`, drives the Harbor Master onboarding conversation.
+Onboarding is not a skill. The Harbor Master session is launched by the `autodev onboard` CLI command (T13), which uses the interview protocol from `.autodev/reference/onboarding-protocol.md` directly. No separate skill file is needed.
 
 ## 7. Coexistence Model: `.pi/` and `.opencode/`
 

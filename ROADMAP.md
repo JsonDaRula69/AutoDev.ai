@@ -74,14 +74,6 @@ Full agent monitoring beyond the circuit breaker. The initial wave's background 
 - **Wave:** Medium-term.
 - **Depends on:** Background agent manager (T8).
 
-### .omo/rules/ rules injection
-
-A project-specific rules directory. Load Markdown files of project-specific coding standards, conventions, and constraints into agent context alongside AGENTS.md. This one might get pulled into the initial wave if time allows. If not, it lands here.
-
-- **Why deferred:** AGENTS.md plus .autodev/memory/ provide sufficient project-specific guidance for the initial wave.
-- **Wave:** Medium-term.
-- **Depends on:** Context injection system (T5).
-
 ## Long-term waves
 
 Major features that require significant effort. Each one reshapes how AutoDev operates.

@@ -1,3 +1,5 @@
+> **SUPERSEDED.** This document describes the OpenCode-based knowledge architecture. It is kept as a historical reference. The current pi-based knowledge architecture is documented at the root-level `ARCHITECTURE.md` §10 (Loreguard), §11 (Docs Query), §28 (Context Injection), and §29 (Magic Context Integration). Refer to those sections for the current design.
+
 # AutoDev Knowledge Architecture
 
 How the AutoDev team stores, retrieves, and guards the project knowledge base. Design decisions here are ratified — do not modify without human approval.
