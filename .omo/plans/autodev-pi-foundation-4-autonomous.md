@@ -198,12 +198,28 @@ Critical Path: T13 → T16
   QA scenarios: happy — all 5 register, graceful degradation. Failure — stub not replaced. Evidence: `.omo/evidence/task-20-autodev-pi-foundation.txt`.
   Commit: Y | feat(integration): 5 integration modules with real logic
 
+## Pre-Existing Issue Policy
+
+When a subagent discovers an issue it categorizes as "pre-existing" (i.e., code from a prior plan that has a bug or gap, but is outside the current todo's scope), the subagent must NOT fix it — that would be scope creep. However, the issue must NOT be silently ignored. The subagent must:
+
+1. **Record the issue** in a `## Pre-Existing Issues Found` section at the end of its evidence file (`.omo/evidence/task-<N>-autodev-pi-foundation.txt`).
+2. **Include**: file path, line number(s), description of the issue, severity, and suggested fix.
+3. **Notify**: the subagent's final message must include a `## Pre-Existing Issues` summary listing all such findings.
+
+After each todo completes, the orchestrator (Nemo or the continuation loop) must:
+1. **Read the evidence file** and extract any pre-existing issues.
+2. **Create a follow-up task** to fix each pre-existing issue before the next todo begins.
+3. **Only proceed to the next todo** when ALL pre-existing issues from the previous todo have been addressed (either fixed or explicitly deferred with a recorded reason).
+
+This ensures no issue is lost. A problem is still a problem, even if it was pre-existing.
+
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
 
-- [ ] F1. Verify scope — heartbeat (with multi-project polling), dispatch, Discord, debate, auto-merge, boulder, continuation, debug, installer, 5 integration modules filled in
+- [ ] F1. Verify scope — heartbeat (with multi-project polling), dispatch, Discord, debate, auto-merge, boulder, continuation, debug, installer, 5 integration modules filled in. Confirm all pre-existing issues from every todo's evidence file have been addressed or explicitly deferred.
 - [ ] F2. Code quality — heartbeat logic, dispatch state machine, debate session isolation, merge gate logic, installer flow
 - [ ] F3. Manual QA — mock GitHub issue → triage → plan → implement → review → merge pipeline (mocked), Discord mock, debate mock, installer mock
+- [ ] F4. Code-vs-plan compliance audit — for each todo (T13-T20), read the actual implemented code and compare line-by-line against the plan's "What to do", "Must NOT do", and "Acceptance criteria" sections. Verify every acceptance criterion is met by actual code (not just by tests passing). Flag any acceptance criterion that is unimplemented, partially implemented, or contradicts the plan. Read the actual files — do not trust test output alone. Output a per-todo compliance table: {todo, criterion, status (MET/UNMET/PARTIAL), evidence (file:line or test name)}. All criteria must be MET before the plan is declared complete.
 
 ## Commit strategy
 
@@ -231,3 +247,5 @@ Critical Path: T13 → T16
 14. Liaison role is conditional on project type (agent-consumed vs human-consumed).
 15. All planning and PM goes through GitHub (issues, PRs, labels, CI).
 16. All 15 extension modules have real register() logic — zero stubs remaining (4 foundation from T5 + 6 core from Plans 2-3 + 5 integration from T20).
+17. All pre-existing issues discovered during implementation have been addressed or explicitly deferred with a recorded reason.
+18. F4 code-vs-plan compliance audit passes — every acceptance criterion in every todo is verified as MET by actual code.
