@@ -594,3 +594,33 @@ Date: 2026-06-23
 - `bun run typecheck`: tsc --noEmit EXIT 0.
 - `bun test test/doctor.test.ts`: 12 pass, 0 fail.
 - `bun test` (full suite): 521 pass, 0 fail.
+
+# T7 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/orchestrator/projects.ts`: removed the `projectRoot?: string` parameter from `registryPath`, `loadRegistry`, and `saveRegistry`. Imported `getAgentDir` from `@earendil-works/pi-coding-agent`. The registry now resolves to `join(getAgentDir(), "..", "projects.json")` — i.e. `~/.AutoDev/projects.json` when `PI_CODING_AGENT_DIR` is set (T1's env wiring). `saveRegistry` still creates the central dir via `mkdir(join(path, ".."), { recursive: true })`. `defaultRegistry(projectRoot?)` is unchanged — it keeps the optional `projectRoot` for deriving name/repo from cwd.
+- `extensions/autodev/orchestrator/__tests__/orchestrator.test.ts`: added a `beforeEach`/`afterEach` pair that saves, sets, and restores `PI_CODING_AGENT_DIR` to `join(tmpDir, "agent")` so `getAgentDir()` resolves into the test's temp tree (matching the T2/T3/T5 pattern). 4 registry tests rewritten for the machine-level path (no `projectRoot` arg). Multi-project test updated to drop `tmpDir` arg. 2 new tests: "saveRegistry writes machine-level file and creates missing dir" and "saveRegistry creates the central dir when it does not exist" (deeply nested path).
+- Evidence: `.omo/evidence/project-init-centralization/t7-registry-happy.md`, `t7-registry-failure.md`.
+
+## Key decisions
+
+- **`registryPath()` is now zero-arg.** The old `DEFAULT_REGISTRY_PATH` relative constant was removed entirely; the path is always computed from `getAgentDir()`. This is the same resolution pattern T2 used for agent Markdown files (`join(getAgentDir(), "..", "agents")`).
+- **`defaultRegistry` keeps `projectRoot`.** The task spec said "keep `projectRoot` for deriving name/repo from cwd" — `guessProjectName` and `guessRepo` both take a `cwd` string, so the parameter is still meaningful even though it no longer affects where the file is read from / written to.
+- **`mkdir` parent is `join(path, "..")`, not `dirname(path)`.** Both work, but `join(path, "..")` matches the pre-existing pattern in `saveRegistry` and is consistent with how the central home is derived elsewhere (`centralHome = join(agentDir, "..")` in T1).
+- **Test isolation via `PI_CODING_AGENT_DIR`, not `process.chdir`.** `chdir` would pollute other tests in the same file (heartbeat, CLI) that depend on `process.cwd()`. Redirecting `getAgentDir()` via the env var is surgical and restored in `afterEach`.
+
+## Gotchas
+
+- **`getAgentDir()` reads `PI_CODING_AGENT_DIR` live** (confirmed in T2 learnings), so the `beforeEach` env-var set takes effect immediately — no dynamic import needed. The `import("../projects.js")` inside each test re-evaluates the module, but even a cached import would see the new env value because `getAgentDir()` reads it on each call.
+- **Pre-existing unused imports removed.** The old `projects.ts` imported `existsSync` from `node:fs` and `resolve` from `node:path` but never used them. The refactor dropped both. `tsc --noEmit` exit 0 confirms no unused-import errors.
+- **No production caller needed updating.** `scripts/cli.ts`, `extensions/autodev/orchestrator/cli.ts`, and `extensions/autodev/orchestrator/heartbeat.ts` all already called `loadRegistry()` with no argument (confirmed in the notepad's call-site audit). Only the test file passed `tmpDir` and that was updated.
+- **`orchestrator.test.ts` is now 326 pure LOC** (was 295). The file is over the 250-LOC ceiling. The pre-existing smell is carried — T7's MUST NOT constraint ("Do NOT touch files outside projects.ts, its tests, and evidence") forbids the split. Candidate split for a follow-up: extract the registry tests into `__tests__/projects.test.ts` and keep dispatch/heartbeat/CLI tests in `orchestrator.test.ts`.
+
+## Verification
+
+- `bun test extensions/autodev/orchestrator/__tests__/orchestrator.test.ts`: 20 pass, 0 fail.
+- `bun test` (full suite): 522 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit EXIT 0.

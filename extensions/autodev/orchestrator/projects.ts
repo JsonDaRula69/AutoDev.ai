@@ -1,12 +1,13 @@
 /**
- * Project registry — load/save `.autodev/projects.json`.
+ * Project registry — load/save the machine-level registry at
+ * `~/.AutoDev/projects.json` (i.e. `join(getAgentDir(), "..", "projects.json")`).
  *
  * Schema: { projects: [{ name, path, repo, active }] }
  * The default active project is the current working directory.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 export interface ProjectEntry {
   readonly name: string;
@@ -19,14 +20,12 @@ export interface ProjectRegistry {
   readonly projects: ProjectEntry[];
 }
 
-const DEFAULT_REGISTRY_PATH = ".autodev/projects.json";
-
 /**
- * Resolve the registry file path. Uses the project root if provided,
- * otherwise the current working directory.
+ * Resolve the registry file path. Always machine-level:
+ * `join(getAgentDir(), "..", "projects.json")`.
  */
-function registryPath(projectRoot?: string): string {
-  return join(projectRoot ?? process.cwd(), DEFAULT_REGISTRY_PATH);
+function registryPath(): string {
+  return join(getAgentDir(), "..", "projects.json");
 }
 
 /**
@@ -34,27 +33,26 @@ function registryPath(projectRoot?: string): string {
  * Returns a default registry (current cwd as the only project) if the file
  * does not exist or is unreadable.
  */
-export async function loadRegistry(projectRoot?: string): Promise<ProjectRegistry> {
-  const path = registryPath(projectRoot);
+export async function loadRegistry(): Promise<ProjectRegistry> {
+  const path = registryPath();
   try {
     const raw = await readFile(path, "utf-8");
     const parsed = JSON.parse(raw) as ProjectRegistry;
-    // Validate shape
     if (!Array.isArray(parsed.projects)) {
-      return defaultRegistry(projectRoot);
+      return defaultRegistry();
     }
     return parsed;
   } catch {
-    return defaultRegistry(projectRoot);
+    return defaultRegistry();
   }
 }
 
 /**
- * Save the project registry to disk. Creates the `.autodev/` directory if
- * it does not exist.
+ * Save the project registry to disk. Creates the central directory
+ * (the parent of the agent dir, e.g. `~/.AutoDev/`) if it does not exist.
  */
-export async function saveRegistry(registry: ProjectRegistry, projectRoot?: string): Promise<void> {
-  const path = registryPath(projectRoot);
+export async function saveRegistry(registry: ProjectRegistry): Promise<void> {
+  const path = registryPath();
   await mkdir(join(path, ".."), { recursive: true });
   await writeFile(path, JSON.stringify(registry, null, 2), "utf-8");
 }

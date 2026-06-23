@@ -49,40 +49,71 @@ afterEach(async () => {
 });
 
 // ---- Projects Registry Tests ----
+//
+// The registry now lives at the machine level: `~/.AutoDev/projects.json`
+// (resolved as `join(getAgentDir(), "..", "projects.json")`). Tests redirect
+// `PI_CODING_AGENT_DIR` to a temp tree so `getAgentDir()` returns a temp
+// `<central>/agent/`, and the registry file lands at `<central>/projects.json`.
 
-test("loadRegistry returns default when no file exists", async () => {
+let savedAgentDir: string | undefined;
+
+beforeEach(() => {
+  savedAgentDir = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = join(tmpDir, "agent");
+});
+
+afterEach(() => {
+  if (savedAgentDir !== undefined) process.env.PI_CODING_AGENT_DIR = savedAgentDir;
+  else delete process.env.PI_CODING_AGENT_DIR;
+});
+
+test("loadRegistry returns default when no file exists (machine-level)", async () => {
   const { loadRegistry } = await import("../projects.js");
-  const registry = await loadRegistry(tmpDir);
+  const registry = await loadRegistry();
   expect(registry.projects.length).toBe(1);
   expect(registry.projects[0]!.active).toBe(true);
 });
 
-test("loadRegistry reads existing file", async () => {
+test("loadRegistry reads existing machine-level file", async () => {
   const { loadRegistry } = await import("../projects.js");
+  const centralDir = join(tmpDir);
   const testData = {
     projects: [
       { name: "test-proj", path: "/tmp/test", repo: "user/test", active: true },
     ],
   };
-  await writeFile(join(tmpDir, ".autodev", "projects.json"), JSON.stringify(testData));
-  const registry = await loadRegistry(tmpDir);
+  await writeFile(join(centralDir, "projects.json"), JSON.stringify(testData));
+  const registry = await loadRegistry();
   expect(registry.projects.length).toBe(1);
   expect(registry.projects[0]!.name).toBe("test-proj");
 });
 
-test("saveRegistry writes file", async () => {
+test("saveRegistry writes machine-level file and creates missing dir", async () => {
   const { saveRegistry, loadRegistry } = await import("../projects.js");
+  const centralDir = join(tmpDir);
   const registry = {
     projects: [
       { name: "proj-a", path: "/tmp/a", repo: "user/a", active: true },
       { name: "proj-b", path: "/tmp/b", repo: "user/b", active: false },
     ],
   };
-  await saveRegistry(registry, tmpDir);
-  const loaded = await loadRegistry(tmpDir);
+  await saveRegistry(registry);
+  expect(existsSync(join(centralDir, "projects.json"))).toBe(true);
+  const loaded = await loadRegistry();
   expect(loaded.projects.length).toBe(2);
   expect(loaded.projects[0]!.name).toBe("proj-a");
   expect(loaded.projects[1]!.name).toBe("proj-b");
+});
+
+test("saveRegistry creates the central dir when it does not exist", async () => {
+  const { saveRegistry } = await import("../projects.js");
+  const deepCentral = join(tmpDir, "nested", "central");
+  process.env.PI_CODING_AGENT_DIR = join(deepCentral, "agent");
+  const registry = {
+    projects: [{ name: "p", path: "/tmp/p", repo: "user/p", active: true }],
+  };
+  await saveRegistry(registry);
+  expect(existsSync(join(deepCentral, "projects.json"))).toBe(true);
 });
 
 test("getActiveProject returns active project", async () => {
@@ -284,9 +315,9 @@ test("multi-project registry with 2 projects", async () => {
       { name: "project-b", path: "/tmp/proj-b", repo: "user/proj-b", active: false },
     ],
   };
-  await saveRegistry(registry, tmpDir);
+  await saveRegistry(registry);
 
-  const loaded = await loadRegistry(tmpDir);
+  const loaded = await loadRegistry();
   expect(loaded.projects.length).toBe(2);
 
   const active = getActiveProject(loaded);
