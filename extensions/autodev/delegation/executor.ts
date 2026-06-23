@@ -169,6 +169,7 @@ export async function executeTaskTool(
   let systemPrompt: string;
   let baseTools: readonly string[];
   let agentName: string | undefined;
+  let thinkingLevel: string | undefined;
 
   if (hasCategory && category !== undefined) {
     const cat = getCategory(projectRoot, category);
@@ -183,6 +184,7 @@ export async function executeTaskTool(
     // Categories get the standard read-only tool set. No `task` (anti-re-delegation).
     baseTools = ["read", "bash", "grep", "glob"];
     agentName = `category:${category}`;
+    thinkingLevel = cat.thinkingLevel;
   } else if (hasSubagent && subagent_type !== undefined) {
     const agent = loadAgent(projectRoot, subagent_type);
     if (agent === undefined) {
@@ -217,6 +219,7 @@ export async function executeTaskTool(
     systemPrompt,
     tools,
     agentName,
+    thinkingLevel,
   };
 
   // 5. Spawn.

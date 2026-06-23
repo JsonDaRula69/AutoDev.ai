@@ -183,7 +183,7 @@ test("session_list reports empty when no sessions", async () => {
 
 test("session_read returns messages from a session", async () => {
   const deps = createMockSessionDeps(makeSessions());
-  const result = await executeSessionRead({ session_id: "ses_1" }, deps);
+  const result = await executeSessionRead({ session_id: "ses_1" }, deps, "/cwd");
   expect(result.isError).toBeFalsy();
   expect(result.details?.count).toBe(2);
   expect(result.content[0]?.text).toContain("user");
@@ -192,20 +192,20 @@ test("session_read returns messages from a session", async () => {
 
 test("session_read opens by path too", async () => {
   const deps = createMockSessionDeps(makeSessions());
-  const result = await executeSessionRead({ session_id: "/p/ses_2.jsonl" }, deps);
+  const result = await executeSessionRead({ session_id: "/p/ses_2.jsonl" }, deps, "/cwd");
   expect(result.details?.count).toBe(1);
 });
 
 test("session_read honors the limit param", async () => {
   const deps = createMockSessionDeps(makeSessions());
-  const result = await executeSessionRead({ session_id: "ses_1", limit: 1 }, deps);
+  const result = await executeSessionRead({ session_id: "ses_1", limit: 1 }, deps, "/cwd");
   expect(result.details?.count).toBe(1);
 });
 
-test("session_read on a missing session returns empty", async () => {
+test("session_read on a missing session fails gracefully", async () => {
   const deps = createMockSessionDeps(makeSessions());
-  const result = await executeSessionRead({ session_id: "ses_missing" }, deps);
-  expect(result.content[0]?.text).toContain("No messages");
+  const result = await executeSessionRead({ session_id: "ses_missing" }, deps, "/cwd");
+  expect(result.content[0]?.text).toContain("Session not found");
 });
 
 // --- session_search --------------------------------------------------------

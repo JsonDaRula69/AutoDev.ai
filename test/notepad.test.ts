@@ -15,6 +15,8 @@ import {
   storeIssue,
   storeVerification,
   storeProblem,
+  setSearchLoreAvailable,
+  isSearchLoreAvailable,
   MEMORY_CATEGORY_ARCHITECTURE,
   MEMORY_CATEGORY_CONSTRAINTS,
 } from "../extensions/autodev/notepad/index.js";
@@ -38,10 +40,14 @@ beforeEach(() => {
   checkSqliteVersion(memDb);
   createSchema(memDb);
   setDb(memDb);
+  // Default to false (no pi registration); each test that exercises the
+  // loreguard path must explicitly enable it via setSearchLoreAvailable(true).
+  setSearchLoreAvailable(false);
 });
 
 afterEach(() => {
   resetDb();
+  setSearchLoreAvailable(false);
   memDb.close();
 });
 
@@ -54,6 +60,8 @@ test("storeLearning routes to ctx_memory ARCHITECTURE", () => {
 });
 
 test("storeDecision writes a draft ADR to Loreguard via suggest_lore", () => {
+  setSearchLoreAvailable(true);
+  expect(isSearchLoreAvailable()).toBe(true);
   const d = storeDecision("Use Bun as runtime", "Bun ships faster than Node for our workload.");
   expect(d.kind).toBe("decision");
   expect(d.backend).toBe("loreguard:adr");
@@ -62,6 +70,20 @@ test("storeDecision writes a draft ADR to Loreguard via suggest_lore", () => {
   expect(d.content).toContain("Draft (suggest_lore)");
   expect(d.target).toMatch(/^loreguard decision #\d+$/);
   expect(d.note).toContain("ratify_lore");
+});
+
+test("storeDecision falls back to ctx_memory:ARCHITECTURE when search_lore is unavailable", () => {
+  setSearchLoreAvailable(false);
+  expect(isSearchLoreAvailable()).toBe(false);
+  const d = storeDecision("Use Bun as runtime", "Bun ships faster than Node for our workload.");
+  expect(d.kind).toBe("decision");
+  expect(d.backend).toBe("ctx_memory:ARCHITECTURE");
+  expect(d.written).toBe(false);
+  expect(d.content).toContain("ADR: Use Bun as runtime");
+  expect(d.content).toContain("Draft (ctx_memory fallback)");
+  expect(d.target).toBe("ctx_memory ARCHITECTURE");
+  expect(d.note).toContain("ctx_memory(action='write'");
+  expect(d.note).not.toContain("ratify_lore");
 });
 
 test("storeIssue routes to ctx_memory CONSTRAINTS", () => {

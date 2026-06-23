@@ -29,6 +29,7 @@
 import type { ExtensionAPI, ToolCallEvent } from "@earendil-works/pi-coding-agent";
 import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { resolve, join } from "node:path";
+import { evaluateExpression, type GuardrailContext } from "./evaluator.js";
 
 /** Rule enforcement outcome for a hard stop. */
 export interface BlockResult {
@@ -51,6 +52,7 @@ export type RuleResult = BlockResult | WarnResult | AllowResult;
 export interface HardStopRule {
   readonly id: string;
   readonly description: string;
+  readonly check: string;
   readonly enforcement: string;
 }
 
@@ -58,6 +60,7 @@ export interface HardStopRule {
 export interface SoftStopRule {
   readonly id: string;
   readonly description: string;
+  readonly check: string;
   readonly enforcement: "warn";
 }
 
@@ -114,7 +117,7 @@ export function parseGuardrailsYaml(text: string): GuardrailsConfig {
   const hardStops: HardStopRule[] = [];
   const softStops: SoftStopRule[] = [];
   let section: "hard" | "soft" | null = null;
-  let current: { id?: string; description?: string; enforcement?: string } | null = null;
+  let current: { id?: string; description?: string; enforcement?: string; check?: string } | null = null;
 
   const flush = (): void => {
     if (current === null) return;
@@ -122,6 +125,7 @@ export function parseGuardrailsYaml(text: string): GuardrailsConfig {
       const rule = {
         id: current.id,
         description: current.description ?? "",
+        check: current.check ?? "",
         enforcement: current.enforcement ?? "",
       };
       if (section === "hard") {
@@ -172,6 +176,12 @@ export function parseGuardrailsYaml(text: string): GuardrailsConfig {
       const enfMatch = /^\s+enforcement:\s*(\S+)\s*$/.exec(line);
       if (enfMatch !== null && enfMatch[1] !== undefined) {
         current.enforcement = enfMatch[1];
+        continue;
+      }
+      // check: "..." — strip surrounding quotes.
+      const checkMatch = /^\s+check:\s*"?(.*?)"?\s*$/.exec(line);
+      if (checkMatch !== null && checkMatch[1] !== undefined) {
+        current.check = checkMatch[1];
         continue;
       }
     }
@@ -379,12 +389,131 @@ export interface GuardrailHandler {
  *
  * Tests import this directly to drive the logic with fake events and a temp
  * project root, avoiding the need to spawn a real pi session.
+ *
+ * Evaluation strategy: for each rule, first try the rule's `check` expression
+ * via the DSL evaluator. If the evaluator signals a violation, enforce the
+ * rule. If the evaluator throws or signals no violation, fall back to the
+ * hardcoded logic — which encodes the same intent but with richer tool-call
+ * semantics (e.g. detecting deploy-like commands, counting edits) that the
+ * tiny DSL cannot express.
  */
 export function buildHandler(config: GuardrailsConfig, deps: GuardrailDeps = {}): GuardrailHandler {
   const hardStopIds = new Set(config.hard_stops.map((r) => r.id));
   const softStopIds = new Set(config.soft_stops.map((r) => r.id));
+  const hardCheckExprs = new Map(config.hard_stops.map((r) => [r.id, r.check] as const));
+  const softCheckExprs = new Map(config.soft_stops.map((r) => [r.id, r.check] as const));
   const ciChecker = deps.ciChecker ?? defaultCiChecker;
+  const fallback = buildFallbackHandler(hardStopIds, softStopIds, ciChecker, deps);
 
+  return async (event: ToolCallEvent, projectRoot: string): Promise<RuleResult> => {
+    const root = deps.projectRoot ?? projectRoot;
+
+    // --- HARD STOPS via DSL evaluator -----------------------------------
+    for (const rule of config.hard_stops) {
+      const ctx = buildGuardrailContext(event, root);
+      const expr = hardCheckExprs.get(rule.id) ?? "";
+      if (expr.trim() === "") continue;
+      try {
+        if (evaluateExpression(expr, ctx)) {
+          return { block: true, reason: rule.id };
+        }
+      } catch {
+        // Evaluator failed — fall through to the hardcoded logic below.
+      }
+    }
+
+    // --- SOFT STOPS via DSL evaluator -----------------------------------
+    for (const rule of config.soft_stops) {
+      const ctx = buildGuardrailContext(event, root);
+      const expr = softCheckExprs.get(rule.id) ?? "";
+      if (expr.trim() === "") continue;
+      try {
+        if (evaluateExpression(expr, ctx)) {
+          return { warn: `${rule.id}: ${rule.description}` };
+        }
+      } catch {
+        // Evaluator failed — fall through to the hardcoded logic below.
+      }
+    }
+
+    // --- FALLBACK: hardcoded logic (richer tool-call semantics) ---------
+    return fallback(event, root);
+  };
+}
+
+/**
+ * Build a `GuardrailContext` for the DSL evaluator from a tool_call event.
+ *
+ * `action_type` is derived from the tool name + command: `bash` running a
+ * `git commit` is `commit`, `gh pr merge` is `merge`, a deploy keyword is
+ * `deploy`, `write`/`edit` is `write`, `review` is `review`, `todowrite` is
+ * `implement`, otherwise the tool name itself.
+ *
+ * `evidence_exists` reflects the `.omo/evidence/` directory; `active_tasks`
+ * is 1 when an active-task.json exists, else 0; `ci_status` is left undefined
+ * for merge commands so the async CI checker in the fallback layer owns the
+ * real enforcement.
+ */
+function buildGuardrailContext(event: ToolCallEvent, root: string): GuardrailContext {
+  let actionType = event.toolName;
+  let command: string | undefined;
+  if (event.toolName === "bash") {
+    command = extractCommand(event);
+    if (command !== undefined) {
+      if (isDeployAction(command)) actionType = "deploy";
+      else if (isGhPrMerge(command)) actionType = "merge";
+      else if (isGitCommit(command)) actionType = "commit";
+    }
+  } else if (event.toolName === "write" || event.toolName === "edit") {
+    actionType = "write";
+  } else if (event.toolName === "review") {
+    actionType = "review";
+  } else if (event.toolName === "todowrite") {
+    actionType = "implement";
+  }
+
+  const diff = extractWrittenText(event);
+  const path = extractTargetPath(event);
+  const evidenceExistsFlag = evidenceExists(root);
+
+  let activeTasks = 0;
+  if (readActiveTask(root) !== undefined) activeTasks = 1;
+
+  let ciStatus: string | undefined;
+  if (event.toolName === "bash" && command !== undefined && isGhPrMerge(command)) {
+    ciStatus = undefined;
+  }
+
+  let agent: string | undefined;
+  const reviewInput = event.input as { reviewer?: string; implementer?: string };
+  if (event.toolName === "review" && typeof reviewInput.reviewer === "string") {
+    agent = reviewInput.reviewer;
+  }
+
+  return {
+    action_type: actionType,
+    agent,
+    diff,
+    path,
+    ci_status: ciStatus,
+    evidence_exists: evidenceExistsFlag,
+    evidence_file_exists: evidenceExistsFlag,
+    active_tasks: activeTasks,
+  };
+}
+
+/**
+ * Build the hardcoded fallback handler. This is the original per-rule logic,
+ * preserved so the guardrail engine still enforces correctly when the DSL
+ * evaluator cannot express a rule's intent (e.g. deploy-detection heuristics,
+ * edit-count thresholds, async CI checks).
+ */
+function buildFallbackHandler(
+  hardStopIds: Set<string>,
+  softStopIds: Set<string>,
+  ciChecker: CiChecker,
+  deps: GuardrailDeps,
+): GuardrailHandler {
   return async (event: ToolCallEvent, projectRoot: string): Promise<RuleResult> => {
     const root = deps.projectRoot ?? projectRoot;
 
@@ -433,10 +562,17 @@ export function buildHandler(config: GuardrailsConfig, deps: GuardrailDeps = {})
           }
         }
       }
-      // On completion of the active task, clear the state file.
-      const completesAny = todos.some((t) => t?.status === "completed");
-      if (completesAny && readActiveTask(root) !== undefined) {
-        clearActiveTask(root);
+      // On completion of the active task, clear the state file — but only if
+      // the SPECIFIC todo that was set as the active task is completed. A
+      // different todo completing must NOT clear the active task's state.
+      const active = readActiveTask(root);
+      if (active !== undefined) {
+        const activeTodoCompleted = todos.some(
+          (t) => t?.status === "completed" && t?.content === active.task_id,
+        );
+        if (activeTodoCompleted) {
+          clearActiveTask(root);
+        }
       }
       // On first in_progress with no active task, record it.
       if (firstInProgress !== undefined && readActiveTask(root) === undefined) {

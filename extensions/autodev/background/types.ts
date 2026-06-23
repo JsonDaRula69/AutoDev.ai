@@ -36,6 +36,7 @@ export interface TaskState {
   readonly onParentWake:
     | ((taskId: string, status: TaskStatus, result: unknown) => void)
     | undefined;
+  readonly thinkingLevel: string | undefined;
   /** Models already tried, used to advance through the fallback chain. */
   triedModels: string[];
 }
@@ -50,6 +51,13 @@ export interface SpawnConfig {
   readonly parentTaskId?: string;
   readonly staleTimeoutMs?: number;
   readonly onParentWake?: (taskId: string, status: TaskStatus, result: unknown) => void;
+  /**
+   * Optional thinking level for the pi SDK's `setThinkingLevel()`.
+   * Plumbed from category-level `thinkingLevel` (e.g. "xhigh" for ultrabrain).
+   * When set, passed to the session factory so the spawned session enables
+   * extended thinking.
+   */
+  readonly thinkingLevel?: string;
 }
 
 /** Events the manager listens for on a managed session. */
@@ -67,12 +75,13 @@ export interface ManagedSession {
   dispose(): void;
 }
 
-/** Configuration passed to the session factory. */
+/** Configuration passed to the session factory. Injectable for tests. */
 export interface SessionFactoryConfig {
   readonly model: string;
   readonly systemPrompt: string;
   readonly tools: readonly string[];
   readonly customTools: readonly unknown[];
+  readonly thinkingLevel?: string;
 }
 
 /** Factory that creates a managed session from config. Injectable for tests. */
@@ -123,6 +132,7 @@ export function createTaskState(id: string, config: SpawnConfig): TaskState {
     parentTaskId: config.parentTaskId,
     staleTimeoutMs: config.staleTimeoutMs,
     onParentWake: config.onParentWake,
+    thinkingLevel: config.thinkingLevel,
     triedModels: [config.model],
   };
 }

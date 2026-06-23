@@ -18,6 +18,7 @@ import {
   approveLore,
   rejectLore,
   searchLore,
+  archiveLore,
   getLore,
   RATIFY_APPROVER_THRESHOLD,
   SQLITE_MIN_VERSION,
@@ -28,6 +29,7 @@ import {
   approveLoreExecute,
   rejectLoreExecute,
   searchLoreExecute,
+  archiveLoreExecute,
 } from "../extensions/autodev/loreguard/tools.js";
 
 let db: Database;
@@ -165,6 +167,21 @@ test("reject_lore records rejection and keeps status under-review", () => {
 
 test("reject_lore throws on unknown id", () => {
   expect(() => rejectLore(99999, "r", "x")).toThrow(/not found/);
+});
+
+// 5b. Rejection blocks auto-ratification even with 3 approvals (M6) ---------
+
+test("reject_lore then 3 approvals does NOT auto-ratify because a rejection exists", () => {
+  const { id } = suggestLore("Decision M6", "content for m6");
+  ratifyLore(id);
+
+  rejectLore(id, "disagree", "momus");
+  approveLore(id, "ok", "nemo");
+  approveLore(id, "ok", "oracle");
+  approveLore(id, "ok", "conseil");
+
+  expect(getLore(id)!.status).toBe("under-review");
+  expect(getLore(id)!.ratified_at).toBeNull();
 });
 
 // 6. search_lore with include_drafts=false returns only ratified -----------
@@ -313,4 +330,73 @@ test("search_lore tool executor honors include_drafts default false", async () =
   suggestLore("Draft only searchable", "body");
   const res = await searchLoreExecute("call-6", { query: "searchable" });
   expect(res.content[0]!.text).toContain("No decisions matched");
+});
+
+// 11. archive_lore (M7) ------------------------------------------------------
+
+test("archive_lore transitions a ratified decision to archived", () => {
+  const { id } = suggestLore("To archive", "ratified then archived");
+  ratifyLore(id);
+  approveLore(id, "ok", "oracle");
+  approveLore(id, "ok", "nemo");
+  approveLore(id, "ok", "momus");
+  expect(getLore(id)!.status).toBe("ratified");
+
+  const res = archiveLore(id);
+  expect(res.success).toBe(true);
+  expect(res.archived).toBe(true);
+  expect(getLore(id)!.status).toBe("archived");
+});
+
+test("archive_lore is idempotent — archiving an already-archived decision succeeds", () => {
+  const { id } = suggestLore("Double archive", "content");
+  ratifyLore(id);
+  archiveLore(id);
+  const res = archiveLore(id);
+  expect(res.archived).toBe(true);
+  expect(getLore(id)!.status).toBe("archived");
+});
+
+test("archive_lore returns archived:false for unknown id", () => {
+  const res = archiveLore(99999);
+  expect(res.success).toBe(true);
+  expect(res.archived).toBe(false);
+});
+
+test("search_lore does NOT return archived decisions by default", () => {
+  const { id } = suggestLore("Archived one", "archive searchable term");
+  ratifyLore(id);
+  approveLore(id, "ok", "oracle");
+  approveLore(id, "ok", "nemo");
+  approveLore(id, "ok", "momus");
+  archiveLore(id);
+
+  const res = searchLore("archive");
+  expect(res.results.find((r) => r.id === id)).toBeUndefined();
+});
+
+test("search_lore with include_drafts=true DOES return archived decisions", () => {
+  const { id } = suggestLore("Archived visible", "archive searchable term");
+  ratifyLore(id);
+  approveLore(id, "ok", "oracle");
+  approveLore(id, "ok", "nemo");
+  approveLore(id, "ok", "momus");
+  archiveLore(id);
+
+  const res = searchLore("archive", true);
+  const found = res.results.find((r) => r.id === id);
+  expect(found).toBeDefined();
+  expect(found!.status).toBe("archived");
+});
+
+test("archive_lore tool executor returns the archive result", async () => {
+  const { id } = suggestLore("Tool archive", "content");
+  ratifyLore(id);
+  approveLore(id, "ok", "oracle");
+  approveLore(id, "ok", "nemo");
+  approveLore(id, "ok", "momus");
+
+  const res = await archiveLoreExecute("call-7", { id });
+  expect(res.details.name).toBe("archive_lore");
+  expect((res.details.result as { archived: boolean }).archived).toBe(true);
 });

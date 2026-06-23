@@ -17,6 +17,7 @@ import {
   parseGuardrailsYaml,
   type GuardrailDeps,
 } from "../extensions/autodev/guardrails/index.js";
+import { evaluateExpression, type GuardrailContext } from "../extensions/autodev/guardrails/evaluator.js";
 
 /** Build a mock bash tool_call event. */
 function bashEvent(command: string, toolCallId = "tc1") {
@@ -274,6 +275,53 @@ test("todowrite completing the active task clears active-task.json", async () =>
   expect(existsSync(join(root, ".autodev", "active-task.json"))).toBe(false);
 });
 
+test("completing a non-active todo does NOT clear the active task", async () => {
+  mkdirSync(join(root, ".autodev"), { recursive: true });
+  writeFileSync(
+    join(root, ".autodev", "active-task.json"),
+    JSON.stringify({ task_id: "task-A", started_at: "2026-01-01T00:00:00Z" }),
+  );
+  const h = handlerWith();
+  // task-B completed (not task-A) — no in_progress to trigger the block branch.
+  const ev = todowriteEvent([{ content: "task-B", status: "completed" }]);
+  const result = await h(ev, root);
+  expect(result).toBeUndefined();
+  // active-task.json must still be present because task-A was not completed.
+  expect(existsSync(join(root, ".autodev", "active-task.json"))).toBe(true);
+});
+
+test("completing the active todo alongside another todo clears active-task.json", async () => {
+  mkdirSync(join(root, ".autodev"), { recursive: true });
+  writeFileSync(
+    join(root, ".autodev", "active-task.json"),
+    JSON.stringify({ task_id: "task-A", started_at: "2026-01-01T00:00:00Z" }),
+  );
+  const h = handlerWith();
+  const ev = todowriteEvent([
+    { content: "task-A", status: "completed" },
+    { content: "task-B", status: "completed" },
+  ]);
+  const result = await h(ev, root);
+  expect(result).toBeUndefined();
+  expect(existsSync(join(root, ".autodev", "active-task.json"))).toBe(false);
+});
+
+test("completing only a non-active todo (with active task present) preserves active-task.json", async () => {
+  mkdirSync(join(root, ".autodev"), { recursive: true });
+  writeFileSync(
+    join(root, ".autodev", "active-task.json"),
+    JSON.stringify({ task_id: "task-A", started_at: "2026-01-01T00:00:00Z" }),
+  );
+  const h = handlerWith();
+  const ev = todowriteEvent([
+    { content: "task-B", status: "completed" },
+    { content: "task-C", status: "completed" },
+  ]);
+  const result = await h(ev, root);
+  expect(result).toBeUndefined();
+  expect(existsSync(join(root, ".autodev", "active-task.json"))).toBe(true);
+});
+
 // --- hard stop 5: follow-the-plan -------------------------------------------
 
 test("write to a file NOT in the active plan is blocked with reason follow-the-plan", async () => {
@@ -430,4 +478,95 @@ test("loadGuardrailsConfig reads from .autodev/config/guardrails.yaml", () => {
   expect(cfg.hard_stops.length).toBe(9);
   expect(cfg.soft_stops.length).toBe(5);
   expect(cfg.hard_stops.some((r) => r.id === "no-secrets-in-code")).toBe(true);
+});
+
+// --- expression evaluator (M3) ------------------------------------------------
+
+test("evaluateExpression: action_type == 'deploy' matches deploy action_type", () => {
+  expect(evaluateExpression("action_type == 'deploy'", { action_type: "deploy" })).toBe(true);
+});
+
+test("evaluateExpression: action_type == 'deploy' is false for write action_type", () => {
+  expect(evaluateExpression("action_type == 'deploy'", { action_type: "write" })).toBe(false);
+});
+
+test("evaluateExpression: AND with != is true when agent differs", () => {
+  expect(
+    evaluateExpression("action_type == 'deploy' AND agent != 'navigator'", {
+      action_type: "deploy",
+      agent: "nemo",
+    }),
+  ).toBe(true);
+});
+
+test("evaluateExpression: AND with != is false when agent is navigator", () => {
+  expect(
+    evaluateExpression("action_type == 'deploy' AND agent != 'navigator'", {
+      action_type: "deploy",
+      agent: "navigator",
+    }),
+  ).toBe(false);
+});
+
+test("evaluateExpression: contains_secrets(diff) is true for an API key", () => {
+  expect(evaluateExpression("contains_secrets(diff)", { diff: "sk-ant-abc123def456ghi789jkl012mno345pqr678" })).toBe(true);
+});
+
+test("evaluateExpression: contains_secrets(diff) is false for clean code", () => {
+  expect(evaluateExpression("contains_secrets(diff)", { diff: "normal code" })).toBe(false);
+});
+
+test("evaluateExpression: active_tasks > 1 is true when active_tasks is 2", () => {
+  expect(evaluateExpression("active_tasks > 1", { active_tasks: 2 })).toBe(true);
+});
+
+test("evaluateExpression: active_tasks > 1 is false when active_tasks is 1", () => {
+  expect(evaluateExpression("active_tasks > 1", { active_tasks: 1 })).toBe(false);
+});
+
+test("evaluateExpression: NOT evidence_exists is true when evidence_exists is false", () => {
+  expect(evaluateExpression("NOT evidence_exists", { evidence_exists: false })).toBe(true);
+});
+
+test("evaluateExpression: NOT evidence_exists is false when evidence_exists is true", () => {
+  expect(evaluateExpression("NOT evidence_exists", { evidence_exists: true })).toBe(false);
+});
+
+test("evaluateExpression: OR returns true when either side is true", () => {
+  expect(
+    evaluateExpression("action_type == 'deploy' OR action_type == 'merge'", { action_type: "merge" }),
+  ).toBe(true);
+});
+
+test("evaluateExpression: OR returns false when neither side is true", () => {
+  expect(
+    evaluateExpression("action_type == 'deploy' OR action_type == 'merge'", { action_type: "write" }),
+  ).toBe(false);
+});
+
+test("evaluateExpression: path_starts_with(path, '.autodev/reference/') matches reference path", () => {
+  expect(
+    evaluateExpression("path_starts_with(path, '.autodev/reference/')", {
+      path: ".autodev/reference/architecture.md",
+    }),
+  ).toBe(true);
+});
+
+test("evaluateExpression: path_starts_with(path, '.autodev/reference/') is false for other paths", () => {
+  expect(
+    evaluateExpression("path_starts_with(path, '.autodev/reference/')", { path: "src/foo.ts" }),
+  ).toBe(false);
+});
+
+test("evaluateExpression: empty expression returns false", () => {
+  expect(evaluateExpression("", {} as GuardrailContext)).toBe(false);
+  expect(evaluateExpression("   ", {} as GuardrailContext)).toBe(false);
+});
+
+test("evaluateExpression: ci_status != 'green' is true when ci_status is red", () => {
+  expect(evaluateExpression("ci_status != 'green'", { ci_status: "red" })).toBe(true);
+});
+
+test("evaluateExpression: ci_status != 'green' is false when ci_status is green", () => {
+  expect(evaluateExpression("ci_status != 'green'", { ci_status: "green" })).toBe(false);
 });

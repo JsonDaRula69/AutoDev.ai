@@ -62,8 +62,18 @@ export async function executeSessionList(
 export async function executeSessionRead(
   params: { readonly session_id: string; readonly limit?: number },
   deps: SessionDeps,
+  cwd: string,
 ): Promise<ToolResult> {
-  const sm = deps.open(params.session_id);
+  const sessions = await deps.list(cwd);
+  const target = sessions.find(
+    (s) => s.id === params.session_id || s.path === params.session_id,
+  );
+  if (!target) {
+    return {
+      content: [{ type: "text", text: `Session not found: ${params.session_id}` }],
+    };
+  }
+  const sm = deps.open(target.path);
   const entries = sm.getEntries();
   const messages = entries.filter((e) => e.type === "message");
   const limited = params.limit ? messages.slice(0, params.limit) : messages;

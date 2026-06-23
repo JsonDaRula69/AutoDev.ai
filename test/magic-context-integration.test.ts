@@ -33,6 +33,7 @@ import {
   storeIssue,
   storeVerification,
   storeProblem,
+  setSearchLoreAvailable,
   MEMORY_CATEGORY_ARCHITECTURE,
   MEMORY_CATEGORY_CONSTRAINTS,
 } from "../extensions/autodev/notepad/index.js";
@@ -95,10 +96,12 @@ beforeEach(() => {
   checkSqliteVersion(memDb);
   createSchema(memDb);
   setDb(memDb);
+  setSearchLoreAvailable(false);
 });
 
 afterEach(() => {
   resetDb();
+  setSearchLoreAvailable(false);
   memDb.close();
 });
 
@@ -153,16 +156,28 @@ test("ctx_memory mock 'write' returns a fixed id of 999", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Group 2: ctx_search — storeDecision routes to loreguard:adr, NOT ctx_memory
+// Group 2: ctx_search — storeDecision routes to loreguard:adr when
+// search_lore is available, and to ctx_memory:ARCHITECTURE as a fallback
 // ---------------------------------------------------------------------------
 
-test("storeDecision produces a loreguard:adr descriptor, not ctx_memory", () => {
+test("storeDecision produces a loreguard:adr descriptor when search_lore is available", () => {
+  setSearchLoreAvailable(true);
   const d = storeDecision("Use Bun as runtime", "Bun ships faster than Node.");
   expect(d.backend).toBe("loreguard:adr");
   expect(d.backend).not.toMatch(/^ctx_memory/);
   expect(d.content).toContain("ADR: Use Bun as runtime");
   expect(d.note).toContain("ratify_lore");
   expect(d.written).toBe(true);
+});
+
+test("storeDecision falls back to ctx_memory:ARCHITECTURE when search_lore is unavailable", () => {
+  setSearchLoreAvailable(false);
+  const d = storeDecision("Use Bun as runtime", "Bun ships faster than Node.");
+  expect(d.backend).toBe("ctx_memory:ARCHITECTURE");
+  expect(d.written).toBe(false);
+  expect(d.content).toContain("ADR: Use Bun as runtime");
+  expect(d.note).toContain("ctx_memory(action='write'");
+  expect(d.note).not.toContain("ratify_lore");
 });
 
 test("ctx_search mock returns memory + message hits echoing the query", async () => {
@@ -286,12 +301,22 @@ test("storeLearning routes to ctx_memory:ARCHITECTURE backend", () => {
   expect(d.written).toBe(false);
 });
 
-test("storeDecision routes to loreguard:adr backend", () => {
+test("storeDecision routes to loreguard:adr backend when search_lore is available", () => {
+  setSearchLoreAvailable(true);
   const d = storeDecision("title", "body");
   expect(d.kind).toBe("decision");
   expect(d.backend).toBe("loreguard:adr");
   expect(d.target).toContain("loreguard");
   expect(d.written).toBe(true);
+});
+
+test("storeDecision routes to ctx_memory:ARCHITECTURE backend when search_lore is unavailable", () => {
+  setSearchLoreAvailable(false);
+  const d = storeDecision("title", "body");
+  expect(d.kind).toBe("decision");
+  expect(d.backend).toBe("ctx_memory:ARCHITECTURE");
+  expect(d.target).toContain("ARCHITECTURE");
+  expect(d.written).toBe(false);
 });
 
 test("storeIssue routes to ctx_memory:CONSTRAINTS backend", () => {
@@ -321,6 +346,7 @@ test("storeProblem routes to research-note backend", () => {
 });
 
 test("all 5 notepad store* functions cover 5 distinct backends", () => {
+  setSearchLoreAvailable(true);
   const backends = new Set([
     storeLearning("x").backend,
     storeDecision("t", "b").backend,

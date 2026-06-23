@@ -19,9 +19,8 @@ export interface CategoryDefinition {
   readonly description: string;
   /**
    * Optional thinking level for the pi SDK's `setThinkingLevel()`.
-   * Currently declared here for capability discovery but NOT wired through
-   * the spawn pipeline (SpawnConfig lacks a thinkingLevel field).
-   * TODO: wire thinkingLevel through SpawnConfig.
+   * Plumbed through SpawnConfig → SessionFactoryConfig to the spawned
+   * session (e.g. ultrabrain sets "xhigh").
    */
   readonly thinkingLevel?: string;
 }

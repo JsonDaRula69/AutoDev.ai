@@ -114,7 +114,7 @@ export function register(pi: ExtensionAPI): void {
       session_id: Type.String({ description: "Session ID to read" }),
       limit: Type.Optional(Type.Number({ description: "Max messages to return" })),
     }),
-    execute: async (_toolCallId, params) => executeSessionRead(params, sessionDeps),
+    execute: async (_toolCallId, params) => executeSessionRead(params, sessionDeps, process.cwd()),
   });
 
   // --- session_search -----------------------------------------------------

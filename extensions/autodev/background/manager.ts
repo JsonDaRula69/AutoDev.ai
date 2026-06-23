@@ -29,6 +29,50 @@ import { handleSessionError } from "./error-handler.js";
 import { CircuitBreaker, type TimerFactory, type TimerHandle, DEFAULT_STALE_TIMEOUT_MS } from "./circuit-breaker.js";
 import { loadConcurrencyConfig, DEFAULT_MAX_CONCURRENCY } from "./concurrency.js";
 
+/**
+ * Default session factory — wires the background manager to the real pi SDK.
+ *
+ * Resolves the model string from `SpawnConfig` against the pi `ModelRegistry`,
+ * then calls `createAgentSession` with an in-memory session manager. The
+ * resulting `AgentSession` exposes `subscribe`, `abort`, and `dispose`, which
+ * satisfies the `ManagedSession` interface.
+ *
+ * The pi SDK import is lazy (dynamic `import()`) so this module stays testable
+ * without the real SDK fully initialized. If the import or session creation
+ * fails, the factory throws and the manager marks the task as errored — tests
+ * inject their own factory and never hit this path.
+ */
+const defaultSessionFactory: SessionFactory = async (config) => {
+  const { createAgentSession, SessionManager, ModelRegistry, AuthStorage, DefaultResourceLoader, getAgentDir } =
+    await import("@earendil-works/pi-coding-agent");
+  const cwd = process.cwd();
+  const agentDir = getAgentDir();
+  const authStorage = AuthStorage.create(`${agentDir}/auth.json`);
+  const modelRegistry = ModelRegistry.create(authStorage, `${agentDir}/models.json`);
+  const [provider, modelId] = config.model.split("/");
+  const model = provider !== undefined && modelId !== undefined
+    ? modelRegistry.find(provider, modelId)
+    : undefined;
+  const resourceLoader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    settingsManager: undefined as never,
+  });
+  await resourceLoader.reload();
+  const sessionOpts: Record<string, unknown> = {
+    cwd,
+    tools: [...config.tools],
+    customTools: config.customTools as never,
+    sessionManager: SessionManager.inMemory(),
+    resourceLoader,
+    modelRegistry,
+    authStorage,
+  };
+  if (model !== undefined) sessionOpts.model = model;
+  const { session } = await createAgentSession(sessionOpts as never);
+  return session as unknown as ManagedSession;
+};
+
 /** Manager options (injectable for tests). */
 export interface BackgroundManagerOptions {
   readonly projectRoot?: string;
@@ -54,7 +98,7 @@ export class BackgroundManager {
   private readonly sessions = new Map<string, ManagedSession>();
   private readonly runningPerKey = new Map<string, number>();
   private readonly queue: QueuedTask[] = [];
-  private readonly sessionFactory: SessionFactory | undefined;
+  private readonly sessionFactory: SessionFactory;
   private readonly concurrencyConfig: ConcurrencyConfig;
   private readonly fallbackConfig: ResolvedFallbackConfig | undefined;
   private readonly defaultStaleTimeoutMs: number;
@@ -62,7 +106,7 @@ export class BackgroundManager {
   private taskCounter = 0;
 
   constructor(options: BackgroundManagerOptions = {}) {
-    this.sessionFactory = options.sessionFactory;
+    this.sessionFactory = options.sessionFactory ?? defaultSessionFactory;
     this.concurrencyConfig = options.concurrencyConfig ?? loadConcurrencyConfig(options.projectRoot ?? ".");
     this.fallbackConfig = options.fallbackConfig;
     this.defaultStaleTimeoutMs = options.defaultStaleTimeoutMs ?? DEFAULT_STALE_TIMEOUT_MS;
@@ -139,6 +183,7 @@ export class BackgroundManager {
         systemPrompt: state.systemPrompt,
         tools: state.tools,
         customTools: state.customTools,
+        thinkingLevel: state.thinkingLevel,
       });
       this.sessions.set(id, session);
       this.breaker.arm(id, state.staleTimeoutMs);

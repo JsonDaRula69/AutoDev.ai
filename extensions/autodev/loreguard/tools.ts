@@ -14,6 +14,7 @@ import {
   approveDecision,
   rejectDecision,
   searchDecisions,
+  archiveDecision,
 } from "./operations.js";
 import { getDb } from "./db.js";
 
@@ -55,6 +56,11 @@ export const SearchLoreSchema = Type.Object({
   ),
 });
 export type SearchLoreInput = Static<typeof SearchLoreSchema>;
+
+export const ArchiveLoreSchema = Type.Object({
+  id: Type.Number({ description: "Decision ID to archive" }),
+});
+export type ArchiveLoreInput = Static<typeof ArchiveLoreSchema>;
 
 // --- Result shape -----------------------------------------------------------
 
@@ -133,4 +139,15 @@ export async function searchLoreExecute(
         .map((d: Decision) => `  #${d.id} [${d.status}] ${d.title}`)
         .join("\n");
   return text(summary, { name: "search_lore", result: res });
+}
+
+export async function archiveLoreExecute(
+  _toolCallId: string,
+  params: ArchiveLoreInput,
+): Promise<ToolResult> {
+  const res = archiveDecision(getDb(), params.id);
+  return text(`Decision #${params.id} archive result: ${res.archived}.`, {
+    name: "archive_lore",
+    result: res,
+  });
 }

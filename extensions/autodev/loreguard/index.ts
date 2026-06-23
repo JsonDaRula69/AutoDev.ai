@@ -10,6 +10,7 @@
  *   approve_lore  — record an approval; 3 distinct approvers → ratified
  *   reject_lore   — record a rejection (status unchanged)
  *   search_lore   — FTS5 search; ratified-only by default, include_drafts for all
+ *   archive_lore  — archive a decision by id (idempotent)
  *
  * Tests inject an in-memory DB via {@link setDb} so they never touch disk and
  * never need a real pi session. Tool executors/schemas live in `tools.ts`;
@@ -23,6 +24,7 @@ import {
   approveDecision,
   rejectDecision,
   searchDecisions,
+  archiveDecision,
   getDecision,
   type Decision,
   type DecisionCategory,
@@ -31,6 +33,7 @@ import {
   type ApproveResult,
   type RejectResult,
   type SearchResult,
+  type ArchiveResult,
 } from "./operations.js";
 import { getDb } from "./db.js";
 import {
@@ -39,11 +42,13 @@ import {
   ApproveLoreSchema,
   RejectLoreSchema,
   SearchLoreSchema,
+  ArchiveLoreSchema,
   suggestLoreExecute,
   ratifyLoreExecute,
   approveLoreExecute,
   rejectLoreExecute,
   searchLoreExecute,
+  archiveLoreExecute,
 } from "./tools.js";
 
 // --- Re-exports (module root is the public surface) ------------------------
@@ -54,6 +59,7 @@ export {
   ratifyDecision,
   approveDecision,
   rejectDecision,
+  archiveDecision,
   searchDecisions,
   getDecision,
   listDecisions,
@@ -67,6 +73,7 @@ export {
   ApproveLoreSchema,
   RejectLoreSchema,
   SearchLoreSchema,
+  ArchiveLoreSchema,
 } from "./tools.js";
 
 // --- Public typed API (used by notepad and other extension modules) --------
@@ -106,6 +113,11 @@ export function rejectLore(
 /** FTS5 search; ratified-only by default, all statuses with includeDrafts. */
 export function searchLore(query: string, includeDrafts = false): SearchResult {
   return searchDecisions(getDb(), query, includeDrafts);
+}
+
+/** Archive a decision by id; idempotent. */
+export function archiveLore(id: number): ArchiveResult {
+  return archiveDecision(getDb(), id);
 }
 
 /** Fetch a single decision by id on the active DB, or `undefined`. */
@@ -160,5 +172,13 @@ export function register(pi: ExtensionAPI): void {
     description: "Search ratified decisions via FTS5",
     parameters: SearchLoreSchema,
     execute: searchLoreExecute,
+  });
+
+  pi.registerTool({
+    name: "archive_lore",
+    label: "Archive Lore",
+    description: "Archive a ratified or rejected decision.",
+    parameters: ArchiveLoreSchema,
+    execute: archiveLoreExecute,
   });
 }

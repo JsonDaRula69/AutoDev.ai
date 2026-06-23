@@ -79,6 +79,12 @@ export interface SearchResult {
   readonly results: readonly Decision[];
 }
 
+/** Result of {@link archiveDecision}. */
+export interface ArchiveResult {
+  readonly success: true;
+  readonly archived: boolean;
+}
+
 /**
  * Create a draft ADR. The caller is responsible for ratifying it; a draft is
  * never truth. Returns the new row id and the fixed `"draft"` status.
@@ -148,6 +154,14 @@ export function approveDecision(
     .get(id) as { c: number };
   const count = countRow.c;
   let status = row.status as DecisionStatus;
+  const rejectRow = db
+    .prepare(
+      "SELECT COUNT(*) AS cnt FROM approvals WHERE decision_id = ? AND approved = 0",
+    )
+    .get(id) as { cnt: number };
+  if (rejectRow.cnt > 0) {
+    return { success: true, status, approvals_count: count };
+  }
   if (count >= RATIFY_APPROVER_THRESHOLD && row.status !== "ratified") {
     db.prepare(
       "UPDATE decisions SET status = 'ratified', ratified_at = datetime('now') WHERE id = ?",
@@ -216,6 +230,26 @@ export function getDecision(db: Database, id: number): Decision | undefined {
     )
     .get(id) as DecisionRow | undefined;
   return row === undefined || row === null ? undefined : toDecision(row);
+}
+
+/**
+ * Archive a decision by id. Idempotent — returns success when the row is
+ * already archived. Returns `archived: false` when the decision does not
+ * exist. Any non-archived status (draft, under-review, ratified, rejected)
+ * is transitioned to `archived`.
+ */
+export function archiveDecision(db: Database, id: number): ArchiveResult {
+  const row = db
+    .prepare("SELECT status FROM decisions WHERE id = ?")
+    .get(id) as { status: string } | undefined;
+  if (row === undefined || row === null) {
+    return { success: true, archived: false };
+  }
+  if (row.status === "archived") {
+    return { success: true, archived: true };
+  }
+  db.prepare("UPDATE decisions SET status = 'archived' WHERE id = ?").run(id);
+  return { success: true, archived: true };
 }
 
 /**

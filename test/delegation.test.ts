@@ -36,6 +36,7 @@ interface FakeTask {
     readonly systemPrompt: string;
     readonly tools: readonly string[];
     readonly agentName: string | undefined;
+    readonly thinkingLevel: string | undefined;
   };
   status: "pending" | "running" | "completed" | "error" | "cancelled";
   result: unknown;
@@ -56,6 +57,7 @@ class FakeSpawner implements TaskSpawner {
         systemPrompt: config.systemPrompt,
         tools: config.tools,
         agentName: config.agentName,
+        thinkingLevel: config.thinkingLevel,
       },
       status: "pending",
       result: undefined,
@@ -429,6 +431,34 @@ test("default model mapping: all 8 categories resolve to their spec'd models wit
   expect(map["writing"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
   expect(map["unspecified-low"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
   expect(map["unspecified-high"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
+});
+
+// --- thinkingLevel wiring (M5) -----------------------------------------------
+
+test("task(category=ultrabrain) passes thinkingLevel='xhigh' through to the spawn config", async () => {
+  const spawner = new FakeSpawner();
+  await executeTaskTool(
+    "tc-m5",
+    { category: "ultrabrain", prompt: "reason hard", run_in_background: true },
+    { projectRoot, spawner },
+  );
+
+  expect(spawner.spawns.length).toBe(1);
+  const task = spawner.spawns[0]!;
+  expect(task.config.model).toBe("ollama-cloud/deepseek-v4-pro");
+  expect(task.config.thinkingLevel).toBe("xhigh");
+});
+
+test("task(category=quick) leaves thinkingLevel undefined when the category has none", async () => {
+  const spawner = new FakeSpawner();
+  await executeTaskTool(
+    "tc-m5b",
+    { category: "quick", prompt: "fix typo", run_in_background: true },
+    { projectRoot, spawner },
+  );
+
+  const task = spawner.spawns[0]!;
+  expect(task.config.thinkingLevel).toBeUndefined();
 });
 
 // --- Agent loader unit tests -------------------------------------------------
