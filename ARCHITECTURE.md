@@ -166,7 +166,7 @@ The 6 hard stops, all non-negotiable (per workflow-specification.md section 4.1)
 | no-secrets-in-code | `write` or `edit` calls containing API keys, tokens, passwords | Regex check on the content being written |
 | evidence-or-it-didnt-happen | `bash` calls running `git commit` when no evidence file exists in `.omo/evidence/` for the current task | File existence check |
 | one-task-at-a-time | New task creation when a task is already in progress | Active task counter check |
-| follow-the-plan | Implementation that deviates from a plan in `.autodev/plans/` | Diff against plan acceptance criteria |
+| follow-the-plan | Implementation that deviates from a plan in `.omo/plans/` | Diff against plan acceptance criteria |
 | ci-is-the-hard-gate | `bash` calls running `gh pr merge` when CI status is not green | `gh pr checks` status poll |
 
 Soft stops generate warnings but do not block: suggest-review (large change without review), warn-scope (more than 10 files changed), flag-missing-evidence (review with no evidence file).
@@ -242,7 +242,7 @@ DB path: `.autodev/decisions/loreguard.db`, configurable. Loreguard is the singl
 
 ## 11. Docs Query System
 
-The docs query system gives agents semantic search over a corpus of 218 files in `docs-corpus/`.
+The docs query system gives agents semantic search over a corpus of 119 files in `docs-corpus/`.
 
 Embedding layer supports two providers: VoyageAI (remote, requires `VOYAGE_API_KEY`) and local ONNX (`Xenova/all-MiniLM-L6-v2`, roughly 90MB, downloads on first use). When the VoyageAI key is unset, the system falls back to local ONNX automatically.
 
@@ -325,7 +325,7 @@ Config via environment variables: `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`, `DI
 
 ## 16. Debate Protocol
 
-The debate protocol handles Complex decisions. It runs 5 phases across 5 separate pi sessions. Five sessions, not three. Independence is the point.
+The debate protocol handles Complex decisions. It runs 5 phases across 6 pi sessions. Five sessions are independent (proposer, opposer, 3 judges); the 6th is a shared cross-examination session for Phase 3. Independence is the point.
 
 **Phase 1: Independent Preparation.** Five pi sessions start in parallel. Aronnax is the proposer, developing the full argument with evidence citations. Momus is the opposer, developing a critique with counter-evidence. Nemo is judge-1. Oracle is judge-2. Conseil is judge-3. The three judges each run in their own session and review standing orders, reference docs, and relevant Loreguard records. No participant sees another's preparation. That independence is the source of diversity.
 
@@ -370,7 +370,7 @@ State lives in `.omo/boulder.json` with fields: `active_plan`, `session_ids`, `s
 On `/start-work`:
 
 - **Resume mode**: if `boulder.json` exists, read the state, calculate progress, inject a continuation prompt into the new session. The agent knows what was done and what remains.
-- **Init mode**: if no `boulder.json` exists, find the latest plan in `.autodev/plans/`, create `boulder.json`, and begin execution.
+- **Init mode**: if no `boulder.json` exists, find the latest plan in `.omo/plans/`, create `boulder.json`, and begin execution.
 
 This prevents the crew from losing context when a session times out, crashes, or is manually interrupted. Implemented by T16 in the pi-foundation plan.
 
