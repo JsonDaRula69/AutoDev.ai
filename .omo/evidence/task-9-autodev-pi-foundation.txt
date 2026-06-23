@@ -1,0 +1,128 @@
+# Task 9 — Delegation: Category System + Task Tool for Crew Dispatch
+
+## Summary
+
+Built the category-based task delegation system in `extensions/autodev/delegation/`.
+Replaced the stub `register()` with a real `task` pi tool registered via
+`pi.registerTool()` that accepts either `category` or `subagent_type`
+(mutually exclusive), spawns a background session via T8's
+`getBackgroundManager()`, and supports `run_in_background: true` for async
+execution.
+
+## Files Created/Modified
+
+- `extensions/autodev/delegation/index.ts` — replaced stub `register()` with
+  `pi.registerTool("task", ...)` wiring; `execute` calls `executeTaskTool()`
+  with `ctx.cwd` as project root and `getBackgroundManager()` as spawner.
+- `extensions/autodev/delegation/schemas.ts` (new, 20 LOC) — TypeBox
+  `TaskSchema` with `category`, `subagent_type`, `prompt`,
+  `run_in_background`, `load_skills` (all Optional except `prompt`).
+- `extensions/autodev/delegation/categories.ts` (new, 120 LOC) — 8 built-in
+  categories (quick, deep, ultrabrain, visual-engineering, artistry, writing,
+  unspecified-low, unspecified-high) with default model mapping + custom
+  override via `.autodev/config/categories.json`.
+- `extensions/autodev/delegation/agents.ts` (new, 91 LOC) — parses
+  `.pi/agents/*.md` frontmatter (name, model, tools, systemPrompt body).
+- `extensions/autodev/delegation/executor.ts` (new, 197 LOC) — runtime
+  routing: mutual-exclusivity validation, category/subagent routing, model
+  allowlist validation, anti-re-delegation (strips `task` from spawned
+  tools), `run_in_background` support, `load_skills` accepted-but-ignored,
+  foreground completion wait (bounded 30s max).
+- `test/delegation.test.ts` (new, 375 LOC) — 20 tests with FakeSpawner +
+  temp project roots.
+
+## Functionality Verified
+
+- [x] 8 built-in categories with correct default model mapping
+  (quick=glm-5.2:cloud, deep=deepseek-v4-pro, ultrabrain=deepseek-v4-pro,
+  visual-engineering/artistry/writing/unspecified-low/unspecified-high=
+  glm-5.2:cloud)
+- [x] Category model assignments loaded from config (NOT hardcoded in
+  executor) — `loadCategoryMap()` reads `.autodev/config/categories.json`
+  and overrides built-ins
+- [x] All model strings validated against `.autodev/config/models.json`
+  allowlist — non-allowlisted models rejected with `model-not-allowed` error
+- [x] `task` pi tool registered via `pi.registerTool()` with TypeBox schema
+- [x] `category` and `subagent_type` mutually exclusive — both set returns
+  `mutual-exclusivity-violation` error
+- [x] Neither set returns `missing-dispatch-target` error
+- [x] `run_in_background: true` returns task ID immediately
+  (`{ task_id, status: "pending", run_in_background: true }`)
+- [x] `run_in_background: false` (default) waits for completion (bounded
+  30s max wait)
+- [x] `load_skills` accepted as `readonly string[]`, type-validated by
+  schema, silently ignored (NOT injected into system prompt)
+- [x] Anti-re-delegation: `task` tool stripped from spawned session's tool
+  list — delegated sessions cannot re-delegate
+- [x] Custom categories configurable in `.autodev/config/categories.json`
+  (override built-ins or add new ones)
+- [x] Subagent routing loads agent definition from `.pi/agents/<name>.md`
+  (model, tools, systemPrompt body)
+- [x] Unknown category → `unknown-category` error
+- [x] Unknown subagent_type → `unknown-subagent` error
+
+## Test Results
+
+```
+bun test ./test/delegation.test.ts
+20 pass
+0 fail
+86 expect() calls
+Ran 20 tests across 1 file. [211.00ms]
+```
+
+### Test Coverage (8 required + 12 supplementary)
+
+1. `task(category="quick")` → spawned with quick model (glm-5.2:cloud) ✓
+2. `task(subagent_type="explore")` → Explore agent session spawned ✓
+3. `task(category="quick", run_in_background=true)` → returns task ID
+   immediately ✓
+4. `task(category="invalid")` → error returned ✓
+5. `task(category="quick", subagent_type="explore")` → error (mutually
+   exclusive) ✓
+6. `task(prompt="do something")` → error (neither category nor
+   subagent_type) ✓
+7. Category models loaded from config (custom override changes model) ✓
+8. Model validated against allowlist (non-allowlisted model rejected) ✓
+
+Supplementary: custom category accepted, agent-not-found, agent model
+allowlist rejection, anti-re-delegation (agent + category), load_skills
+accepted-but-ignored, default model mapping for all 8 categories, agent
+loader unit tests (frontmatter parse, missing file, list names),
+foreground completion path.
+
+## TypeCheck
+
+```
+npx tsc --noEmit
+EXIT: 0
+```
+
+0 new type errors. (Pre-existing 8 errors from T3/T4 resolved — tsc now
+reports 0 total.)
+
+## Full Suite
+
+```
+bun test
+240 pass
+0 fail
+1031 expect() calls
+Ran 240 tests across 12 files. [2.51s]
+```
+
+20 new delegation tests + 220 pre-existing = 240 total, 0 failures.
+
+## Architecture Notes
+
+- Module split into 5 files (each <250 pure LOC, owns one concept):
+  schemas.ts (20), categories.ts (120), agents.ts (91), executor.ts (197),
+  index.ts (40). Total delegation module: 428 LOC across 5 files.
+- `TaskSpawner` interface decouples executor from `BackgroundManager` —
+  tests inject `FakeSpawner`, production wires the real singleton.
+- `loadModelAllowlist()` reused from T8's `background/fallback.js` — no
+  duplicate allowlist loader.
+- Category system is config-driven: built-ins are defaults, `.autodev/
+  config/categories.json` overrides. No hardcoded models in executor.
+- Anti-re-delegation enforced structurally: `buildTools()` filters out
+  `"task"` from every spawned session's tool list.
