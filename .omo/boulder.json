@@ -90,7 +90,7 @@
       "plan_name": "autodev-pi-foundation-1-core",
       "status": "active",
       "started_at": "2026-06-23T05:21:15.784Z",
-      "updated_at": "2026-06-23T05:27:26.920Z",
+      "updated_at": "2026-06-23T05:32:15.672Z",
       "session_ids": [
         "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
       ],
@@ -111,6 +111,19 @@
           "status": "completed",
           "ended_at": "2026-06-23T05:27:26.920Z",
           "elapsed_ms": 231909
+        },
+        "todo:4": {
+          "task_key": "todo:4",
+          "task_label": "4",
+          "task_title": "Port 13 crew agents to pi format",
+          "session_id": "opencode:ses_10d0cdeceffel3V7zMCfh4L4Cz",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-06-23T05:32:15.672Z",
+          "started_at": "2026-06-23T05:31:57.916Z",
+          "status": "completed",
+          "ended_at": "2026-06-23T05:32:15.672Z",
+          "elapsed_ms": 17756
         }
       }
     }
@@ -118,7 +131,7 @@
   "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-1-core.md",
   "started_at": "2026-06-23T05:21:15.784Z",
   "status": "active",
-  "updated_at": "2026-06-23T05:27:26.920Z",
+  "updated_at": "2026-06-23T05:32:15.672Z",
   "session_ids": [
     "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
   ],
@@ -139,6 +152,19 @@
       "status": "completed",
       "ended_at": "2026-06-23T05:27:26.920Z",
       "elapsed_ms": 231909
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "Port 13 crew agents to pi format",
+      "session_id": "opencode:ses_10d0cdeceffel3V7zMCfh4L4Cz",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-06-23T05:32:15.672Z",
+      "started_at": "2026-06-23T05:31:57.916Z",
+      "status": "completed",
+      "ended_at": "2026-06-23T05:32:15.672Z",
+      "elapsed_ms": 17756
     }
   },
   "agent": "atlas"
