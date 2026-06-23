@@ -50,6 +50,14 @@ Pi supports a `thinkingLevel` option, but per-agent configuration isn't wired ye
 - **Wave:** Near-term.
 - **Depends on:** Agent session architecture (T4).
 
+### Inter-agent communication protocol
+
+A structured communication protocol defining how agents contact each other: message types (question, flag, alert, observation, handoff, debrief), a contact matrix (who can message whom and for what), surface-to-Harbor-Master criteria (what's a blocker vs self-resolvable), Harbor Master → agent response path, and when to use `task(subagent_type=...)` vs team mailbox vs dispatch rule. The dispatch rules and team mailbox exist in the initial wave, but the structured guidelines for when and how agents use them are deferred.
+
+- **Why deferred:** The initial wave builds the communication mechanisms (team mailbox, dispatch rules, task tool). The structured protocol for when and how agents use them is an enhancement.
+- **Wave:** Near-term.
+- **Depends on:** Team mode (T5), category system (T9), heartbeat + dispatch (T13).
+
 ## Medium-term features
 
 These features need moderate effort. They add real capability but don't reshape the system.

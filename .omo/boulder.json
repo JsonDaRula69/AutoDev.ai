@@ -6,9 +6,9 @@
       "work_id": "autodev-pi-docs-59bc5f29",
       "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-docs.md",
       "plan_name": "autodev-pi-docs",
-      "status": "active",
+      "status": "completed",
       "started_at": "2026-06-23T02:22:33.314Z",
-      "updated_at": "2026-06-23T02:56:51.812Z",
+      "updated_at": "2026-06-23T02:57:29.630Z",
       "session_ids": [
         "opencode:ses_10db6a953ffev7xTVGe82yS3d0"
       ],
@@ -80,13 +80,15 @@
           "ended_at": "2026-06-23T02:56:51.812Z",
           "elapsed_ms": 394888
         }
-      }
+      },
+      "ended_at": "2026-06-23T02:57:29.630Z",
+      "elapsed_ms": 2096316
     }
   },
   "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-docs.md",
   "started_at": "2026-06-23T02:22:33.314Z",
-  "status": "active",
-  "updated_at": "2026-06-23T02:56:51.812Z",
+  "status": "completed",
+  "updated_at": "2026-06-23T02:57:29.630Z",
   "session_ids": [
     "opencode:ses_10db6a953ffev7xTVGe82yS3d0"
   ],
@@ -159,5 +161,7 @@
       "elapsed_ms": 394888
     }
   },
-  "agent": "atlas"
+  "agent": "atlas",
+  "ended_at": "2026-06-23T02:57:29.630Z",
+  "elapsed_ms": 2096316
 }

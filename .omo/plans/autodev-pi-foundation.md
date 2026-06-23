@@ -4,6 +4,14 @@
 
 > **PREREQUISITE:** This plan depends on `.omo/plans/autodev-pi-docs.md` being executed first. The README.md, ARCHITECTURE.md, STRUCTURE.md, and ROADMAP.md produced by that plan are the **source of truth** for the pi-based AutoDev design. Every todo in this plan references those docs as the specification to implement. If the docs and this plan disagree, the docs win.
 
+> **SPLIT:** This master plan has been split into 4 sub-plans for controlled execution:
+> 1. `.omo/plans/autodev-pi-foundation-1-core.md` — Core Foundation (T1-T6)
+> 2. `.omo/plans/autodev-pi-foundation-2-engine.md` — Crew Engine (T7-T9)
+> 3. `.omo/plans/autodev-pi-foundation-3-knowledge.md` — Knowledge + Tools (T10-T12)
+> 4. `.omo/plans/autodev-pi-foundation-4-autonomous.md` — Autonomous System (T13-T19)
+>
+> Execute in order: 1 → 2 → 3 → 4 (Plan 3 can parallelize with Plan 2 after Plan 1 completes). This master plan remains the reference for the full scope and success criteria.
+
 ## TL;DR (For humans)
 
 **What you'll get:** A rebuilt AutoDev that runs on pi. The crew of the Nautilus — 13 specialized agents from Captain Nemo to the Watch Officer — comes online as pi agent sessions, each with their Nautilus identity and assigned model. They triage GitHub issues, plan work, implement in worktrees, review PRs, and auto-merge when all gates pass. Magic Context handles long-term memory so the crew remembers everything across sessions. The system runs autonomously via a heartbeat that polls GitHub and dispatches work without human intervention.
@@ -103,6 +111,7 @@ These features are documented as future work and are NOT in this wave's scope:
 - **Additional CLI commands** — install, cleanup, refresh-model-capabilities (add as needed)
 - **Think mode per agent** — pi supports thinkingLevel but per-agent configuration is a future enhancement
 - **Unstable agent babysitter** — partially covered by T8's circuit breaker; full babysitter is future work
+- **Inter-agent communication protocol** — structured guidelines for when and how agents contact each other (message types, contact matrix, surface criteria, response paths). The mechanisms exist in the initial wave; the protocol is a near-term enhancement.
 - **Single binary** — future wave
 
 ## Verification strategy
