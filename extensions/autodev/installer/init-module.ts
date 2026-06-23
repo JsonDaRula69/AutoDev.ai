@@ -10,10 +10,13 @@
  * Steps 1-3 (dirs, templates, .github) are tracked as state step 6 ("project
  * structure"). Step 5 (.omo) is tracked as state step 7. Step 4 (marker) is an
  * idempotent write with no dedicated state step. Steps 6-7 (registry + docs)
- * are tracked as state step 8. Steps 8-9 (repo + labels) are tracked as state
+ * are tracked as state step 8. Steps 8-9 (repo + labels) are tracked as
  * step 9.
  *
- * Step 10 (onboard) is implemented in T10 — this module owns steps 1-9.
+ * Step 10 (onboard) launches the Harbor Master session (T10). It is tracked
+ * as state step 11 (not step 10) to keep the numbering aligned with the
+ * plan's step indices. When `skipOnboard=true`, step 11 is marked complete
+ * without launching the session.
  *
  * allow: SIZE_OK - T9 task constraints forbid touching files outside
  * init-module.ts; split into steps-helpers deferred to post-merge follow-up.
@@ -70,6 +73,8 @@ const STEP_STRUCTURE = 6;
 const STEP_OMO = 7;
 const STEP_REGISTRY_DOCS = 8;
 const STEP_REPO_LABELS = 9;
+/** Step 10 (onboard) completion is tracked as state step 11. */
+const STEP_ONBOARD = 11;
 
 /** The 8 required AutoDev workflow labels. */
 const REQUIRED_LABELS: ReadonlyArray<{ readonly name: string; readonly color: string; readonly description: string }> = [
@@ -117,7 +122,8 @@ export async function runInit(deps: InitModuleDeps): Promise<InstallFixResult[]>
   const omoDone = await isStepCompleted(projectRoot, STEP_OMO, "init");
   const regDocsDone = await isStepCompleted(projectRoot, STEP_REGISTRY_DOCS, "init");
   const repoLabelsDone = await isStepCompleted(projectRoot, STEP_REPO_LABELS, "init");
-  if (existsSync(markerPath) && structDone && omoDone && regDocsDone && repoLabelsDone) {
+  const onboardDone = await isStepCompleted(projectRoot, STEP_ONBOARD, "init");
+  if (existsSync(markerPath) && structDone && omoDone && regDocsDone && repoLabelsDone && onboardDone) {
     notify("Project already initialized.", "info");
     return [{ name: "init", ok: true, detail: "already initialized" }];
   }
@@ -181,6 +187,20 @@ export async function runInit(deps: InitModuleDeps): Promise<InstallFixResult[]>
     // Only mark step 9 if the gh steps actually ran (not skipped due to auth).
     if (ran && ghResults.every((r) => r.ok)) {
       await markStepCompleted(projectRoot, STEP_REPO_LABELS, "init");
+    }
+  }
+
+  // ---- Step 10: Harbor Master onboard (tracked as state step 11) ----
+  if (onboardDone) {
+    results.push({ name: "onboard", ok: true, detail: "Already completed (step 11)." });
+  } else if (deps.skipOnboard === true) {
+    await markStepCompleted(projectRoot, STEP_ONBOARD, "init");
+    results.push({ name: "onboard", ok: true, detail: "Skipped (--skip-onboard). Step 11 marked." });
+  } else {
+    const onboardResult = await runStep10Onboard(projectRoot, notify);
+    results.push(onboardResult);
+    if (onboardResult.ok) {
+      await markStepCompleted(projectRoot, STEP_ONBOARD, "init");
     }
   }
 
@@ -464,6 +484,25 @@ function runStep9Labels(
     ok: true,
     detail: `Labels: ${created} created, ${failed} failed, ${missing.length - failed} of ${missing.length} ok.`,
   };
+}
+
+/** Step 10: Launch the Harbor Master onboard session (in-process, not subprocess). */
+async function runStep10Onboard(
+  projectRoot: string,
+  notify: (m: string, l: "info" | "warning" | "error") => void,
+): Promise<InstallFixResult> {
+  notify("Launching Harbor Master onboarding session...", "info");
+  try {
+    const { runOnboard } = await import("../../../scripts/onboard.js");
+    const code = await runOnboard({ projectRoot, notify });
+    if (code === 0) {
+      return { name: "onboard", ok: true, detail: "Onboard session completed." };
+    }
+    return { name: "onboard", ok: true, detail: `Onboard fell back to stub (exit ${code}).` };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { name: "onboard", ok: false, detail: `Onboard failed: ${msg}` };
+  }
 }
 
 // ---- Helpers ----

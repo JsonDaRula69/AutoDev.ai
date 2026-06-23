@@ -207,11 +207,9 @@ async function cmdConfig(parts: string[]): Promise<number> {
 }
 
 async function cmdOnboard(): Promise<number> {
-  notify("Launching Harbor Master onboarding...", "info");
-  notify("Use: pi to start an interactive session with the Harbor Master agent.", "info");
-  // In a real implementation, this would create a Harbor Master session.
-  // For now, we delegate to the user starting pi interactively.
-  return 0;
+  const projectRoot = process.cwd();
+  const { runOnboard } = await import("./onboard.js");
+  return runOnboard({ projectRoot, notify });
 }
 
 async function cmdStatus(): Promise<number> {

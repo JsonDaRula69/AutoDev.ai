@@ -704,3 +704,51 @@ Date: 2026-06-23
 - `bun test` (full suite): 532 pass, 0 fail.
 - `bun run typecheck`: tsc --noEmit EXIT 0.
 - Evidence: `.omo/evidence/project-init-centralization/t9-init-gh-happy.md`, `t9-init-gh-failure.md`.
+
+# T10 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/installer/init-module.ts`: added step 10 to `runInit()`.
+  - `STEP_ONBOARD = 11` constant (step 10 is tracked as state step 11, not step 10, to avoid collision with the plan's step-10 label while keeping the state numbering sequential after step 9).
+  - Fast-path check now includes `onboardDone` (state step 11).
+  - Step-10 block: if `onboardDone` → "Already completed (step 11)"; if `skipOnboard===true` → mark step 11, emit skipped result; else → `runStep10Onboard()` in-process (dynamic import of `scripts/onboard.js`), mark step 11 on success.
+  - `runStep10Onboard()` helper wraps `runOnboard({ projectRoot, notify })` in an `InstallFixResult`.
+- New file `scripts/onboard.ts`: `runOnboard(opts: OnboardOptions): Promise<number>` — the real Harbor Master onboard launcher.
+  - Resolves agent definition via `loadAgent()` from `extensions/autodev/delegation/agents.js`.
+  - Resolves onboarding protocol from `~/.AutoDev/reference/onboarding-protocol.md` via `getAgentDir()` from the pi SDK.
+  - Builds combined system prompt (agent body + protocol injection).
+  - Creates a real pi `AgentSession` via `createAgentSession()` (lazy dynamic import; falls back to stub on failure).
+  - Runs the session via `session.prompt()` with an onboarding greeting.
+  - Writes `.autodev/memory/projectbrief.md` (placeholder seeded post-session).
+  - Fallback: emits manual onboarding instructions when pi SDK unavailable or agent definition missing.
+  - All collaborators (`sessionFactory`, `loadHarborMaster`, `loadOnboardingProtocol`, `writeMemory`) are injectable for tests.
+- `scripts/cli.ts`: rewrote `cmdOnboard()` to dispatch to `runOnboard({ projectRoot: process.cwd(), notify })` — removed the stub message.
+- New test file `scripts/__tests__/onboard.test.ts` (5 tests: happy, missing agent, pi SDK unavailable, memory write fail, default memory writer).
+- Updated `extensions/autodev/installer/__tests__/init-module.test.ts`: all 10 existing tests now pass `skipOnboard: true` and expect 11 results; added 2 new T10 tests (skipOnboard=true, re-run with step 11 complete).
+
+## Key decisions
+
+- **Step 10 tracked as state step 11, not step 10.** The plan refers to the init step as "step 10" but the state numbering already uses 6-9 for the prior steps. Using state step 10 for onboard would be confusing because the plan's "step 10" label and the state "step 10" are different concepts. Using state step 11 keeps the state numbering sequential after step 9 and avoids ambiguity. The `STEP_ONBOARD = 11` constant documents this.
+- **`runOnboard` is a separate module (`scripts/onboard.ts`), not inlined in `init-module.ts`.** `init-module.ts` is already 464 pure LOC (over the 250 ceiling with a `SIZE_OK` allow). Inlining the onboard logic would push it further over. The new `scripts/onboard.ts` is ~180 pure LOC and owns a single responsibility: launching the Harbor Master session. `init-module.ts` step 10 is a thin 15-line block that delegates to it.
+- **All collaborators injectable.** `OnboardOptions` exposes `sessionFactory`, `loadHarborMaster`, `loadOnboardingProtocol`, and `writeMemory` as optional injection points. Production uses the default implementations (lazy SDK imports). Tests inject fakes — no real pi SDK, no real filesystem writes to the dev machine. This matches the DI pattern established by T1-T9.
+- **Fallback to stub instructions.** When the pi SDK is unavailable or the Harbor Master agent definition is missing, `runOnboard` emits manual onboarding instructions (run `pi` manually, select model, paste protocol, save to projectbrief.md). This keeps `autodev onboard` usable even when the SDK isn't fully configured. Return code 1 signals fallback; 0 signals a real session ran.
+- **`cmdOnboard()` dispatches, doesn't implement.** The task spec said T11 wires CLI commands; T10 implements `cmdOnboard`. The implementation is a 5-line dispatch to `runOnboard`. T11 can layer additional CLI flags (--skip-onboard, --non-interactive) on top without touching `onboard.ts`.
+
+## Gotchas
+
+- **Pre-existing tests needed `skipOnboard: true`.** Without it, `runStep10Onboard` dynamically imports `scripts/onboard.js` and attempts a real `createAgentSession`, which fails in tests (no auth, no model registry). Adding `skipOnboard: true` to all 10 existing tests keeps them focused on steps 1-9 and avoids the real SDK. The 2 new T10 tests explicitly exercise the skip and idempotent paths.
+- **`require()` vs `import()` for `loadAgent`.** `loadHarborMasterDefault` uses `require()` (synchronous) instead of a dynamic `import()` because `runOnboard` is an `async` function but the agent loader is sync. `require()` works under Bun for ESM with the `.js` extension. Using `await import()` would also work but adds an unnecessary await for a sync operation.
+- **`AgentSession.prompt()` is the SDK's interactive entrypoint.** The pi SDK's `AgentSession` exposes `prompt(text)` which sends a message to the agent. For the embedded onboarding use case, we call `prompt()` with an onboarding greeting and let the session's own event loop drive the conversation. This is the documented SDK pattern (see pi README "Programmatic Usage"). The full TUI interactive mode is driven by pi's CLI entrypoint, not by `AgentSession` directly — but for `autodev onboard` the programmatic path is sufficient.
+- **System prompt injection.** The combined system prompt (agent body + protocol) is built but not directly set on the session — `AgentSession` does not expose a public system-prompt setter. The production `createSessionDefault` relies on AGENTS.md discovery (the session loads `.pi/agents/harbor-master.md` automatically via the resource loader). The `buildSystemPrompt` output is used for the fallback stub message and for the memory artifact placeholder. A future task can wire the protocol injection via `--append-system-prompt` or a custom resource loader if tighter control is needed.
+- **File size: `init-module.ts` is now ~490 pure LOC.** Still over the 250 ceiling (carried `SIZE_OK` allow from T9). The step-10 block added ~25 LOC. Post-merge follow-up: extract steps into `init-steps-*.ts` modules as noted in T9 learnings.
+
+## Verification
+
+- `bun run typecheck`: tsc --noEmit EXIT 0.
+- `bun test scripts/__tests__/onboard.test.ts`: 5 pass, 0 fail.
+- `bun test extensions/autodev/installer/__tests__/init-module.test.ts`: 12 pass, 0 fail.
+- `bun test` (full suite): 539 pass, 0 fail.
+- Evidence: `.omo/evidence/project-init-centralization/t10-onboard-happy.md`, `t10-onboard-failure.md`.

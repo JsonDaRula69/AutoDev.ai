@@ -116,10 +116,11 @@ test("runInit happy path: all dirs/files created, state steps 6+7 recorded", asy
       notify: () => {},
       execSyncOverride: makeGhExec({ authed: false }),
       packageRoot,
+      skipOnboard: true,
     });
 
-    // THEN: 10 step results (5 from T8 + 3 registry/docs + 2 repo/labels).
-    expect(results.length).toBe(10);
+    // THEN: 11 step results (5 from T8 + 3 registry/docs + 2 repo/labels + 1 onboard).
+    expect(results.length).toBe(11);
     expect(results.map((r: any) => r.name)).toEqual([
       "autodev-dirs",
       "templates",
@@ -131,6 +132,7 @@ test("runInit happy path: all dirs/files created, state steps 6+7 recorded", asy
       "context-md",
       "repo-check",
       "labels",
+      "onboard",
     ]);
     expect(results.every((r: any) => r.ok)).toBe(true);
 
@@ -186,10 +188,11 @@ test("runInit failure: package templates dir missing -> step 2 fails, others con
       notify: () => {},
       execSyncOverride: makeGhExec({ authed: false }),
       packageRoot,
+      skipOnboard: true,
     });
 
-    // THEN: 10 results (5 T8 + 5 T9).
-    expect(results.length).toBe(10);
+    // THEN: 11 results (5 T8 + 5 T9 + 1 onboard).
+    expect(results.length).toBe(11);
 
     expect(results[0].name).toBe("autodev-dirs");
     expect(results[0].ok).toBe(true);
@@ -245,10 +248,11 @@ test("runInit resume: step 6 done, step 7 fails then re-run skips 6 and retries 
       notify: () => {},
       execSyncOverride: makeGhExec({ authed: false }),
       packageRoot,
+      skipOnboard: true,
     });
 
-    // THEN: 10 results; first three are "Already completed (step 6)".
-    expect(results.length).toBe(10);
+    // THEN: 11 results; first three are "Already completed (step 6)".
+    expect(results.length).toBe(11);
     expect(results[0].ok).toBe(true);
     expect(results[0].detail).toContain("Already completed (step 6)");
     expect(results[1].ok).toBe(true);
@@ -291,8 +295,9 @@ test("runInit idempotent: full happy run then re-run returns 'already initialize
       notify: () => {},
       execSyncOverride: exec,
       packageRoot,
+      skipOnboard: true,
     });
-    expect(first.length).toBe(10);
+    expect(first.length).toBe(11);
     expect(first.every((r: any) => r.ok)).toBe(true);
 
     const second = await runInit({
@@ -300,6 +305,7 @@ test("runInit idempotent: full happy run then re-run returns 'already initialize
       notify: () => {},
       execSyncOverride: exec,
       packageRoot,
+      skipOnboard: true,
     });
 
     expect(second.length).toBe(1);
@@ -327,6 +333,7 @@ test("runInit marker JSON shape: {name, path, repo}", async () => {
       notify: () => {},
       execSyncOverride: makeGhExec({ repo: "acme/widget-factory", authed: false }),
       packageRoot,
+      skipOnboard: true,
     });
 
     const marker = JSON.parse(
@@ -471,6 +478,7 @@ test("T9 step 6-9 happy: gh auth ok, repo view ok, 5 labels created, registry up
       notify: () => {},
       execSyncOverride: exec,
       packageRoot,
+      skipOnboard: true,
     });
 
     // THEN: results include steps 6-9.
@@ -538,6 +546,7 @@ test("T9 repo missing: gh repo view fails -> gh repo create called, labels skipp
       notify: () => {},
       execSyncOverride: exec,
       packageRoot,
+      skipOnboard: true,
     });
 
     // THEN: repo-check result ok (created).
@@ -592,6 +601,7 @@ test("T9 label create failure: warn and continue", async () => {
       },
       execSyncOverride: exec,
       packageRoot,
+      skipOnboard: true,
     });
 
     // THEN: labels result still ok (best-effort).
@@ -635,6 +645,7 @@ test("T9 gh not authenticated: gh auth status fails -> warn, skip steps 8-9", as
       },
       execSyncOverride: exec,
       packageRoot,
+      skipOnboard: true,
     });
 
     // THEN: step 6 (registry) and step 7 (docs) still succeed.
@@ -692,6 +703,73 @@ test("T9 registry write failure: hard fail at step 6", async () => {
 
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;
+  } finally {
+    cleanupTempDir(packageRoot);
+    cleanupTempDir(projectRoot);
+    cleanupTempDir(tmpRoot);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// T10 — Step 10 (Harbor Master onboard auto-launch)
+// ---------------------------------------------------------------------------
+
+test("T10 skipOnboard=true: step 11 marked, no session launched", async () => {
+  const packageRoot = createTempDir();
+  const projectRoot = createTempDir();
+  const tmpRoot = createTempDir();
+
+  try {
+    createMockPackage(packageRoot);
+    const restoreAgent = withAgentDir(tmpRoot);
+    const { runInit } = await import("../init-module.js");
+
+    const results = await runInit({
+      projectRoot,
+      notify: () => {},
+      execSyncOverride: makeGhExec({ authed: false }),
+      packageRoot,
+      skipOnboard: true,
+    });
+
+    const onboard = results.find((r: any) => r.name === "onboard");
+    expect(onboard).toBeDefined();
+    expect(onboard.ok).toBe(true);
+    expect(onboard.detail).toContain("Skipped");
+
+    const state = await readState(projectRoot, "init");
+    expect(state.completedSteps).toContain(11);
+  } finally {
+    cleanupTempDir(packageRoot);
+    cleanupTempDir(projectRoot);
+    cleanupTempDir(tmpRoot);
+  }
+});
+
+test("T10 re-run with step 11 complete: step 10 skipped", async () => {
+  const packageRoot = createTempDir();
+  const projectRoot = createTempDir();
+  const tmpRoot = createTempDir();
+
+  try {
+    createMockPackage(packageRoot);
+    const restoreAgent = withAgentDir(tmpRoot);
+    const { runInit } = await import("../init-module.js");
+
+    await markStepCompleted(projectRoot, 11, "init");
+
+    const results = await runInit({
+      projectRoot,
+      notify: () => {},
+      execSyncOverride: makeGhExec({ authed: false }),
+      packageRoot,
+      skipOnboard: false,
+    });
+
+    const onboard = results.find((r: any) => r.name === "onboard");
+    expect(onboard).toBeDefined();
+    expect(onboard.ok).toBe(true);
+    expect(onboard.detail).toContain("Already completed (step 11)");
   } finally {
     cleanupTempDir(packageRoot);
     cleanupTempDir(projectRoot);
