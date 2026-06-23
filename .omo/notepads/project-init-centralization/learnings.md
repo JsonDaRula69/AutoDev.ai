@@ -471,3 +471,35 @@ Date: 2026-06-23
 - `bun test extensions/autodev/installer/__tests__/install-module.test.ts`: 5 pass, 0 fail.
 - `bun run typecheck` (T3-isolated, sibling files reverted): EXIT 0.
 - Evidence: `.omo/evidence/project-init-centralization/t3-install-module-happy.md`, `t3-install-module-failure.md`.
+
+# T5 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/installer/tools.ts`: added `detectPackageManager(notify?, execOverride?)`, `installPackageManager(plat, notify?, execOverride?)`, `PackageManagerDetectionResult` interface, and PM pre-check inside `installMissingTools`. Refactored `commandExists` into `commandExists` (public, real exec) + `commandExistsWith(cmd, exec)` (internal, accepts execOverride) so `installMissingTools` threads the test execOverride through gh/git/bun presence checks.
+- New tests: `extensions/autodev/installer/__tests__/tools.test.ts` (10 tests: detect happy/fail for each PM candidate, installMissingTools PM pre-check happy + failure, installPackageManager per-platform darwin/linux/win32 + `--yes` flag).
+- Evidence: `.omo/evidence/project-init-centralization/t5-pm-detect-happy.md`, `t5-pm-detect-failure.md`.
+
+## Key decisions
+
+- `PM_CANDIDATES = ["brew", "apt-get", "winget"]` — ordered tuple, first `command -v` hit wins. brew > apt-get > winget priority matches the existing `installTool` branch order (darwin → linux → win32).
+- `isNonInteractive()` checks three signals: `CI` env var, `stdout.isTTY === false`, and `--yes`/`-y` in `process.argv`. This covers CI runners, piped stdin, and explicit user opt-in.
+- win32 is intentionally non-scriptable: winget ships via the App Installer Store package and cannot be bootstrapped from a shell. `installPackageManager` returns `{ installed: false }` with a Settings instruction instead of attempting an exec that would always fail.
+- `installMissingTools` aborts early (returns only the failed PM result) when bootstrap fails — no point attempting `brew install gh` when brew itself didn't install.
+- `commandExists` refactor: the public export keeps its old signature `(cmd: string) => boolean` for backward compat. The new `commandExistsWith(cmd, exec)` is module-private and used inside `installMissingTools` so the test execOverride applies to presence checks too. Without this, tests that mock `gh --version` in execOverride never took effect because `commandExists` called real `execSync`.
+
+## Gotchas
+
+- Pre-existing uncommitted dirty changes in `doctor.ts` and `install-module.ts` (from a prior task, likely T3/T4) introduce 2 typecheck errors (`reopenTty` / `reopenTtyOverride` undefined). These are NOT caused by T5 — confirmed by stashing only `tools.ts` and observing the same doctor.ts errors. They are out of T5 scope (MUST NOT touch files outside tools.ts, its tests, and evidence).
+- `process.stdout.isTTY` can be `undefined` (not just `false`) in some runtimes; guard with `process.stdout != null && process.stdout.isTTY === false`.
+- `process.argv` includes the bun executable and script path; checking `includes("--yes")` is safe because user flags appear after the script name.
+- Test file uses `// @ts-nocheck` at the top (matching the pattern in `installer.test.ts` and `config-defaults.test.ts`) because `bun:test` mock types are complex for strict mode. This is the established convention in this `__tests__/` directory.
+
+## Verification
+
+- `bun test extensions/autodev/installer/__tests__/tools.test.ts`: 10 pass, 0 fail.
+- `bun test` (full suite): 517 pass, 0 fail.
+- `bun run typecheck`: 0 new errors from T5 changes (pre-existing doctor.ts errors unchanged).
+- Pure LOC: `tools.ts` 199 (healthy), `tools.test.ts` 200 (warning band edge, one cohesive SUT).
