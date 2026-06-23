@@ -22,6 +22,7 @@ import { getCategory, type CategoryDefinition } from "./categories.js";
 import { loadAgent, type AgentDefinition } from "./agents.js";
 import { loadModelAllowlist } from "../background/fallback.js";
 import type { SpawnConfig } from "../background/types.js";
+import { buildSkillPromptBlock } from "./skills.js";
 
 /**
  * Minimal spawner interface the executor depends on.
@@ -54,12 +55,13 @@ function err(message: string, details?: Record<string, unknown>): ToolResult {
  *
  * The prompt wraps the user's task in a delegation envelope. The category
  * description provides context about what kind of work is expected.
+ * Skill prompts are appended as a block when provided.
  */
-function buildCategoryPrompt(category: CategoryDefinition, userPrompt: string): string {
+function buildCategoryPrompt(category: CategoryDefinition, userPrompt: string, skillBlock: string): string {
   return [
     `You are a delegated AutoDev crew member spawned under the "${category.model}" model.`,
     `Category: ${category.description}`,
-    "",
+    skillBlock,
     "Task:",
     userPrompt,
   ].join("\n");
@@ -69,12 +71,13 @@ function buildCategoryPrompt(category: CategoryDefinition, userPrompt: string): 
  * Build the system prompt for a subagent-routed task.
  *
  * Uses the agent's own system prompt (from `.pi/agents/<name>.md` body) as the
- * base, with the user's task appended.
+ * base, with the user's task appended. Skill prompts are appended as a block
+ * when provided.
  */
-function buildAgentPrompt(agent: AgentDefinition, userPrompt: string): string {
+function buildAgentPrompt(agent: AgentDefinition, userPrompt: string, skillBlock: string): string {
   return [
     agent.systemPrompt,
-    "",
+    skillBlock,
     "Task:",
     userPrompt,
   ].join("\n");
@@ -145,10 +148,12 @@ export async function executeTaskTool(
   const { projectRoot, spawner } = options;
   const { category, subagent_type, prompt, run_in_background, load_skills } = params;
 
-  // load_skills is accepted (type-validated by the schema) but NOT injected
-  // into the system prompt. We reference it to satisfy noUnusedLocals.
-  // TODO(T12): inject skill prompts
-  void load_skills;
+  // Resolve skill prompts and inject them into the system prompt.
+  // Skills are loaded from `.autodev/skills/<name>/SKILL.md` or
+  // `.pi/skills/<name>/SKILL.md` and appended as a block.
+  const skillBlock = load_skills !== undefined
+    ? buildSkillPromptBlock(projectRoot, load_skills)
+    : "";
 
   // 1. Mutual exclusivity: exactly one of category / subagent_type must be set.
   const hasCategory = category !== undefined;
@@ -180,7 +185,7 @@ export async function executeTaskTool(
       });
     }
     model = cat.model;
-    systemPrompt = buildCategoryPrompt(cat, prompt);
+    systemPrompt = buildCategoryPrompt(cat, prompt, skillBlock);
     // Categories get the standard read-only tool set. No `task` (anti-re-delegation).
     baseTools = ["read", "bash", "grep", "glob"];
     agentName = `category:${category}`;
@@ -194,7 +199,7 @@ export async function executeTaskTool(
       });
     }
     model = agent.model;
-    systemPrompt = buildAgentPrompt(agent, prompt);
+    systemPrompt = buildAgentPrompt(agent, prompt, skillBlock);
     baseTools = agent.tools;
     agentName = agent.name;
   } else {

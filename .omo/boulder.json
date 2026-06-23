@@ -85,7 +85,7 @@
       "plan_name": "autodev-pi-foundation-4-autonomous",
       "status": "active",
       "started_at": "2026-06-23T10:31:32.724Z",
-      "updated_at": "2026-06-23T11:09:20.085Z",
+      "updated_at": "2026-06-23T11:14:15.944Z",
       "session_ids": [
         "opencode:ses_10bf8e038ffeFYKiz9pbhrpNUW"
       ],
@@ -127,8 +127,21 @@
           "session_id": "opencode:ses_10bda5bc6ffeVLI3hOdDqYAywv",
           "agent": "Sisyphus-Junior",
           "category": "quick",
-          "updated_at": "2026-06-23T11:09:20.085Z",
+          "updated_at": "2026-06-23T11:09:55.821Z",
           "started_at": "2026-06-23T11:09:20.085Z",
+          "status": "completed",
+          "ended_at": "2026-06-23T11:09:55.821Z",
+          "elapsed_ms": 35736
+        },
+        "final-wave:f1": {
+          "task_key": "final-wave:f1",
+          "task_label": "F1",
+          "task_title": "Verify scope — heartbeat (with multi-project polling), dispatch, Discord, debate, auto-merge, boulder, continuation, debug, installer, 5 integration modules filled in. Confirm all pre-existing issues from every todo's evidence file have been addressed or explicitly deferred.",
+          "session_id": "opencode:ses_10bd34eacffe6G4CQPIL7yDvbt",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-06-23T11:14:15.944Z",
+          "started_at": "2026-06-23T11:14:15.944Z",
           "status": "running"
         }
       }
@@ -137,7 +150,7 @@
   "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-4-autonomous.md",
   "started_at": "2026-06-23T10:31:32.724Z",
   "status": "active",
-  "updated_at": "2026-06-23T11:09:20.085Z",
+  "updated_at": "2026-06-23T11:14:15.944Z",
   "session_ids": [
     "opencode:ses_10bf8e038ffeFYKiz9pbhrpNUW"
   ],
@@ -179,8 +192,21 @@
       "session_id": "opencode:ses_10bda5bc6ffeVLI3hOdDqYAywv",
       "agent": "Sisyphus-Junior",
       "category": "quick",
-      "updated_at": "2026-06-23T11:09:20.085Z",
+      "updated_at": "2026-06-23T11:09:55.821Z",
       "started_at": "2026-06-23T11:09:20.085Z",
+      "status": "completed",
+      "ended_at": "2026-06-23T11:09:55.821Z",
+      "elapsed_ms": 35736
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "Verify scope — heartbeat (with multi-project polling), dispatch, Discord, debate, auto-merge, boulder, continuation, debug, installer, 5 integration modules filled in. Confirm all pre-existing issues from every todo's evidence file have been addressed or explicitly deferred.",
+      "session_id": "opencode:ses_10bd34eacffe6G4CQPIL7yDvbt",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-06-23T11:14:15.944Z",
+      "started_at": "2026-06-23T11:14:15.944Z",
       "status": "running"
     }
   },

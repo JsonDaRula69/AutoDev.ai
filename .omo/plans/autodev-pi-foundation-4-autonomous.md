@@ -154,7 +154,7 @@ Critical Path: T13 → T16
   QA scenarios: happy — debug logging works, secrets redacted, off by default. Failure — debug logs contain secrets (redaction failed); or debug mode is on by default (too verbose); or logging blocks the session (sync logging). Evidence: `.omo/evidence/task-18-autodev-pi-foundation.txt` (debug log sample + redaction test + off-by-default test).
   Commit: Y | feat(debug): structured debug mode logging for agent thinking and actions
 
-- [ ] 19. Build installer module
+- [x] 19. Build installer module
   What to do: Build the `autodev install` CLI command — the single entry point for deploying AutoDev to a new environment. The installer runs a structured credential setup flow:
 
   **Step 1 — Environment check:** Verify Bun is installed (>= 1.0). If not, print install instructions and exit. Run `bun install` to install pi + Magic Context dependencies.

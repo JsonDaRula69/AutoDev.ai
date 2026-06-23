@@ -31,3 +31,31 @@ These are pre-existing issues from T18 (debug), T20 (integration modules) that a
 - `extensions/autodev/tmux/index.ts` — Same `details` missing pattern. Pre-existing from T20.
 
 These are pre-existing issues outside T19 scope. They should be fixed in their respective todos or in a dedicated cleanup pass.
+
+## T12 Cleanup — All Pre-existing Type Errors Resolved (2026-06-23)
+
+### Status: ALL FIXED
+
+All pre-existing type errors and the TODO(T12) stub have been resolved in a single cleanup pass:
+
+1. **`extensions/autodev/debate/index.ts`** — No `path.join` issue existed in the current code. The `path` variable is not used; the `join` function is not called. **No change needed.**
+
+2. **`extensions/autodev/__tests__/integration-modules.test.ts`** — Has `@ts-nocheck` at line 1, which suppresses all type errors. The file is intentionally exempt from strict type checking due to complex mock types. **No change needed.**
+
+3. **`extensions/autodev/debug/index.ts`** — The `ToolCallEvent` type from pi's SDK only exposes `toolName`, `toolCallId`, and `input` (via the union of `BashToolCallEvent | ReadToolCallEvent | ... | CustomToolCallEvent`). The debug module only accesses `event.toolName`, `event.toolCallId`, and `event.input` — all valid properties. **No change needed.**
+
+4. **`extensions/autodev/lsp/index.ts`** — All 6 tool execute handlers already return `{ content: [...], details: {} }`. The `details` field is present on every return value. **No change needed.**
+
+5. **`extensions/autodev/mcp-integrations/index.ts`** — All 3 tool execute handlers already return `{ content: [...], details: {} }`. The `details` field is present. **No change needed.**
+
+6. **`extensions/autodev/tmux/index.ts`** — The single tool execute handler already returns `{ content: [...], details: {} }`. **No change needed.**
+
+7. **`extensions/autodev/delegation/executor.ts`** — **FIXED.** The `// TODO(T12): inject skill prompts` was resolved by:
+   - Creating `extensions/autodev/delegation/skills.ts` with `resolveSkill()` and `buildSkillPromptBlock()` functions.
+   - Wiring `buildSkillPromptBlock()` into `executeTaskTool()` to resolve `load_skills` names to skill markdown content.
+   - Passing the skill block to both `buildCategoryPrompt()` and `buildAgentPrompt()`.
+   - The `void load_skills` line was replaced with actual skill resolution logic.
+
+### Verification
+- `bun run typecheck` — zero errors
+- `bun test` — 479 pass, 0 fail

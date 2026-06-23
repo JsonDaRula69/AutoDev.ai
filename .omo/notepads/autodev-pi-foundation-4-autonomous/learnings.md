@@ -118,3 +118,19 @@
 - `MockPrompter` with `answers: string[]` queue pattern for testing interactive prompts.
 - `process.env` save/restore pattern for env var tests.
 - `writeFileSync(join(dir, "package.json"), ...)` needed in tests so `bun install` doesn't fail in temp directories.
+
+## T12 Cleanup — Pre-existing Type Error Fixes (2026-06-23)
+
+### Architecture
+- A new `extensions/autodev/delegation/skills.ts` module was created to resolve skill names to markdown content. It searches `.autodev/skills/<name>/SKILL.md` then `.pi/skills/<name>/SKILL.md` in priority order, strips YAML frontmatter, and returns the body.
+- `buildSkillPromptBlock()` returns a formatted block with `--- Loaded Skills ---` / `--- End Skills ---` delimiters, or empty string when no skills are provided or none are found.
+
+### Key Decisions
+- **Skill search path priority**: `.autodev/skills/` (project skills) before `.pi/skills/` (pi skills), so project-level skills override pi-level ones with the same name.
+- **Frontmatter stripping**: YAML frontmatter (delimited by `---`) is stripped from skill files before injection. Skills without frontmatter pass through unchanged.
+- **Empty skill block**: When `load_skills` is undefined or empty, or no skill files are found, the skill block is an empty string — no extra whitespace or delimiters are added to the system prompt.
+- **Skill block placement**: Injected between the base prompt and the "Task:" section for both category and subagent routes, so the task prompt is always the last thing the spawned agent sees.
+
+### Patterns
+- Skill resolver is a pure function with no side effects — reads from disk at call time (not cached), so skill file changes take effect immediately without reload.
+- The `buildSkillPromptBlock` function handles the empty case gracefully: returns `""` when no skills match, so callers don't need to check separately.
