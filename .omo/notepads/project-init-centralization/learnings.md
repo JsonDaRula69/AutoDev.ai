@@ -624,3 +624,41 @@ Date: 2026-06-23
 - `bun test extensions/autodev/orchestrator/__tests__/orchestrator.test.ts`: 20 pass, 0 fail.
 - `bun test` (full suite): 522 pass, 0 fail.
 - `bun run typecheck`: tsc --noEmit EXIT 0.
+
+# T8 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- New file `extensions/autodev/installer/init-module.ts` implements `runInit(deps: InitModuleDeps): Promise<InstallFixResult[]>` for `autodev init` steps 1-5:
+  - Step 1: Create 9 `.autodev/` subdirs (evidence, decisions, work-items, debates, embeddings, research, memory, plans, scripts). NOT config/skills/reference (centralized via symlinks by T1).
+  - Step 2: Copy 4 templates (ADR-template.md, autodev-delivery.md, autodev-request.md, harbor-log.md) from the central package (default `~/.bun/install/global/node_modules/autodev/.autodev/templates/`, overridable via `deps.packageRoot`) into `.autodev/templates/`.
+  - Step 3: Create `.github/ISSUE_TEMPLATE/` and copy `autodev-request.md` from `.autodev/templates/`.
+  - Step 4: Write `.autodev/project` marker JSON `{name, path, repo}` (repo from `git remote get-url origin` via `execSyncOverride`).
+  - Step 5: Create 5 `.omo/` subdirs (plans, evidence, rules, drafts, notepads).
+- New test file `extensions/autodev/installer/__tests__/init-module.test.ts` (5 tests: happy, failure, resume, idempotent re-run, marker JSON shape).
+
+## Key decisions
+
+- **Steps 1-3 share state step 6 ("structure").** Step 6 is only marked complete when ALL three structure steps succeed. A partial failure (e.g. step 2 fails because the package templates dir is missing) leaves step 6 unmarked, so the next `runInit()` retries the full structure phase. This matches the plan's Decision #8 (idempotency/resume via state.ts).
+- **Step 5 uses state step 7 ("omo").** Independent of step 6 — omo creation succeeds or fails on its own. If step 6 passed but step 5 failed, re-running init skips steps 1-3 (already done) and retries only step 5.
+- **Step 4 (marker) has NO dedicated state step.** It's an idempotent write that runs on every invocation (unless the fast-path short-circuits). This is correct because the marker JSON can change (repo URL updated, cwd moved) and re-writing it is harmless.
+- **Fast path:** if `.autodev/project` exists AND state steps 6+7 are both complete, `runInit()` returns a single `{ok: true, detail: "already initialized"}` result without running any step. This avoids redundant `mkdirSync`/`cpSync` calls on repeat invocations.
+- **`InitModuleDeps` reuses `InstallFixResult` from `install-module.ts`.** Same `{name, ok, detail}` shape — keeps the result type consistent across install and init lifecycles. Imported as a type-only import to avoid pulling the install module's runtime side effects.
+- **`execSyncOverride` is threaded through to `guessRepo()`** (step 4 repo detection) so tests can mock `git remote get-url origin` without shelling out. The same override will be used by T9/T10 for `gh` commands.
+
+## Gotchas
+
+- **Step 3 cascades from step 2.** If step 2 fails (package templates dir missing), `autodev-request.md` is never copied into `.autodev/templates/`, so step 3's source file check fails. This is intentional — step 3 depends on step 2's output. The test asserts both fail; the failure evidence documents this cascade.
+- **`basename(projectRoot)` for the marker name.** The plan says `<dir-name>` — `basename` of the project root gives the directory name. `guessProjectName` in `projects.ts` does the same (`cwd.split("/").filter(Boolean).pop()`). Consistent.
+- **`readState` is imported from `state.js` in the test** to verify state steps were recorded. The test file uses `// @ts-nocheck` (matching the established `__tests__/` convention) so the `any` casts on result objects don't trip strict mode.
+- **`packageRoot` default.** When `deps.packageRoot` is undefined, `defaultPackageRoot()` returns `~/.bun/install/global/node_modules/autodev/`. Tests always pass an explicit `packageRoot` (a temp mock package) so they never touch the real global install.
+- **File size:** `init-module.ts` is ~190 pure LOC — healthy, well under the 250 ceiling. T9/T10 will add steps 6-10 to the same `runInit()` function; if the file crosses 250 LOC, split the steps into a `steps.ts` helper module BEFORE adding the new lines.
+
+## Verification
+
+- `bun test extensions/autodev/installer/__tests__/init-module.test.ts`: 5 pass, 0 fail.
+- `bun test` (full suite): 527 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit EXIT 0.
+- Evidence: `.omo/evidence/project-init-centralization/t8-init-dirs-happy.md`, `t8-init-dirs-failure.md`.
