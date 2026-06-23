@@ -387,3 +387,33 @@ Date: 2026-06-23
 - Agent resolution is now centralized via `getAgentDir()` from the SDK.
 - The env override `PI_CODING_AGENT_DIR` is the only test-time redirection mechanism; `pi.configDir` in a project `package.json` is NOT honored by the SDK (confirmed in earlier section).
 - When T1 creates `~/.AutoDev/agent/` and symlinks `~/.AutoDev/agents/` → global package `.pi/agents/`, these loaders will pick up the centralized agents automatically with no further code change, because `getAgentDir()` will return `~/.AutoDev/agent/` (via `PI_CODING_AGENT_DIR` set by T1's env wiring) and `join(.., "agents")` resolves to `~/.AutoDev/agents/`.
+
+# T1 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `install.sh`: exports `PI_CODING_AGENT_DIR="$HOME/.AutoDev/agent"` for the current session, persists to `~/.zshrc`/`~/.bashrc`/`~/.profile` (detected via `$BASH_VERSION`/`$ZSH_VERSION`), and adds `set -gx` to `~/.config/fish/config.fish` when fish is installed.
+- `extensions/autodev/installer/config-defaults.ts`: rewrote `validateAndCreateConfig` from GitHub-raw downloads to symlink creation from the global npm package (`~/.bun/install/global/node_modules/autodev/`). Removed `fetchOverride`. Added optional `packageRoot` (tests) and `ValidateAndCreateConfigOverrides.symlinkOverride` (EPERM simulation). Writes `magic-context.jsonc` as a real file with AutoDev defaults. Windows/EPERM fallback uses `fs.cpSync` with a warning detail.
+- `extensions/autodev/installer/doctor.ts` and `install-module.ts`: replaced `fetchOverride` field with `packageRoot` field; `validateAndCreateConfig` now called with `packageRoot` only.
+- New tests: `extensions/autodev/installer/__tests__/config-defaults.test.ts` (6 tests covering env var baseline, env var override, happy-path symlinks, missing source, idempotency, EPERM copy fallback).
+- Updated `test/doctor.test.ts` to use the new `packageRoot` DI and `PI_CODING_AGENT_DIR` env var (no more `.pi/` file scaffolding in the project dir — symlinks come from the mock package).
+
+## Key decisions
+
+- `linkOrCopy` returns a `copied` flag so multi-file call sites (agents, config) can surface the `COPY_FALLBACK_WARNING` instead of a generic "symlinked" detail.
+- `detailFor(r, createdMsg)` helper preserves the copy-fallback warning when `linkOrCopy` fell back to copying; single-file call sites use it directly.
+- `centralHome = join(agentDir, "..")` — the central home is the parent of the agent dir. When `PI_CODING_AGENT_DIR=~/.AutoDev/agent`, centralHome is `~/.AutoDev/`. When unset, centralHome is `~/.pi/`.
+- `ConfigCheckResult` interface is unchanged (name/ok/detail/created) so callers like `doctor.ts` don't need a type change beyond the signature.
+
+## Gotchas
+
+- `getAgentDir()` is cached at module load — setting `PI_CODING_AGENT_DIR` after import does NOT change its return value in the same process if the SDK module was already imported elsewhere. Tests set the env var before `import("../config-defaults.js")` to ensure fresh resolution. (Confirmed: the SDK reads `process.env[ENV_AGENT_DIR]` on each call, not at module load — but `CONFIG_DIR_NAME` is a module-level const. The env var path is read live.)
+- The pi SDK's `CONFIG_DIR_NAME` is hardcoded from its own `package.json` (`pkg.piConfig?.configDir || ".pi"`), so `pi.configDir` in the consuming project's `package.json` is ignored. `PI_CODING_AGENT_DIR` is the only override path.
+- `symlinkSync(target, path, type)` — the `type` arg ("dir"/"file"/"junction") is only required on Windows. On macOS it's accepted but ignored. Passing it unconditionally is safe.
+
+## Verification
+
+- `bun test`: 489 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit EXIT 0.

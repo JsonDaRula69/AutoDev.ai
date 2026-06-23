@@ -40,8 +40,8 @@ export interface DoctorDeps {
   readonly notify?: (message: string, level: "info" | "warning" | "error") => void;
   /** Optional injected prompter (tests). When omitted doctor creates one. */
   readonly prompter?: Prompter;
-  /** Optional override for global `fetch` used by config file downloads. */
-  readonly fetchOverride?: typeof fetch;
+  /** Optional global package root for symlink-based config defaults (tests). */
+  readonly packageRoot?: string;
 }
 
 /**
@@ -129,7 +129,7 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
     projectRoot: deps.projectRoot,
     notify,
     execSyncOverride: deps.execSyncOverride as never,
-    ...(deps.fetchOverride !== undefined ? { fetchOverride: deps.fetchOverride } : {}),
+    ...(deps.packageRoot !== undefined ? { packageRoot: deps.packageRoot } : {}),
   };
   await runInstallFixes(installDeps);
 
@@ -280,7 +280,7 @@ async function runHealthChecks(deps: DoctorDeps): Promise<DoctorResult> {
     checks.push({ name: "Install state", ok: false, detail: "install-state.json not found" });
   }
 
-  const configResults = await validateAndCreateConfig(deps.projectRoot);
+  const configResults = await validateAndCreateConfig(deps.packageRoot);
   for (const cr of configResults) {
     checks.push({
       name: cr.name,

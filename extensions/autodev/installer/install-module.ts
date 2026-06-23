@@ -32,8 +32,8 @@ export interface InstallModuleDeps {
   readonly platform?: Platform;
   /** Override for execSync (injectable for tests). */
   readonly execSyncOverride?: (command: string, options?: ExecSyncOptions) => Buffer;
-  /** Override for global `fetch` used by config file downloads. */
-  readonly fetchOverride?: typeof fetch;
+  /** Optional global package root for symlink-based config defaults (tests). */
+  readonly packageRoot?: string;
   /** If true, completed steps are skipped. Defaults to true. */
   readonly skipCompleted?: boolean;
 }
@@ -138,9 +138,9 @@ async function runToolsPhase(
 }
 
 async function runConfigFilesPhase(deps: InstallModuleDeps): Promise<InstallFixResult> {
-  const { projectRoot, notify, fetchOverride } = deps;
-  notify("Downloading .pi/ config files if missing...", "info");
-  const configResults = await validateAndCreateConfig(projectRoot, fetchOverride);
+  const { projectRoot, notify, packageRoot } = deps;
+  notify("Symlinking .pi/ config files into ~/.AutoDev/ if missing...", "info");
+  const configResults = await validateAndCreateConfig(packageRoot);
   const failed = configResults.filter((r) => !r.ok);
   if (failed.length === 0) {
     const created = configResults.filter((r) => r.created);

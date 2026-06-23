@@ -1,16 +1,42 @@
-import { existsSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
+/**
+ * T1 config-defaults — centralize pi config to `~/.AutoDev/` via symlinks.
+ *
+ * Resolves the agent dir via `getAgentDir()` from the pi SDK (honors
+ * `PI_CODING_AGENT_DIR`). Creates symlinks from the central config home into
+ * the installed global npm package so `bun update -g autodev` propagates
+ * automatically. `magic-context.jsonc` is written as a real file (AutoDev
+ * defaults) rather than symlinked, because it carries consumer-specific keys.
+ *
+ * No network calls. `fetchOverride` (prior GitHub-raw download param) is
+ * replaced by `packageRoot` (defaults to the global npm package path) and
+ * `SymlinkOverrides` (test EPERM simulation).
+ */
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
-const REPO_OWNER = "JsonDaRula69";
-const REPO_NAME = "AutoDev.ai";
-const REPO_BRANCH = "main";
-const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}`;
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
+import {
+  COPY_FALLBACK_WARNING,
+  detailFor,
+  linkOrCopy,
+  type SymlinkOverrides,
+} from "./symlink-link.js";
 
 const REQUIRED_AGENT_FILES = [
-  "nemo", "aronnax", "ned-land", "conseil", "oracle", "momus",
-  "metis", "harbor-master", "quartermaster", "boatswain",
-  "navigator", "watch-officer", "explore",
-];
+  "nemo",
+  "aronnax",
+  "ned-land",
+  "conseil",
+  "oracle",
+  "momus",
+  "metis",
+  "harbor-master",
+  "quartermaster",
+  "boatswain",
+  "navigator",
+  "watch-officer",
+  "explore",
+] as const;
 
 export interface ConfigCheckResult {
   readonly name: string;
@@ -19,85 +45,153 @@ export interface ConfigCheckResult {
   readonly created: boolean;
 }
 
-async function downloadFile(url: string, fetchOverride?: typeof fetch): Promise<string | undefined> {
-  try {
-    const fetchFn = fetchOverride ?? fetch;
-    const resp = await fetchFn(url);
-    if (!resp.ok) return undefined;
-    return await resp.text();
-  } catch {
-    return undefined;
-  }
+export type ValidateAndCreateConfigOverrides = SymlinkOverrides;
+
+function defaultPackageRoot(): string {
+  return join(
+    process.env.HOME ?? "",
+    ".bun",
+    "install",
+    "global",
+    "node_modules",
+    "autodev",
+  );
 }
 
+/**
+ * Create the centralized `~/.AutoDev/` config tree via symlinks into the
+ * installed global npm package.
+ *
+ * When `PI_CODING_AGENT_DIR` is set (configured by `install.sh`), the agent
+ * dir resolves to `~/.AutoDev/agent/` and the sibling central home is
+ * `~/.AutoDev/`. When unset, falls back to the SDK default `~/.pi/agent/`.
+ */
 export async function validateAndCreateConfig(
-  projectRoot: string,
-  fetchOverride?: typeof fetch,
+  packageRoot?: string,
+  overrides?: ValidateAndCreateConfigOverrides,
 ): Promise<ConfigCheckResult[]> {
   const results: ConfigCheckResult[] = [];
-  const piDir = join(projectRoot, ".pi");
+  const pkg = packageRoot ?? defaultPackageRoot();
+  const agentDir = getAgentDir();
+  const centralHome = join(agentDir, "..");
 
-  const settingsPath = join(piDir, "settings.json");
-  if (!existsSync(settingsPath)) {
-    mkdirSync(piDir, { recursive: true });
-    const content = await downloadFile(`${RAW_BASE}/.pi/settings.json`, fetchOverride);
-    if (content !== undefined) {
-      writeFileSync(settingsPath, content, "utf-8");
-      results.push({ name: "settings.json", ok: true, detail: "downloaded from repo", created: true });
-    } else {
-      results.push({ name: "settings.json", ok: false, detail: "missing and download failed", created: false });
-    }
-  } else {
-    results.push({ name: "settings.json", ok: true, detail: "exists", created: false });
-  }
+  linkSingle(results, "settings.json", join(pkg, ".pi", "settings.json"), join(agentDir, "settings.json"), "symlinked to package .pi/settings.json", overrides);
 
-  const mcPath = join(piDir, "magic-context.jsonc");
-  if (!existsSync(mcPath)) {
-    if (!existsSync(piDir)) mkdirSync(piDir, { recursive: true });
-    const content = await downloadFile(`${RAW_BASE}/.pi/magic-context.jsonc`, fetchOverride);
-    if (content !== undefined) {
-      writeFileSync(mcPath, content, "utf-8");
-      results.push({ name: "magic-context.jsonc", ok: true, detail: "downloaded from repo", created: true });
-    } else {
-      results.push({ name: "magic-context.jsonc", ok: false, detail: "missing and download failed", created: false });
-    }
-  } else {
-    results.push({ name: "magic-context.jsonc", ok: true, detail: "exists", created: false });
-  }
+  linkAgentFiles(results, pkg, centralHome, overrides);
 
-  const agentsDir = join(piDir, "agents");
-  if (!existsSync(agentsDir)) {
-    mkdirSync(agentsDir, { recursive: true });
-  }
+  linkSingle(results, "reference/", join(pkg, ".autodev", "reference"), join(centralHome, "reference"), "symlinked to package .autodev/reference/", overrides);
+  linkSingle(results, "skills/", join(pkg, ".pi", "skills"), join(centralHome, "skills"), "symlinked to package .pi/skills/", overrides);
+  linkSingle(results, "extensions/autodev", join(pkg, "extensions", "autodev"), join(agentDir, "extensions", "autodev"), "symlinked to package extensions/autodev", overrides);
 
-  const existing = existsSync(agentsDir) ? readdirSync(agentsDir).filter((f) => f.endsWith(".md")) : [];
-  const missing = REQUIRED_AGENT_FILES.filter((a) => !existing.includes(`${a}.md`));
-
-  if (missing.length === 0) {
-    results.push({ name: "agents/*.md", ok: true, detail: `${existing.length} agent files present`, created: false });
-  } else {
-    let downloaded = 0;
-    let failed = 0;
-    for (const agent of missing) {
-      const content = await downloadFile(`${RAW_BASE}/.pi/agents/${agent}.md`, fetchOverride);
-      if (content !== undefined) {
-        writeFileSync(join(agentsDir, `${agent}.md`), content, "utf-8");
-        downloaded++;
-      } else {
-        failed++;
-      }
-    }
-    if (failed === 0) {
-      results.push({ name: "agents/*.md", ok: true, detail: `downloaded ${downloaded} missing agent files`, created: true });
-    } else {
-      results.push({
-        name: "agents/*.md",
-        ok: false,
-        detail: `${downloaded} downloaded, ${failed} failed: ${missing.join(", ")}`,
-        created: false,
-      });
-    }
-  }
+  linkConfigDir(results, pkg, centralHome, overrides);
+  writeMagicContext(results, agentDir);
 
   return results;
+}
+
+function linkSingle(
+  results: ConfigCheckResult[],
+  name: string,
+  target: string,
+  link: string,
+  createdMsg: string,
+  overrides?: ValidateAndCreateConfigOverrides,
+): void {
+  if (!existsSync(target)) {
+    results.push({ name, ok: false, detail: "source file missing", created: false });
+    return;
+  }
+  const r = linkOrCopy(target, link, true, overrides);
+  results.push({ name, ok: r.ok, detail: detailFor(r, createdMsg), created: r.created });
+}
+
+function linkAgentFiles(
+  results: ConfigCheckResult[],
+  pkg: string,
+  centralHome: string,
+  overrides?: ValidateAndCreateConfigOverrides,
+): void {
+  const agentsCentralDir = join(centralHome, "agents");
+  if (!existsSync(join(pkg, ".pi", "agents"))) {
+    results.push({ name: "agents/*.md", ok: false, detail: "source directory missing", created: false });
+    return;
+  }
+  let allOk = true;
+  let anyCreated = false;
+  let anyCopied = false;
+  const missingNames: string[] = [];
+  for (const a of REQUIRED_AGENT_FILES) {
+    const target = join(pkg, ".pi", "agents", `${a}.md`);
+    const link = join(agentsCentralDir, `${a}.md`);
+    if (!existsSync(target)) {
+      allOk = false;
+      missingNames.push(a);
+      continue;
+    }
+    const r = linkOrCopy(target, link, false, overrides);
+    if (!r.ok) allOk = false;
+    if (r.created) anyCreated = true;
+    if (r.copied) anyCopied = true;
+  }
+  results.push({
+    name: "agents/*.md",
+    ok: allOk && missingNames.length === 0,
+    detail: allOk && missingNames.length === 0
+      ? anyCopied ? COPY_FALLBACK_WARNING : anyCreated ? `symlinked ${REQUIRED_AGENT_FILES.length} agent files` : `${REQUIRED_AGENT_FILES.length} agent files present`
+      : missingNames.length > 0 ? `source file missing: ${missingNames.join(", ")}` : "one or more agent symlinks failed",
+    created: anyCreated,
+  });
+}
+
+function linkConfigDir(
+  results: ConfigCheckResult[],
+  pkg: string,
+  centralHome: string,
+  overrides?: ValidateAndCreateConfigOverrides,
+): void {
+  const configCentralDir = join(centralHome, "config");
+  const configPkgDir = join(pkg, ".autodev", "config");
+  if (!existsSync(configPkgDir)) {
+    results.push({ name: "config/", ok: false, detail: "source directory missing", created: false });
+    return;
+  }
+  const entries = readdirSync(configPkgDir).filter(
+    (f) => f.endsWith(".yaml") || f.endsWith(".json") || f.endsWith(".md"),
+  );
+  let allOk = true;
+  let anyCreated = false;
+  let anyCopied = false;
+  const missingNames: string[] = [];
+  for (const f of entries) {
+    const r = linkOrCopy(join(configPkgDir, f), join(configCentralDir, f), false, overrides);
+    if (!r.ok) {
+      allOk = false;
+      missingNames.push(f);
+    }
+    if (r.created) anyCreated = true;
+    if (r.copied) anyCopied = true;
+  }
+  results.push({
+    name: "config/",
+    ok: allOk,
+    detail: allOk
+      ? anyCopied ? COPY_FALLBACK_WARNING : anyCreated ? `symlinked ${entries.length} config files` : `${entries.length} config files present`
+      : `failed: ${missingNames.join(", ")}`,
+    created: anyCreated,
+  });
+}
+
+function writeMagicContext(results: ConfigCheckResult[], agentDir: string): void {
+  const mcPath = join(agentDir, "magic-context.jsonc");
+  if (existsSync(mcPath)) {
+    results.push({ name: "magic-context.jsonc", ok: true, detail: "exists", created: false });
+    return;
+  }
+  try {
+    if (!existsSync(agentDir)) mkdirSync(agentDir, { recursive: true });
+    writeFileSync(mcPath, DEFAULT_MAGIC_CONTEXT_JSONC, "utf-8");
+    results.push({ name: "magic-context.jsonc", ok: true, detail: "written with AutoDev defaults", created: true });
+  } catch (e) {
+    results.push({ name: "magic-context.jsonc", ok: false, detail: `write failed: ${(e as Error).message}`, created: false });
+  }
 }

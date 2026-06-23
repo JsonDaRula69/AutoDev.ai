@@ -36,13 +36,47 @@ fi
 echo "Installing autodev globally..."
 bun install -g autodev
 
-# ── Step 3: Verify autodev is on PATH ──────────────────────────────────────
+# ── Step 3: Set PI_CODING_AGENT_DIR for centralized ~/.AutoDev/ config ──────
+# Export for current session so the install flow works without a terminal restart.
+export PI_CODING_AGENT_DIR="$HOME/.AutoDev/agent"
+
+# Persist to the user's shell rc file so future sessions inherit it.
+# Bash vs zsh detection: $BASH_VERSION is set in bash, $ZSH_VERSION in zsh.
+# POSIX sh and others fall back to ~/.profile.
+SHELL_RC="$HOME/.profile"
+if [ -n "$BASH_VERSION" ]; then
+  SHELL_RC="$HOME/.bashrc"
+elif [ -n "$ZSH_VERSION" ]; then
+  SHELL_RC="$HOME/.zshrc"
+fi
+
+PI_ENV_LINE='export PI_CODING_AGENT_DIR="$HOME/.AutoDev/agent"'
+if [ -f "$SHELL_RC" ]; then
+  grep -q 'PI_CODING_AGENT_DIR' "$SHELL_RC" 2>/dev/null || printf '%s\n' "$PI_ENV_LINE" >> "$SHELL_RC"
+else
+  printf '%s\n' "$PI_ENV_LINE" >> "$SHELL_RC"
+fi
+
+# Fish support: add `set -gx` to ~/.config/fish/config.fish if fish is installed.
+FISH_CONFIG_DIR="$HOME/.config/fish"
+if command -v fish >/dev/null 2>&1; then
+  mkdir -p "$FISH_CONFIG_DIR"
+  FISH_CONFIG="$FISH_CONFIG_DIR/config.fish"
+  FISH_LINE='set -gx PI_CODING_AGENT_DIR $HOME/.AutoDev/agent'
+  if [ -f "$FISH_CONFIG" ]; then
+    grep -q 'PI_CODING_AGENT_DIR' "$FISH_CONFIG" 2>/dev/null || printf '%s\n' "$FISH_LINE" >> "$FISH_CONFIG"
+  else
+    printf '%s\n' "$FISH_LINE" >> "$FISH_CONFIG"
+  fi
+fi
+
+# ── Step 4: Verify autodev is on PATH ──────────────────────────────────────
 if ! command -v autodev >/dev/null 2>&1; then
   echo "global autodev install failed — check errors above" >&2
   exit 1
 fi
 
-# ── Step 4: Hand off to doctor ─────────────────────────────────────────────
+# ── Step 5: Hand off to doctor ─────────────────────────────────────────────
 echo
 echo "Running doctor check..."
 if ! autodev doctor; then
