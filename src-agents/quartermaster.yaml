@@ -3,7 +3,7 @@ display_name: Quartermaster
 role: Operations
 model_preference: ollama-cloud/deepseek-v4-flash
 fallback_models:
-  - ollama-cloud/glm-5.2:cloud
+  - ollama-cloud/kimi-k2.7-code
 description: >
   GitHub operations specialist. Manages label transitions (stage-gate enforcement),
   monitors CI, creates/manages issues, computes EVM metrics, keeps project board

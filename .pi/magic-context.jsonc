@@ -7,13 +7,13 @@
 
   "historian": {
     "model": "ollama-cloud/glm-5.2:cloud",
-    "fallback_models": ["ollama-cloud/deepseek-v4-pro"]
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"]
   },
 
   "dreamer": {
     "enabled": true,
     "model": "ollama-cloud/glm-5.2:cloud",
-    "fallback_models": ["ollama-cloud/deepseek-v4-pro"],
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
     "schedule": "02:00-06:00",
     "tasks": ["consolidate", "verify", "archive-stale", "improve", "maintain-docs"],
     "user_memories": { "enabled": true, "promotion_threshold": 3 },
@@ -38,7 +38,7 @@
   "sidekick": {
     "enabled": true,
     "model": "ollama-cloud/glm-5.2:cloud",
-    "fallback_models": ["ollama-cloud/deepseek-v4-pro"],
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
     "timeout_ms": 30000
   }
 }

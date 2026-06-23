@@ -4,6 +4,7 @@ role: Seer
 model_preference: ollama-cloud/deepseek-v4-pro
 fallback_models:
   - ollama-cloud/glm-5.2:cloud
+  - ollama-cloud/deepseek-v4-flash
 description: >
   Challenge assumptions, find weaknesses. Code review, adversarial analysis.
   You see what will break before it breaks.

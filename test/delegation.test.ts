@@ -94,11 +94,17 @@ let projectRoot: string;
 
 beforeEach(() => {
   projectRoot = mkdtempSync(join(tmpdir(), "autodev-delegation-"));
-  // Standard allowlist used across tests.
+  // Standard allowlist used across tests — includes all 5 approved models.
   mkdirSync(join(projectRoot, ".autodev", "config"), { recursive: true });
   writeFileSync(
     join(projectRoot, ".autodev", "config", "models.json"),
-    JSON.stringify(["ollama-cloud/glm-5.2:cloud", "ollama-cloud/deepseek-v4-pro"]),
+    JSON.stringify([
+      "ollama-cloud/glm-5.2:cloud",
+      "ollama-cloud/glm-5.1:cloud",
+      "ollama-cloud/deepseek-v4-pro",
+      "ollama-cloud/deepseek-v4-flash",
+      "ollama-cloud/kimi-k2.7-code",
+    ]),
   );
 });
 
@@ -126,7 +132,7 @@ function writeAgent(name: string, model: string, tools: string, body: string): v
 
 // --- Required test 1: category="quick" spawns with quick model ---------------
 
-test("task(category=quick) spawns background session with glm-5.2:cloud", async () => {
+test("task(category=quick) spawns background session with deepseek-v4-flash", async () => {
   const spawner = new FakeSpawner();
   // Drive the executor, but complete the task immediately via a microtask
   // so the foreground wait sees it as completed before the max wait.
@@ -136,7 +142,7 @@ test("task(category=quick) spawns background session with glm-5.2:cloud", async 
   await new Promise((r) => setTimeout(r, 0));
   expect(spawner.spawns.length).toBe(1);
   const task = spawner.spawns[0]!;
-  expect(task.config.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(task.config.model).toBe("ollama-cloud/deepseek-v4-flash");
   expect(task.config.agentName).toBe("category:quick");
   // systemPrompt should include the user's task.
   expect(task.config.systemPrompt).toContain("fix typo");
@@ -157,7 +163,7 @@ test("task(category=quick, run_in_background=true) returns task ID immediately",
 
   expect(spawner.spawns.length).toBe(1);
   const task = spawner.spawns[0]!;
-  expect(task.config.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(task.config.model).toBe("ollama-cloud/deepseek-v4-flash");
 
   // Background mode returns immediately with the task ID.
   const text = result.content[0];
@@ -399,7 +405,7 @@ test("load_skills is accepted (type-validated) but not injected into the system 
   expect(task.config.systemPrompt).not.toContain("playwright");
   expect(task.config.systemPrompt).not.toContain("frontend");
   // The task was still spawned (load_skills didn't block it).
-  expect(task.config.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(task.config.model).toBe("ollama-cloud/deepseek-v4-flash");
 });
 
 // --- Subagent not found ------------------------------------------------------
@@ -423,13 +429,13 @@ test("task(subagent_type=nonexistent) returns error for missing agent file", asy
 
 test("default model mapping: all 8 categories resolve to their spec'd models without config override", () => {
   const map = loadCategoryMap(projectRoot);
-  expect(map["quick"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
-  expect(map["deep"]?.model).toBe("ollama-cloud/deepseek-v4-pro");
+  expect(map["quick"]?.model).toBe("ollama-cloud/deepseek-v4-flash");
+  expect(map["deep"]?.model).toBe("ollama-cloud/kimi-k2.7-code");
   expect(map["ultrabrain"]?.model).toBe("ollama-cloud/deepseek-v4-pro");
   expect(map["visual-engineering"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
   expect(map["artistry"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
   expect(map["writing"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
-  expect(map["unspecified-low"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(map["unspecified-low"]?.model).toBe("ollama-cloud/deepseek-v4-flash");
   expect(map["unspecified-high"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
 });
 

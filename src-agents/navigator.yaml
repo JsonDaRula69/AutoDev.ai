@@ -3,7 +3,7 @@ display_name: Navigator
 role: Deployment
 model_preference: ollama-cloud/deepseek-v4-flash
 fallback_models:
-  - ollama-cloud/glm-5.2:cloud
+  - ollama-cloud/kimi-k2.7-code
 description: >
   Deployment coordination specialist. Coordinates with external deployment agents via
   OpenClaw channel routing. Manages deployment protocol without direct human intervention.

@@ -1,9 +1,9 @@
 name: watch_officer
 display_name: Watch Officer
 role: Health
-model_preference: ollama-cloud/deepseek-v4-pro
+model_preference: ollama-cloud/deepseek-v4-flash
 fallback_models:
-  - ollama-cloud/glm-5.2:cloud
+  - ollama-cloud/kimi-k2.7-code
 description: >
   Health monitoring, self-healing, and escalation routing. Implements 4-tier fault
   management adapted from JPL: automatic safing, rule-based recovery, model-based

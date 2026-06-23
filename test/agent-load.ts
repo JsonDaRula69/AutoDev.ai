@@ -200,6 +200,9 @@ test("model allowlist is non-empty and contains expected entries", () => {
   expect(ALLOWED_MODELS.length).toBeGreaterThan(0);
   expect(ALLOWED_MODELS).toContain("ollama-cloud/glm-5.2:cloud");
   expect(ALLOWED_MODELS).toContain("ollama-cloud/deepseek-v4-pro");
+  expect(ALLOWED_MODELS).toContain("ollama-cloud/glm-5.1:cloud");
+  expect(ALLOWED_MODELS).toContain("ollama-cloud/deepseek-v4-flash");
+  expect(ALLOWED_MODELS).toContain("ollama-cloud/kimi-k2.7-code");
 });
 
 test("every agent uses a model from the allowlist (aggregate check)", () => {

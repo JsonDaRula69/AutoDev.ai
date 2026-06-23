@@ -4,6 +4,7 @@ role: Critic
 model_preference: ollama-cloud/deepseek-v4-pro
 fallback_models:
   - ollama-cloud/glm-5.2:cloud
+  - ollama-cloud/deepseek-v4-flash
 description: >
   Find gaps, flag ambiguities, block bad plans. Plan review and gap analysis.
   You are incentivized to disagree — your job is to find what's wrong.

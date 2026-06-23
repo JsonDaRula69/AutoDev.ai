@@ -32,13 +32,13 @@ export type CategoryMap = Readonly<Record<string, CategoryDefinition>>;
  * Default category → model mapping.
  *
  * Per task spec:
- *   quick             → glm-5.2:cloud
- *   deep              → deepseek-v4-pro
- *   ultrabrain        → deepseek-v4-pro
+ *   quick             → deepseek-v4-flash
+ *   deep              → kimi-k2.7-code
+ *   ultrabrain        → deepseek-v4-pro (thinkingLevel "xhigh")
  *   visual-engineering → glm-5.2:cloud
  *   artistry          → glm-5.2:cloud
  *   writing           → glm-5.2:cloud
- *   unspecified-low   → glm-5.2:cloud
+ *   unspecified-low   → deepseek-v4-flash
  *   unspecified-high  → glm-5.2:cloud
  *
  * Full provider-qualified strings are used so the background manager can
@@ -46,11 +46,11 @@ export type CategoryMap = Readonly<Record<string, CategoryDefinition>>;
  */
 const BUILTIN_CATEGORIES: Readonly<Record<string, CategoryDefinition>> = {
   quick: {
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/deepseek-v4-flash",
     description: "Fast, cheap model for simple one-off tasks (typos, small fixes).",
   },
   deep: {
-    model: "ollama-cloud/deepseek-v4-pro",
+    model: "ollama-cloud/kimi-k2.7-code",
     description: "High-capability model for complex implementation requiring deep reasoning.",
   },
   ultrabrain: {
@@ -71,7 +71,7 @@ const BUILTIN_CATEGORIES: Readonly<Record<string, CategoryDefinition>> = {
     description: "Model for prose, documentation, and communication.",
   },
   "unspecified-low": {
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/deepseek-v4-flash",
     description: "Low-cost default when no specific category fits.",
   },
   "unspecified-high": {

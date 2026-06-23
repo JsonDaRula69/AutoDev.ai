@@ -3,7 +3,7 @@ display_name: Boatswain
 role: QA
 model_preference: ollama-cloud/deepseek-v4-flash
 fallback_models:
-  - ollama-cloud/glm-5.2:cloud
+  - ollama-cloud/kimi-k2.7-code
 description: >
   Testing and QA execution specialist. Runs test suites, validates evidence independently
   from Ned Land (who implements). Anti-hallucinated-success verification.

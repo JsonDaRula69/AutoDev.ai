@@ -13,7 +13,10 @@
   },
   "enabledModels": [
     "ollama-cloud/glm-5.2:cloud",
-    "ollama-cloud/deepseek-v4-pro"
+    "ollama-cloud/glm-5.1:cloud",
+    "ollama-cloud/deepseek-v4-pro",
+    "ollama-cloud/deepseek-v4-flash",
+    "ollama-cloud/kimi-k2.7-code"
   ],
   "extensions": [
     "./extensions/autodev"

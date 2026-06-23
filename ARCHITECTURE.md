@@ -118,9 +118,10 @@ Model routing per role, from `techContext.md`:
 
 | Role | Model | Used for |
 |------|-------|----------|
-| Nemo, Aronnax, Metis, Harbor Master, Quartermaster, Boatswain, Navigator, Watch Officer, Conseil, Explore | `ollama-cloud/glm-5.2:cloud` | Triage, planning, deploy, orchestration, research |
-| Ned Land | `ollama-cloud/deepseek-v4-pro` | Execution, building, testing |
+| Nemo, Aronnax, Metis, Harbor Master | `ollama-cloud/glm-5.2:cloud` | Triage, planning, deploy, orchestration |
+| Ned Land | `ollama-cloud/kimi-k2.7-code` | Execution, building, testing |
 | Oracle, Momus | `ollama-cloud/deepseek-v4-pro` | Review, critique, adversarial analysis |
+| Conseil, Quartermaster, Boatswain, Navigator, Watch Officer, Explore | `ollama-cloud/deepseek-v4-flash` | Knowledge retrieval, GitHub ops, QA, deployment, health monitoring, investigation |
 
 13 agents total: nemo, aronnax, ned-land, conseil, oracle, momus, metis, harbor-master, quartermaster, boatswain, navigator, watch-officer, explore. The Engineer identity block is shared across quartermaster, boatswain, navigator, and watch-officer per the README. The Explore identity block maps to the explore subagent. Implemented by T4 in the pi-foundation plan.
 
@@ -208,13 +209,13 @@ Built-in categories:
 
 | Category | Use case | Default model |
 |----------|----------|---------------|
-| quick | Trivial fixes, typos, small tweaks | `glm-5.2:cloud` |
-| deep | Autonomous problem-solving | `deepseek-v4-pro` |
+| quick | Trivial fixes, typos, small tweaks | `deepseek-v4-flash` |
+| deep | Autonomous problem-solving | `kimi-k2.7-code` |
 | ultrabrain | Hard logic, deep reasoning | `deepseek-v4-pro` |
 | visual-engineering | Frontend, UI work | `glm-5.2:cloud` |
 | artistry | Creative work | `glm-5.2:cloud` |
 | writing | Docs, prose, READMEs | `glm-5.2:cloud` |
-| unspecified-low | General low-effort | `glm-5.2:cloud` |
+| unspecified-low | General low-effort | `deepseek-v4-flash` |
 | unspecified-high | General high-effort | `glm-5.2:cloud` |
 
 `task(category="deep", prompt="...")` spawns a background session with the deep category's model and a system prompt that includes the task and any loaded skill context. `task(subagent_type="explore", prompt="...")` spawns a specific crew agent. `run_in_background=true` returns a task ID immediately for async work. `load_skills=["..."]` injects skill prompts into the spawned session.

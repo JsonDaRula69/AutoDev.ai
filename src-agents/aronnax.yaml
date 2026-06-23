@@ -3,7 +3,8 @@ display_name: Professor Aronnax
 role: Professor
 model_preference: ollama-cloud/glm-5.2:cloud
 fallback_models:
-  - ollama-cloud/deepseek-v4-pro
+  - ollama-cloud/glm-5.1:cloud
+  - ollama-cloud/deepseek-v4-flash
 description: >
   Deep planning, validated implementation plans. Produce detailed, validated
   implementation plans. Do not implement — if you start writing code, stop and

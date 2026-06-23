@@ -253,10 +253,10 @@ test("config: dreamer.model is ollama-cloud/glm-5.2:cloud", () => {
   expect(dreamer.model).toBe("ollama-cloud/glm-5.2:cloud");
 });
 
-test("config: dreamer.fallback_models includes deepseek-v4-pro", () => {
+test("config: dreamer.fallback_models includes glm-5.1:cloud", () => {
   const cfg = parseJsonc(readFileSync(CONFIG_PATH, "utf8"));
   const dreamer = cfg["dreamer"] as { fallback_models: string[] };
-  expect(dreamer.fallback_models).toContain("ollama-cloud/deepseek-v4-pro");
+  expect(dreamer.fallback_models).toContain("ollama-cloud/glm-5.1:cloud");
 });
 
 test("config: embedding.api_key references ${VOYAGE_API_KEY}", () => {
