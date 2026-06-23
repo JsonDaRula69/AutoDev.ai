@@ -81,7 +81,7 @@ export async function executeSessionRead(
   const lines = limited.map((e) => {
     if (e.type !== "message") return "";
     const role = e.message.role ?? "unknown";
-    return `[${e.timestamp}] ${role}: ${entryText(e).slice(0, 2000)}`;
+    return `[${e.timestamp}] ${role}: ${entryText(e)}`;
   });
   return {
     content: [

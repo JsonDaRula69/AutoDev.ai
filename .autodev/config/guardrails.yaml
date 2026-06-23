@@ -7,19 +7,18 @@ hard_stops:
 
   - id: never-deploy-directly
     description: "AutoDev never deploys directly. Submit PRs, pass CI, alert liaison. Task not complete until liaison verifies deployment."
-    check: "action_type == 'deploy' AND agent != 'navigator'"
     enforcement: block_action
     applies_to: [nemo, aronnax, ned_land, oracle, momus, conseil, metis, engineer, harbor_master, boatswain]
 
   - id: no-secrets-in-code
     description: "API keys, tokens, credentials never go in source files. Use environment variables or a secrets manager. If you find secrets in code, file an issue."
-    check: "action_type == 'commit' AND contains_secrets(diff)"
+    check: "action_type == 'write' AND contains_secrets(diff)"
     enforcement: block_commit
     applies_to: all
 
   - id: one-task-at-a-time
     description: "Do not context-switch. If interrupted, log as GitHub issue and resume original task."
-    check: "active_tasks > 1"
+    check: "active_tasks >= 1"
     enforcement: block_new_task
     applies_to: all
 
@@ -31,7 +30,6 @@ hard_stops:
 
   - id: follow-the-plan
     description: "If a plan exists at .autodev/plans/<slug>.md, implement what the plan says. Do not add improvements the plan didn't call for. If the plan is wrong, fix the plan first."
-    check: "action_type == 'implement' AND plan_exists AND implementation_deviates_from_plan"
     enforcement: block_action
     applies_to: [ned_land]
 
@@ -54,7 +52,7 @@ hard_stops:
 
   - id: never-modify-debate-transcripts
     description: "Debate transcripts are immutable audit trail. Never modify them after verdict."
-    check: "action_type == 'write' AND path_starts_with('.autodev/debates/') AND debate_phase == 'complete'"
+    check: "action_type == 'write' AND path_starts_with('.autodev/debates/')"
     enforcement: block_write
     applies_to: all
 

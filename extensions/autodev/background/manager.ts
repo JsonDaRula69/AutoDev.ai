@@ -199,6 +199,8 @@ export class BackgroundManager {
   private onCircuitBreakerTrip(id: string): void {
     const state = this.tasks.get(id);
     if (state === undefined || isTerminal(state.status)) return;
+    // If the task already received a terminal event (agent_end), let the event win.
+    if (state.receivedTerminalEvent === true) return;
     const session = this.sessions.get(id);
     void session?.abort();
     this.finishTask(id, "error", undefined, "circuit-breaker-timeout");
@@ -217,6 +219,7 @@ export class BackgroundManager {
     }
 
     if (event.type === "agent_end") {
+      state.receivedTerminalEvent = true;
       this.breaker.clear(id);
       this.finishTask(id, "completed", event.messages, undefined);
       this.freeSlot(state.providerKey);
@@ -250,7 +253,13 @@ export class BackgroundManager {
     state.status = "pending";
 
     this.dec(oldKey);
-    void this.startTask(id);
+    // Go through concurrency check instead of calling startTask directly.
+    if (this.running(state.providerKey) < this.maxFor(state.providerKey)) {
+      void this.startTask(id);
+    } else {
+      this.queue.push({ taskId: id, providerKey: state.providerKey });
+    }
+    void this.drainQueue();
   }
 
   private disposeSession(id: string): void {

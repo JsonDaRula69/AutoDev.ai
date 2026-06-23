@@ -24,12 +24,25 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
  * loreguard as unavailable.
  */
 let suggestLoreImpl: ((title: string, content: string, category?: string) => { id: number }) | undefined;
-try {
-  // Bun resolves the .js suffix to the compiled TypeScript module at test time.
-  const mod = require("../loreguard/index.js");
-  suggestLoreImpl = typeof mod.suggestLore === "function" ? mod.suggestLore : undefined;
-} catch {
-  suggestLoreImpl = undefined;
+
+/**
+ * Override suggestLoreImpl for tests that need synchronous injection.
+ * Tests call this before setSearchLoreAvailable(true) to avoid the async
+ * import race in initSuggestLore.
+ */
+export function setSuggestLoreImpl(
+  impl: ((title: string, content: string, category?: string) => { id: number }) | undefined,
+): void {
+  suggestLoreImpl = impl;
+}
+
+async function initSuggestLore(): Promise<void> {
+  try {
+    const mod = await import("../loreguard/index.js");
+    suggestLoreImpl = typeof mod.suggestLore === "function" ? (mod.suggestLore as typeof suggestLoreImpl) : undefined;
+  } catch {
+    suggestLoreImpl = undefined;
+  }
 }
 
 /**
@@ -220,6 +233,10 @@ export function storeProblem(
 }
 
 export function register(pi: ExtensionAPI): void {
+  // Kick off lazy import of loreguard so suggestLoreImpl is available by the
+  // time storeDecision is called during agent work.
+  void initSuggestLore();
+
   // notepad is invoked directly by subagents; no event subscriptions or
   // tool registrations are required at load time. However, we DO probe the
   // pi runtime for the `search_lore` tool (registered by the loreguard

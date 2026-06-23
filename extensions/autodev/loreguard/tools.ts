@@ -23,10 +23,10 @@ import { getDb } from "./db.js";
 export const SuggestLoreSchema = Type.Object({
   title: Type.String({ description: "Decision title" }),
   content: Type.String({ description: "Decision content in markdown" }),
-  category: Type.String({
-    description: "Category: fact, onboarding, or design",
-    default: "fact",
-  }),
+  category: Type.Union(
+    [Type.Literal("fact"), Type.Literal("onboarding"), Type.Literal("design")],
+    { description: "Category: fact, onboarding, or design", default: "fact" },
+  ),
 });
 export type SuggestLoreInput = Static<typeof SuggestLoreSchema>;
 
@@ -84,9 +84,7 @@ export async function suggestLoreExecute(
   _toolCallId: string,
   params: SuggestLoreInput,
 ): Promise<ToolResult> {
-  const cat = params.category === "onboarding" || params.category === "design"
-    ? params.category
-    : "fact";
+  const cat = params.category;
   const res = suggestDecision(getDb(), params.title, params.content, cat);
   return text(
     `Draft ADR #${res.id} created (status: ${res.status}). Call ratify_lore to submit for review.`,

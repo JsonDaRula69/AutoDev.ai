@@ -17,10 +17,11 @@ import {
   storeProblem,
   setSearchLoreAvailable,
   isSearchLoreAvailable,
+  setSuggestLoreImpl,
   MEMORY_CATEGORY_ARCHITECTURE,
   MEMORY_CATEGORY_CONSTRAINTS,
 } from "../extensions/autodev/notepad/index.js";
-import { setDb, resetDb, createSchema, checkSqliteVersion } from "../extensions/autodev/loreguard/index.js";
+import { setDb, resetDb, createSchema, checkSqliteVersion, suggestDecision } from "../extensions/autodev/loreguard/index.js";
 
 let tempRoot: string;
 
@@ -40,6 +41,10 @@ beforeEach(() => {
   checkSqliteVersion(memDb);
   createSchema(memDb);
   setDb(memDb);
+  // Inject suggestLore synchronously so tests don't wait for the async import.
+  setSuggestLoreImpl((title, content, category) =>
+    suggestDecision(memDb, title, content, (category ?? "fact") as "fact" | "onboarding" | "design"),
+  );
   // Default to false (no pi registration); each test that exercises the
   // loreguard path must explicitly enable it via setSearchLoreAvailable(true).
   setSearchLoreAvailable(false);
@@ -48,6 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   resetDb();
   setSearchLoreAvailable(false);
+  setSuggestLoreImpl(undefined);
   memDb.close();
 });
 

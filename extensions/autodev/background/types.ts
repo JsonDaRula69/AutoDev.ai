@@ -39,6 +39,8 @@ export interface TaskState {
   readonly thinkingLevel: string | undefined;
   /** Models already tried, used to advance through the fallback chain. */
   triedModels: string[];
+  /** Set when a terminal agent event (agent_end) has been received. Circuit breaker should not abort. */
+  receivedTerminalEvent: boolean | undefined;
 }
 
 /** Configuration for spawning a background task. */
@@ -134,5 +136,6 @@ export function createTaskState(id: string, config: SpawnConfig): TaskState {
     onParentWake: config.onParentWake,
     thinkingLevel: config.thinkingLevel,
     triedModels: [config.model],
+    receivedTerminalEvent: undefined,
   };
 }

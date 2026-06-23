@@ -34,10 +34,11 @@ import {
   storeVerification,
   storeProblem,
   setSearchLoreAvailable,
+  setSuggestLoreImpl,
   MEMORY_CATEGORY_ARCHITECTURE,
   MEMORY_CATEGORY_CONSTRAINTS,
 } from "../extensions/autodev/notepad/index.js";
-import { setDb, resetDb, createSchema, checkSqliteVersion } from "../extensions/autodev/loreguard/index.js";
+import { setDb, resetDb, createSchema, checkSqliteVersion, suggestDecision } from "../extensions/autodev/loreguard/index.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 const CONFIG_PATH = resolve(PROJECT_ROOT, ".pi", "magic-context.jsonc");
@@ -96,12 +97,17 @@ beforeEach(() => {
   checkSqliteVersion(memDb);
   createSchema(memDb);
   setDb(memDb);
+  // Inject suggestLore synchronously so tests don't wait for the async import.
+  setSuggestLoreImpl((title, content, category) =>
+    suggestDecision(memDb, title, content, (category ?? "fact") as "fact" | "onboarding" | "design"),
+  );
   setSearchLoreAvailable(false);
 });
 
 afterEach(() => {
   resetDb();
   setSearchLoreAvailable(false);
+  setSuggestLoreImpl(undefined);
   memDb.close();
 });
 

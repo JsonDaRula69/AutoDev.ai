@@ -212,11 +212,12 @@ export function searchDecisions(
   const ids = ftsRows.map((r) => r.id);
   const placeholders = ids.map(() => "?").join(",");
   const statusClause = includeDrafts ? "" : " AND status = 'ratified'";
+  const orderByCase = ids.map((id, i) => `WHEN ${id} THEN ${i}`).join(" ");
   const rows = db
     .prepare(
       `SELECT id, title, status, category, content, created_at, ratified_at
        FROM decisions WHERE id IN (${placeholders})${statusClause}
-       ORDER BY id`,
+       ORDER BY CASE id ${orderByCase} END`,
     )
     .all(...ids) as DecisionRow[];
   return { results: rows.map(toDecision) };

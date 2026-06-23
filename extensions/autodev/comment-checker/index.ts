@@ -15,6 +15,7 @@
  *  - "TODO: implement ..." with no owner/date
  *  - "This is a ..." on a declaration that already names itself
  */
+import { readFileSync, writeFileSync } from "node:fs";
 import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 
 /** A single slop pattern match found in written content. */
@@ -156,8 +157,39 @@ export function register(pi: ExtensionAPI): void {
     const report = stripSlop(content);
     if (report.stripped === 0) return undefined;
 
+    // Extract file path from the tool result event
+    const input = event.input as { filePath?: string };
+    const filePath = input?.filePath;
+
+    if (filePath) {
+      try {
+        // Read the file from disk
+        const diskContent = readFileSync(filePath, "utf8");
+        // Apply stripSlop to the actual file content
+        const diskReport = stripSlop(diskContent);
+        if (diskReport.stripped > 0) {
+          // Write the cleaned content back
+          writeFileSync(filePath, diskReport.cleaned, "utf8");
+          ctx.ui.notify(
+            `comment-checker: stripped ${diskReport.stripped} slop pattern(s) from ${filePath}`,
+            "warning",
+          );
+          for (const m of diskReport.matches) {
+            ctx.ui.notify(
+              `  L${m.line}:${m.column} [${m.pattern}] ${m.suggestion}`,
+              "info",
+            );
+          }
+          return undefined;
+        }
+      } catch {
+        // If we can't read/write the file, fall through to the original notification
+      }
+    }
+
+    // Fallback: original notification behavior
     ctx.ui.notify(
-      `comment-checker: stripped ${report.stripped} slop pattern(s) from ${event.toolName} result`,
+      `comment-checker: detected ${report.stripped} slop pattern(s) in ${event.toolName} result`,
       "warning",
     );
     for (const m of report.matches) {
