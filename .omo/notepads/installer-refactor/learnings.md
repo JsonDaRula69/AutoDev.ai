@@ -26,3 +26,19 @@
 - `bun run scripts/cli.ts config` prints correct usage with llm/voyage/discord/github
 - `bun run scripts/cli.ts badcommand` exits with code 1 and prints usage
 - Fix: first pass left empty `"preinstall": ""` / `"postinstall": ""` keys and wrong CLI references; amended commit fixes all three defects
+
+## 2026-06-23 — Config module created (todo 4)
+
+- Created `extensions/autodev/installer/config-module.ts` with `runConfig(deps, subcommand?)` and all 4 handlers.
+- `ConfigModuleDeps` = `{ projectRoot, authPath, prompter, notify, execSyncOverride? }` — no `nonInteractive` field.
+- `ConfigResult` = `{ name, status, message }` with status union `"ok" | "skipped" | "warning" | "error"`.
+- **llm handler**: prompts for provider (default `ollama-cloud`), checks `~/.pi/agent/auth.json` and `~/.opencode/auth.json` for import, writes actual secret to `.env` and env-var reference (`$OLLAMA_CLOUD_API_KEY`) to `auth.json`.
+- **voyage handler**: prompts for key, Enter → writes empty `VOYAGE_API_KEY=` to `.env` with ONNX fallback warning.
+- **discord handler**: confirm (default no), if yes prompts token/channel/liaison, writes all three to `.env`.
+- **github handler**: checks `gh auth status` first, then prompts to run `gh auth login --web` via `execSyncOverride` with 5-min timeout.
+- `ensureGitignore` runs on first handler invocation via local flag.
+- Sub-command routing: undefined/empty → all 4 in order; known sub-command → single handler; unknown → error result.
+- No `nonInteractive` field — config is interactive-only. No-TTY prompter returns empty strings; handlers warn and skip.
+- TypeScript: `HANDLERS[name]!` non-null assertion needed because `for...of` on `as const` array still types `name` as `string`, not the literal union.
+- All acceptance criteria pass: file exists, typecheck clean (no config-module errors), no forbidden terms, `execSyncOverride` present, `nonInteractive` absent.
+- Evidence at `.omo/evidence/task-4-installer-refactor.md`.
