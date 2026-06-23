@@ -116,6 +116,8 @@ Everything gets recorded in a Harbor Log. It is a journal of the conversation, n
 
 Onboarding takes 5 to 10 minutes. When it completes, the crew is ready for work.
 
+After onboarding, you interact only with the Harbor Master. The rest of the crew is invisible to you. If any agent hits a blocker or needs clarification, it alerts the Harbor Master through the team mailbox, and the Harbor Master contacts you via CLI or Discord. The Harbor Master is a permanent interface — not just an onboarding tool.
+
 ---
 
 ## How It Works
@@ -131,7 +133,7 @@ GitHub issue (autodev-request)
   -> Oracle reviews the PR
   -> CI runs
   -> Evidence + CI + Oracle all green? Auto-merge.
-  -> Liaison deploys and verifies
+  -> Liaison deploys and verifies (if applicable — agent-consumed projects only)
   -> Nemo closes the issue
 ```
 
@@ -152,6 +154,8 @@ The crew works one task at a time. If interrupted with new instructions while wo
 
 AutoDev merges when evidence, CI, and Oracle review all pass. No human approval step blocks the pipeline. Humans can still intervene. `@autodev hold` on a PR freezes it. `@autodev proceed` releases it. But the default is autonomy. The crew ships when the verification gates are green, not when someone clicks approve.
 
+The liaison role is optional. It applies when the project is used by other agents (like an MCP server) — the liaison handles end-user testing because the end user is another agent. For standard projects (web apps, APIs, tools consumed by humans), the crew coordinates deployment directly.
+
 ### Label Lifecycle
 
 GitHub labels are the single source of truth for workflow state. The Quartermaster transitions labels when evidence gates are satisfied. The board is a view layer that reflects label state, not a separate system.
@@ -162,6 +166,10 @@ autodev-request  ->  autodev-planned  ->  autodev-in-progress
 ```
 
 Blocked: `autodev-blocked`. Rejected: `autodev-rejected`.
+
+### Multiple Projects
+
+AutoDev can work on multiple projects at the same time. Each project lives in its own directory with its own GitHub repo and its own crew of agents. The Harbor Master tracks which project is currently active and keeps context on all projects so nothing gets mixed up.
 
 ### Guardrails
 

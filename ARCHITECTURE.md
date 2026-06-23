@@ -100,7 +100,11 @@ Label lifecycle on the GitHub issue:
 autodev-request -> autodev-planned -> autodev-in-progress -> autodev-review -> autodev-ready -> autodev-merged
 ```
 
-Blocked items get `autodev-blocked`. Rejected items get `autodev-rejected`. The Quartermaster enforces label transitions when evidence gates are satisfied. Implemented by T13 in the pi-foundation plan.
+Blocked items get `autodev-blocked`. Rejected items get `autodev-rejected`. The Quartermaster enforces label transitions when evidence gates are satisfied.
+
+All planning, progress tracking, and project management happens through GitHub. Issues are the work queue, labels are the state machine, PRs are the delivery mechanism, CI is the quality gate, and comments are the communication channel. No external project management tools or tracking systems are used.
+
+Implemented by T13 in the pi-foundation plan.
 
 ---
 
@@ -345,7 +349,11 @@ The `auto_merge_pr` pi tool checks three gates before merging:
 
 If all three are green, the tool runs `gh pr merge --squash --delete-head`. The label transitions from `autodev-ready` to `autodev-merged`. A completion comment is posted on the issue.
 
-If any gate fails, the merge is blocked with a reason string. No silent failures. The Quartermaster enforces label transitions. Humans can freeze a PR with `@autodev hold` and release it with `@autodev proceed`. Humans intervene to stop things, not to permit them. Implemented by T16 in the pi-foundation plan.
+If any gate fails, the merge is blocked with a reason string. No silent failures. The Quartermaster enforces label transitions. Humans can freeze a PR with `@autodev hold` and release it with `@autodev proceed`. Humans intervene to stop things, not to permit them.
+
+The liaison role is optional. It applies when the project is consumed by other agents (e.g., an MCP server for Openclaw agents) — the liaison handles end-user testing since the end user is another agent. For standard projects consumed by humans (web apps, APIs, CLI tools), the liaison may not be applicable. The deployment protocol conditionally includes the liaison based on project type, determined during Harbor Master onboarding.
+
+Implemented by T16 in the pi-foundation plan.
 
 ---
 
@@ -421,6 +429,8 @@ IntentGate analyzes true user intent before classifying or acting. Literal inter
 Applied in two places:
 
 **Harbor Master onboarding.** When the user gives their initial project description, IntentGate analyzes it to surface hidden intentions. It suggests probing questions the Harbor Master should ask. A user who says "I want a trading bot" might actually need risk controls, compliance checks, and audit trails. IntentGate surfaces that.
+
+Harbor Master is the sole user-facing point of contact. All other agents are invisible to the user. If any agent needs clarification, encounters an issue requiring user input, or surfaces a blocker, it alerts Harbor Master through the team mailbox. Harbor Master then contacts the user via CLI or Discord. Harbor Master remains reachable after onboarding completes — it is a permanent user interface, not just an onboarding agent.
 
 **Nemo triage.** When a GitHub issue arrives, IntentGate analyzes the issue text to detect the true intent. "The dashboard is slow" could be a bug (query performance), a feature request (add caching), or a refactor (restructure the data layer). IntentGate classifies the intent (bug, feature, refactor, question) before Cynefin classification runs.
 
@@ -535,7 +545,32 @@ Implemented by T13 in the pi-foundation plan.
 
 ---
 
-## 31. Failure Modes and Recovery
+## 31. Debug Mode
+
+Debug mode enables logging for all agent thinking and actions. It is off by default.
+
+When enabled, every agent session logs:
+- Model prompts and responses
+- Tool calls and results
+- Guardrail inspections (pass/block decisions)
+- Background task lifecycle events
+- Heartbeat poll results
+
+Debug output goes to a configurable log file (default: `.autodev/debug.log`) or stdout. This is for development and troubleshooting — the verbosity makes it unsuitable for normal operation. Enable via `autodev doctor --debug on` or the `AUTODEV_DEBUG=true` environment variable.
+
+---
+
+## 32. Multi-Project Support
+
+AutoDev supports multiple projects simultaneously. Each project is self-contained in its own working directory, linked to its own GitHub repository. Each project has an independent team of agents to enable simultaneous work without confusion.
+
+Harbor Master tracks which project is currently active (the one the user is discussing or working on) and maintains awareness of all other projects and their current states. When the user switches context, Harbor Master notes the switch and the crew adjusts its active work accordingly. Projects do not get mixed up — each has its own `.autodev/` state, its own agent sessions, and its own GitHub label set.
+
+The heartbeat polls GitHub across all configured project repositories. Nemo triages issues per-project, routing work to the project's dedicated crew. Background agents are scoped to their project's working directory.
+
+---
+
+## 33. Failure Modes and Recovery
 
 | Failure | How it is detected | Recovery |
 |---------|-------------------|----------|
@@ -550,9 +585,20 @@ Implemented by T13 in the pi-foundation plan.
 | Debate deadlock | Judges cannot reach a verdict, needs-revision loops repeat | After 3 needs-revision loops, the debate escalates to Nemo for a final decision. |
 | Merge conflict | `gh pr view` shows `mergeable: false` | Ned Land rebases on the target branch, re-pushes, and re-enters the verification loop. |
 
+### Watch Officer: Proactive Monitoring
+
+The Watch Officer does not wait for failures. During implementation, it monitors in real time to detect deviations before they happen:
+
+- **Plan deviation**: implementation that diverges from the approved plan
+- **API mismatch**: incorrect implementation of a dependency's documented API
+- **Dependency incompatibility**: code that conflicts with dependency documentation
+- **Assumption errors**: agent assumptions that don't match the actual codebase or project constraints
+
+This is a proactive role, not just reactive self-healing. The Watch Officer observes ongoing agent work and flags issues through the team mailbox before they propagate into committed code.
+
 ---
 
-## 32. Data Flow Diagrams
+## 34. Data Flow Diagrams
 
 ### Diagram A: GitHub issue to merge pipeline (end to end)
 
@@ -607,7 +653,7 @@ GitHub issue labeled autodev-request
   Label: autodev-merged
         |
         v
-  Navigator alerts liaison, liaison deploys and verifies
+  Navigator alerts liaison (if applicable), liaison deploys and verifies — OR Navigator confirms deployment directly for human-consumed projects
         |
         v
   Task complete
@@ -697,5 +743,7 @@ GitHub issue labeled autodev-request
 | Context Injection | T5 |
 | Magic Context Integration | T3, T6 |
 | CLI Commands | T13 |
+| Debug Mode | (new todo — pi-foundation plan) |
+| Multi-Project Support | (new todo — pi-foundation plan) |
 
-Features not in the pi-foundation plan are documented in `ROADMAP.md` as future waves. This architecture covers only what the pi-foundation plan builds.
+Features not in the pi-foundation plan are documented in `ROADMAP.md` as future waves. This architecture covers only what the pi-foundation plan builds, including multi-project support.

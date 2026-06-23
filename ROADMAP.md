@@ -8,6 +8,8 @@ The pi-foundation wave builds the core autonomous engineering team. Thirteen cre
 
 This roadmap tracks what comes AFTER that foundation is solid. It's organized by priority and dependency, not by date. Three waves: near-term enhancements that build on what's already there, medium-term features that need moderate effort, and long-term waves that require significant work. A final section covers opt-in and future enhancements to Magic Context itself.
 
+Multi-project support has been moved into the initial pi-foundation wave — it is no longer a future-wave item.
+
 Each entry says what the feature is, why it's deferred, which wave it belongs to, and what depends on it. No implementation details here. This is a roadmap, not a plan.
 
 ## Near-term enhancements
@@ -78,21 +80,13 @@ Full agent monitoring beyond the circuit breaker. The initial wave's background 
 
 Major features that require significant effort. Each one reshapes how AutoDev operates.
 
-### Multi-project routing
-
-Point AutoDev at multiple projects at once. Nemo triages across all of them. Each project gets its own .autodev/ state. Sessions are scoped per project so context doesn't leak between them.
-
-- **Why deferred:** Single-project operation is the core use case and must be solid before adding multi-project complexity.
-- **Wave:** Long-term.
-- **Depends on:** Complete pi-foundation (all 16 todos).
-
 ### Installer
 
 One-command setup. `curl ... | sh` or `npx autodev-init`. The installer handles pi installation, Magic Context setup, credential configuration, GitHub label creation, and knowledge base seeding in a single guided flow.
 
 - **Why deferred:** The manual setup steps are documented and manageable for early adopters. A polished installer is for broader adoption.
 - **Wave:** Long-term.
-- **Depends on:** Complete pi-foundation, multi-project routing.
+- **Depends on:** Complete pi-foundation.
 
 ### Single binary
 
