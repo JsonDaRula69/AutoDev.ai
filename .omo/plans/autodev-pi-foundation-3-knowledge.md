@@ -3,6 +3,16 @@
 > **BRANCH:** All work in this plan is conducted on the `pi-foundation` branch. Do NOT push to `main`. The `pi-foundation` branch was created from `main` as a fresh start — all commits land here. `main` is frozen and will not receive any pushes during this work. Upon completion of all sub-plans, `main` will be deprecated and `pi-foundation` will become the new `main` branch (via branch rename or fast-forward merge at the user's discretion).
 
 > **PREREQUISITE:** This plan depends on `.omo/plans/autodev-pi-foundation-1-core.md` being complete. The base extension (T5) must be in place before this plan can execute. This plan can parallelize with Plan 2 (Crew Engine) after Plan 1 completes.
+>
+> > **SOURCE OF TRUTH:** During implementation, agents must refer to these resources:
+> > 1. **ARCHITECTURE.md** (root) — the system design specification (§10 Loreguard, §11 Docs Query, §12 Custom Tools, §13 Skills)
+> > 2. **STRUCTURE.md** (root) — the directory map and reference catalog
+> > 3. **.autodev/reference/** — immutable specs
+> > 4. **docs-corpus/pi/** — pi SDK documentation (sdk.md for defineTool, skills.md for SKILL.md format)
+> > 5. **docs-corpus/magic-context/** — Magic Context documentation
+> > 6. **This plan file** — the implementation specification
+> >
+> > If any source disagrees, ARCHITECTURE.md wins on design, .autodev/reference/ wins on process, and this plan wins on scope.
 
 > **SPLIT FROM:** This is sub-plan 3 of 4 from the master plan `.omo/plans/autodev-pi-foundation.md`. Execute after Plan 1 completes. Can run in parallel with Plan 2.
 
@@ -29,8 +39,8 @@ This plan implements the design described in the following documents. If this pl
 ### Must have
 
 - **Loreguard: ADR store + search_lore tool.** SQLite FTS5-backed ADR store (bun:sqlite works on pi). CRUD operations, full-text search, ratification workflow. Expose as `search_lore` pi tool.
-- **Docs query: embeddings + search_docs tool.** Embedding layer (VoyageAI or local ONNX), vector store (SQLite BLOB cosine similarity), search_docs tool. Rebuild docs corpus from docs-corpus/ (218 files).
-- **Custom tools via defineTool().** Register: todowrite, search_lore, search_docs, look_at (if multimodal needed), session management tools. Each tool: name, description, parameters (TypeBox schema), execute function returning content + details.
+- **Docs query: embeddings + search_docs tool.** Embedding layer (VoyageAI or local ONNX), vector store (SQLite BLOB cosine similarity), search_docs tool. Rebuild docs corpus from docs-corpus/ (119 files).
+- **Custom tools via defineTool().** Register: todowrite, look_at, session_list, session_read, session_search. (Note: search_lore is registered in T10, search_docs is registered in T11 — those are NOT in this todo.) Each tool: name, description, parameters (TypeBox schema), execute function returning content + details.
 - **Skills system.** Port .autodev/skills/ to pi's skill format (SKILL.md with YAML frontmatter). Skills: autodev-triage, autodev-implement, autodev-review, autodev-deploy. Load via pi's skill discovery (`.pi/skills/` or `.agents/skills/`).
 
 ### Must NOT have (guardrails, anti-slop, scope boundaries)
@@ -46,6 +56,14 @@ This plan implements the design described in the following documents. If this pl
 - **Must NOT register tools that duplicate Magic Context's tools** (ctx_search, ctx_memory, etc.).
 - **Must NOT port third-party skills** — only AutoDev's 4 custom skills.
 - **Must NOT push to `main`.** All work is on the `pi-foundation` branch. `main` is frozen. No commits, no pushes to `main` during this work. Upon completion, `main` will be deprecated and `pi-foundation` becomes the new `main`.
+
+## Mock Strategy (No Building in Place)
+
+This plan follows the "no building in place" approach: tests use mocks, not real pi sessions or external services. Real verification happens at deployment time via the installer (T19 in Plan 4).
+
+- **T10 (Loreguard)**: Tests use bun:sqlite directly (in-memory or temp DB). The `search_lore` tool is tested by calling its execute function directly — no real pi session needed.
+- **T11 (Docs query)**: Tests use a small test corpus (3-5 files) with local ONNX embeddings (no VoyageAI API key needed). The `search_docs` tool is tested by calling its execute function directly.
+- **T12 (Custom tools + skills)**: Tool tests call execute functions directly. Skill tests verify file format and discoverability (read SKILL.md files, check frontmatter) — no real session needed.
 
 ## Dependency matrix
 
@@ -73,10 +91,10 @@ Critical Path: T5 (from Plan 1) → T10/T11/T12 (all parallel)
   Commit: Y | feat(loreguard): SQLite FTS5 ADR store + search_lore tool
 
 - [ ] 11. Build docs query system and search_docs tool
-  What to do: Build a docs corpus query system. Embedding layer: support VoyageAI (remote) and local ONNX (Xenova/all-MiniLM-L6-v2, ~90MB). Vector store: SQLite BLOB storage with Float32Array cosine similarity (no sqlite-vec extension needed). search_docs tool: `search_docs(query: string, limit?: number) -> DocResult[]`. docs status: `docs_status() -> {chunk_count, doc_count, components}`. docs rebuild: `docs_rebuild() -> {chunks, errors}`. Rebuild the docs corpus from docs-corpus/ (218 files). DB path: `.autodev/embeddings/vectors.db` or configurable. Register as pi tools via defineTool().
+  What to do: Build a docs corpus query system. Embedding layer: support VoyageAI (remote) and local ONNX (Xenova/all-MiniLM-L6-v2, ~90MB). Vector store: SQLite BLOB storage with Float32Array cosine similarity (no sqlite-vec extension needed). search_docs tool: `search_docs(query: string, limit?: number) -> DocResult[]`. docs status: `docs_status() -> {chunk_count, doc_count, components}`. docs rebuild: `docs_rebuild() -> {chunks, errors}`. Rebuild the docs corpus from docs-corpus/ (119 files). DB path: `.autodev/embeddings/vectors.db` or configurable. Register as pi tools via defineTool().
   Must NOT do: Do NOT use better-sqlite3 — use bun:sqlite. Do NOT use sqlite-vec extension — pure JS cosine similarity. Do NOT require VoyageAI — local ONNX fallback must work. Do NOT delete docs-corpus/ — it's the source for rebuild.
   Parallelization: Wave 3 | Blocked by: T5 | Blocks: nothing | Can parallelize with: T6, T7, T8, T9, T10, T12
-  References: bun:sqlite for vector storage. VoyageAI API key in env var VOYAGE_API_KEY. Local ONNX model: Xenova/all-MiniLM-L6-v2. Cosine similarity: dot(a,b) / (norm(a) * norm(b)). Pi defineTool(): same as T9. docs-corpus/ has 218 files + MANIFEST.md.
+  References: bun:sqlite for vector storage. VoyageAI API key in env var VOYAGE_API_KEY. Local ONNX model: Xenova/all-MiniLM-L6-v2. Cosine similarity: dot(a,b) / (norm(a) * norm(b)). Pi defineTool(): same as T9. docs-corpus/ has 119 files + MANIFEST.md.
   Design refs: ARCHITECTURE.md §11 Docs Query System
   Acceptance criteria: `docs_status()` returns non-zero chunk_count after rebuild. `docs_rebuild()` ingests docs-corpus/ files and returns {chunks: >0, errors: 0}. `search_docs("what is magic context")` returns relevant DocResult[] with similarity scores. Local ONNX fallback works when VOYAGE_API_KEY is unset. `search_docs` tool available in pi session.
   QA scenarios: happy — rebuild ingests corpus, search returns results, local fallback works. Failure — VoyageAI API key missing and local model not downloaded; or cosine similarity returns NaN (zero vector); or docs-corpus/ empty. Evidence: `.omo/evidence/task-11-autodev-pi-foundation.txt` (rebuild output + search results + status).
@@ -110,7 +128,7 @@ Critical Path: T5 (from Plan 1) → T10/T11/T12 (all parallel)
 ## Success criteria
 
 1. Loreguard stores and retrieves ADRs via SQLite FTS5 + search_lore tool.
-2. Docs corpus (218 files) is searchable via search_docs tool with VoyageAI or local ONNX embeddings.
+2. Docs corpus (119 files) is searchable via search_docs tool with VoyageAI or local ONNX embeddings.
 3. Custom tools (todowrite, look_at, session management) registered and working.
 4. 4 AutoDev skills (triage, implement, review, deploy) ported and discoverable.
 5. `grep -r "@opencode-ai" extensions/ .pi/ src/` returns zero (zero OpenCode package imports).

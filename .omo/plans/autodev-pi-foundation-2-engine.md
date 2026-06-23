@@ -3,6 +3,16 @@
 > **BRANCH:** All work in this plan is conducted on the `pi-foundation` branch. Do NOT push to `main`. The `pi-foundation` branch was created from `main` as a fresh start — all commits land here. `main` is frozen and will not receive any pushes during this work. Upon completion of all sub-plans, `main` will be deprecated and `pi-foundation` will become the new `main` branch (via branch rename or fast-forward merge at the user's discretion).
 
 > **PREREQUISITE:** This plan depends on `.omo/plans/autodev-pi-foundation-1-core.md` being complete. The base extension (T5) and 13 agents (T4) must be in place before this plan can execute.
+>
+> > **SOURCE OF TRUTH:** During implementation, agents must refer to these resources:
+> > 1. **ARCHITECTURE.md** (root) — the system design specification
+> > 2. **STRUCTURE.md** (root) — the directory map and reference catalog
+> > 3. **.autodev/reference/** — immutable specs (workflow-specification.md section 4.1 for guardrails)
+> > 4. **docs-corpus/pi/** — pi SDK documentation (extensions.md for tool_call events, sdk.md for createAgentSession)
+> > 5. **docs-corpus/magic-context/** — Magic Context documentation
+> > 6. **This plan file** — the implementation specification
+> >
+> > If any source disagrees, ARCHITECTURE.md wins on design, .autodev/reference/ wins on process, and this plan wins on scope.
 
 > **SPLIT FROM:** This is sub-plan 2 of 4 from the master plan `.omo/plans/autodev-pi-foundation.md`. Execute after Plan 1 completes. Plan 3 (Knowledge + Tools) can parallelize with this plan after Plan 1 completes.
 
@@ -28,7 +38,7 @@ This plan implements the design described in the following documents. If this pl
 
 ### Must have
 
-- **Guardrail engine via tool_call interception.** Implement hard stops (no-secrets-in-code, evidence-required, follow-the-plan, one-task-at-a-time, ci-is-hard-gate) as pi `tool_call` event handlers that block violating actions. Write tests: plant a secret in a file write → blocked; write evidence then commit → allowed.
+- **Guardrail engine via tool_call interception.** Implement all 6 hard stops (never-deploy-directly, no-secrets-in-code, evidence-or-it-didnt-happen, one-task-at-a-time, follow-the-plan, ci-is-the-hard-gate) as pi `tool_call` event handlers that block violating actions. Write tests: plant a secret in a file write → blocked; write evidence then commit → allowed.
 - **Background agent management.** Spawn subagent sessions via `createAgentSession()` with `SessionManager.inMemory()`. Concurrency control (max 5 per key). Poll completion via session.subscribe() events. Circuit breaker (stale timeout 180s). Parent-wake notifier. Error classifier for retry decisions.
 - **Model fallback chains.** When a model call fails (429, 500, 502, 503, 504), extract error info, resolve the agent's fallback_models chain from config, abort current session, re-prompt with fallback model. Proactive (configured per agent) + reactive (auto-switch on API errors).
 - **Category system for task delegation.** Built-in categories: quick, deep, ultrabrain, visual-engineering, artistry, writing, unspecified-low, unspecified-high. Custom categories configurable. `task(category="...")` routes to Sisyphus-Junior equivalent with category-optimized model. `task(subagent_type="...")` invokes specific crew agent.
@@ -40,6 +50,14 @@ This plan implements the design described in the following documents. If this pl
 - **Must NOT reimplement semantic memory.** Magic Context Pi extension provides ctx_search, ctx_memory, ctx_note, ctx_expand, ctx_reduce, historian, dreamer. Install it, don't rebuild it.
 - **Must NOT build a single binary.** Future wave. Out of scope.
 - **Must NOT push to `main`.** All work is on the `pi-foundation` branch. `main` is frozen. No commits, no pushes to `main` during this work. Upon completion, `main` will be deprecated and `pi-foundation` becomes the new `main`.
+
+## Mock Strategy (No Building in Place)
+
+This plan follows the "no building in place" approach: tests use mocks, not real pi sessions or external services. Real verification happens at deployment time via the installer (T19 in Plan 4).
+
+- **T7 (Guardrails)**: Tests mock the tool_call event to verify hard stop logic. No real pi session needed — test the handler function directly with mock events.
+- **T8 (Background agents)**: Tests mock `createAgentSession` and `session.subscribe()` to verify lifecycle management, concurrency control, and circuit breaker logic. No real model calls — mock sessions return predetermined events.
+- **T9 (Category system)**: Tests mock the background agent manager (T8) to verify routing. No real sessions spawned — verify the category config is loaded and the correct model/session config is passed.
 
 ## Dependency matrix
 
@@ -77,10 +95,10 @@ Critical Path: T5 (from Plan 1) → T8 → T9
   Commit: Y | feat(orchestration): background agent manager + model fallback chains
 
 - [ ] 9. Build category system and task delegation
-  What to do: Build the task delegation system. Built-in categories: quick (trivial fixes), deep (autonomous problem-solving), ultrabrain (hard logic), visual-engineering (frontend/UI), artistry (creative), writing (docs/prose), unspecified-low (general low-effort), unspecified-high (general high-effort). Category model assignments loaded from config (.autodev/config/ or .pi/settings.json) — NOT hardcoded. Default model mapping: quick=glm-5.2:cloud, deep=deepseek-v4-pro, ultrabrain=deepseek-v4-pro (with thinkingLevel="xhigh" if supported), visual-engineering=glm-5.2:cloud, artistry=glm-5.2:cloud, writing=glm-5.2:cloud, unspecified-low=glm-5.2:cloud, unspecified-high=glm-5.2:cloud. All model strings must be validated against the provider API before use. Custom categories configurable in .autodev/config/. Register a `task` pi tool via `defineTool()` that accepts either `category` or `subagent_type` (mutually exclusive). When category is given: spawn a background session (via T8's manager) with the category's model and a system prompt that includes the task description + skill context. When subagent_type is given: spawn a specific crew agent (explore, oracle, etc. from T4's 13 agents). Support `run_in_background: true` for async execution. Support `load_skills` parameter to inject skill prompts (NOTE: skills are ported in T12 which runs in a later wave — implement the parameter interface now, but it will return no skills until T12 completes).
+  What to do: Build the task delegation system. Built-in categories: quick (trivial fixes), deep (autonomous problem-solving), ultrabrain (hard logic), visual-engineering (frontend/UI), artistry (creative), writing (docs/prose), unspecified-low (general low-effort), unspecified-high (general high-effort). Category model assignments loaded from config (.autodev/config/ or .pi/settings.json) — NOT hardcoded. Default model mapping: quick=glm-5.2:cloud, deep=deepseek-v4-pro, ultrabrain=deepseek-v4-pro (with thinkingLevel="xhigh" if supported), visual-engineering=glm-5.2:cloud, artistry=glm-5.2:cloud, writing=glm-5.2:cloud, unspecified-low=glm-5.2:cloud, unspecified-high=glm-5.2:cloud. All model strings must be validated against the static allowlist at `.autodev/config/models.json` (created in T3 of Plan 1). No real API calls during development — the installer (T19) verifies model availability at deployment. Custom categories configurable in .autodev/config/. Register a `task` pi tool via `defineTool()` that accepts either `category` or `subagent_type` (mutually exclusive). When category is given: spawn a background session (via T8's manager) with the category's model and a system prompt that includes the task description + skill context. When subagent_type is given: spawn a specific crew agent (explore, oracle, etc. from T4's 13 agents). Support `run_in_background: true` for async execution. Support `load_skills` parameter to inject skill prompts (NOTE: skills are ported in T12 which runs in a later wave — implement the parameter interface now, but it will return no skills until T12 completes).
   Must NOT do: Do NOT allow category and subagent_type together (mutually exclusive). Do NOT let Sisyphus-Junior equivalent re-delegate (block task tool for delegated sessions). Do NOT hardcode models — load from config.
   Parallelization: Wave 2 | Blocked by: T8 | Blocks: T13 | Can parallelize with: T6, T7, T10, T11, T12
-  References: Pi defineTool(): `defineTool({ name, label, description, parameters: Type.Object({...}), execute: async (id, params) => ({ content, details }) })`. Categories: quick, deep, ultrabrain, visual-engineering, artistry, writing, unspecified-low, unspecified-high. Pi docs: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md (defineTool, customTools). TypeBox for schemas: `import { Type } from "@sinclair/typebox"`.
+  References: Pi defineTool(): `defineTool({ name, label, description, parameters: Type.Object({...}), execute: async (id, params) => ({ content, details }) })`. Categories: quick, deep, ultrabrain, visual-engineering, artistry, writing, unspecified-low, unspecified-high. Pi docs: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md (defineTool, customTools). TypeBox for schemas: `import { Type } from "typebox"`.
   Design refs: ARCHITECTURE.md §9 Category System for Task Delegation
   Acceptance criteria: A test that calls `task(category="quick", prompt="fix typo")` and confirms a background session is spawned with the quick category model. A test that calls `task(subagent_type="explore", prompt="find all tests")` and confirms an Explore agent session is spawned. A test that calls `task(category="quick", run_in_background=true)` and confirms it returns a task ID immediately. A test that calls `task(category="invalid")` and gets an error. Category models loaded from config (not hardcoded).
   QA scenarios: happy — task delegates to correct category/agent, background mode works, invalid category rejected. Failure — wrong model used (config not loaded); or background mode blocks (not async); or invalid category accepted. Evidence: `.omo/evidence/task-9-autodev-pi-foundation.txt` (test outputs).
