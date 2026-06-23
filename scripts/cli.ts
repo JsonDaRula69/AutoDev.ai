@@ -12,9 +12,10 @@
  * arbitrary cwd and needs the agent-dir env).
  *
  * Subcommands:
+ *   autodev init [--skip-onboard] — project initialization (steps 1-10)
  *   autodev doctor             — machine-level health check
  *   autodev config [sub]       — config module (runConfig, created in todo 4)
- *   autodev onboard            — launch Harbor Master onboarding (hint)
+ *   autodev onboard            — launch Harbor Master onboarding
  *   autodev status             — heartbeat state + active project
  *   autodev stop               — stop heartbeat timer
  *   autodev docs query <text> — docs query stub (print message)
@@ -118,13 +119,17 @@ function notify(msg: string, level: "info" | "warning" | "error" = "info"): void
 
 // ---- Subcommand handlers ----
 
-async function cmdDoctor(): Promise<number> {
+export async function cmdDoctor(opts?: {
+  readonly runDoctorOverride?: typeof import("../extensions/autodev/installer/doctor.js")["runDoctor"];
+}): Promise<number> {
   const projectRoot = process.cwd();
   const authPath = await resolveAuthPath();
 
-  const { runDoctor } = await import("../extensions/autodev/installer/doctor.js");
-  const realExec: DoctorExecFn = (cmd, opts) =>
-    execSync(cmd, opts ?? {}) as unknown as string;
+  const runDoctor =
+    opts?.runDoctorOverride ??
+    (await import("../extensions/autodev/installer/doctor.js")).runDoctor;
+  const realExec: DoctorExecFn = (cmd, opts2) =>
+    execSync(cmd, opts2 ?? {}) as unknown as string;
 
   const result = await runDoctor({
     projectRoot,
@@ -150,10 +155,12 @@ async function cmdDoctor(): Promise<number> {
   } else if (result.failed > 0) {
     notify("Some checks failed. Run `autodev install` to fix.", "warning");
   } else if (result.checks.length > 0) {
-    notify("All machine-level checks passed.", "info");
+    notify(
+      "Installation Successful! Use cd to navigate to your project folder and run autodev init to pair a project.",
+      "info",
+    );
   }
 
-  // Exit non-zero on failures
   return result.failed > 0 ? 1 : 0;
 }
 
@@ -206,10 +213,88 @@ async function cmdConfig(parts: string[]): Promise<number> {
   return 0;
 }
 
-async function cmdOnboard(): Promise<number> {
+export async function cmdOnboard(opts?: {
+  readonly runOnboardOverride?: typeof import("./onboard.js")["runOnboard"];
+}): Promise<number> {
   const projectRoot = process.cwd();
-  const { runOnboard } = await import("./onboard.js");
+  const runOnboard = opts?.runOnboardOverride
+    ?? (await import("./onboard.js")).runOnboard;
   return runOnboard({ projectRoot, notify });
+}
+
+/**
+ * `autodev init` — run project-level initialization (steps 1-10) via runInit.
+ *
+ * Flags:
+ *   --skip-onboard  Skip the Harbor Master onboarding session (step 10).
+ *   --help, -h      Print usage and return 0.
+ *
+ * Returns 0 on success, 1 on unknown flag or runInit failure.
+ */
+export async function cmdInit(parts: string[], opts?: {
+  readonly runInitOverride?: typeof import("../extensions/autodev/installer/init-module.js")["runInit"];
+}): Promise<number> {
+  const flags = parseInitFlags(parts);
+  if (flags.unknown) {
+    notify(`Unknown flag: ${flags.unknown}`, "error");
+    printInitUsage();
+    return 1;
+  }
+  if (flags.help) {
+    printInitUsage();
+    return 0;
+  }
+
+  const projectRoot = process.cwd();
+  const runInit = opts?.runInitOverride
+    ?? (await import("../extensions/autodev/installer/init-module.js")).runInit;
+  const results = await runInit({
+    projectRoot,
+    notify,
+    skipOnboard: flags.skipOnboard,
+  });
+
+  let failures = 0;
+  for (const r of results) {
+    if (r.ok) {
+      notify(`  ✓ ${r.name}: ${r.detail}`, "info");
+    } else {
+      notify(`  ✗ ${r.name}: ${r.detail}`, "error");
+      failures++;
+    }
+  }
+  notify("", "info");
+  if (failures > 0) {
+    notify(`Init completed with ${failures} failed step(s).`, "warning");
+    return 1;
+  }
+  notify(`Init complete (${results.length} steps).`, "info");
+  return 0;
+}
+
+interface InitFlags {
+  readonly skipOnboard: boolean;
+  readonly help: boolean;
+  readonly unknown: string | undefined;
+}
+
+function parseInitFlags(parts: string[]): InitFlags {
+  let skipOnboard = false;
+  let help = false;
+  for (const p of parts) {
+    if (p === "--skip-onboard") skipOnboard = true;
+    else if (p === "--help" || p === "-h") help = true;
+    else return { skipOnboard, help, unknown: p };
+  }
+  return { skipOnboard, help, unknown: undefined };
+}
+
+function printInitUsage(): void {
+  notify("Usage: autodev init [--skip-onboard]", "info");
+  notify("", "info");
+  notify("Flags:", "info");
+  notify("  --skip-onboard  Skip the Harbor Master onboarding session (step 10).", "info");
+  notify("  --help, -h      Show this help and exit.", "info");
 }
 
 async function cmdStatus(): Promise<number> {
@@ -313,10 +398,7 @@ async function main(): Promise<number> {
 
   switch (subcommand) {
     case "":
-      notify(
-        "AutoDev subcommands: doctor, config, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
-        "info",
-      );
+      notify(HELP_SUBCOMMANDS, "info");
       return 0;
 
     case "doctor":
@@ -324,6 +406,9 @@ async function main(): Promise<number> {
 
     case "config":
       return cmdConfig(rest);
+
+    case "init":
+      return cmdInit(rest);
 
     case "onboard":
       return cmdOnboard();
@@ -345,21 +430,24 @@ async function main(): Promise<number> {
 
     default:
       notify(`Unknown subcommand: ${subcommand}`, "error");
-      notify(
-        "Subcommands: doctor, config, onboard, status, stop, docs, debate, stop-continuation",
-        "info",
-      );
+      notify(HELP_SUBCOMMANDS, "info");
       return 1;
   }
 }
 
-main()
-  .then((code) => {
-    process.exit(code);
-  })
-  .catch((e) => {
-    console.error(
-      `AutoDev CLI error: ${e instanceof Error ? e.message : String(e)}`,
-    );
-    process.exit(1);
-  });
+/** Canonical subcommand list for help text. */
+export const HELP_SUBCOMMANDS =
+  "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation";
+
+if (import.meta.main) {
+  main()
+    .then((code) => {
+      process.exit(code);
+    })
+    .catch((e) => {
+      console.error(
+        `AutoDev CLI error: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      process.exit(1);
+    });
+}

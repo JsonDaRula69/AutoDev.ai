@@ -2,6 +2,7 @@
  * CLI commands — register `autodev` subcommands via pi.registerCommand().
  *
  * Subcommands (parsed from the args string):
+ *   autodev init [--skip-onboard] — project initialization (steps 1-10)
  *   autodev doctor          — health check
  *   autodev onboard         — launch Harbor Master onboarding
  *   autodev status          — show heartbeat state and work items
@@ -24,13 +25,16 @@ import { stopAllLoops } from "../autonomy/continuation.js";
 
 export function registerCommands(pi: ExtensionAPI): void {
   pi.registerCommand("autodev", {
-    description: "AutoDev — autonomous engineering team commands. Subcommands: config, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+    description: "AutoDev — autonomous engineering team commands. Subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const parts = trimmed.split(/\s+/);
       const subcommand = parts[0]?.toLowerCase() ?? "";
 
       switch (subcommand) {
+        case "init":
+          await handleInit(parts.slice(1), ctx);
+          break;
         case "doctor":
           await handleDoctor(ctx);
           break;
@@ -58,7 +62,7 @@ export function registerCommands(pi: ExtensionAPI): void {
           break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: config, doctor, onboard, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
             "info",
           );
       }
@@ -103,7 +107,10 @@ async function handleDoctor(ctx: ExtensionCommandContext): Promise<void> {
   } else if (result.failed > 0) {
     ctx.ui.notify("Some checks failed. Run `autodev config` in an interactive terminal, or re-run `autodev doctor`.", "warning");
   } else if (result.checks.length > 0) {
-    ctx.ui.notify("All machine-level checks passed.", "info");
+    ctx.ui.notify(
+      "Installation Successful! Use cd to navigate to your project folder and run autodev init to pair a project.",
+      "info",
+    );
   }
 }
 
@@ -146,10 +153,75 @@ export function handleDebugFlag(args: string): string {
 }
 
 async function handleOnboard(ctx: ExtensionCommandContext): Promise<void> {
-  ctx.ui.notify("Launching Harbor Master onboarding...", "info");
-  ctx.ui.notify("Use: pi to start an interactive session with the Harbor Master agent.", "info");
-  // In a real implementation, this would create a Harbor Master session.
-  // For now, we delegate to the user starting pi interactively.
+  const projectRoot = ctx.cwd ?? process.cwd();
+  const { runOnboard } = await import("../../../scripts/onboard.js");
+  const code = await runOnboard({
+    projectRoot,
+    notify: (message, level) => ctx.ui.notify(message, level),
+  });
+  if (code !== 0) {
+    ctx.ui.notify(
+      "Onboarding fell back to manual instructions. See messages above.",
+      "warning",
+    );
+  }
+}
+
+interface InitFlags {
+  readonly skipOnboard: boolean;
+  readonly help: boolean;
+  readonly unknown: string | undefined;
+}
+
+function parseInitFlags(parts: string[]): InitFlags {
+  let skipOnboard = false;
+  let help = false;
+  for (const p of parts) {
+    if (p === "--skip-onboard") skipOnboard = true;
+    else if (p === "--help" || p === "-h") help = true;
+    else return { skipOnboard, help, unknown: p };
+  }
+  return { skipOnboard, help, unknown: undefined };
+}
+
+async function handleInit(parts: string[], ctx: ExtensionCommandContext): Promise<void> {
+  const flags = parseInitFlags(parts);
+  if (flags.unknown) {
+    ctx.ui.notify(`Unknown flag: ${flags.unknown}`, "error");
+    ctx.ui.notify("Usage: autodev init [--skip-onboard]", "info");
+    return;
+  }
+  if (flags.help) {
+    ctx.ui.notify("Usage: autodev init [--skip-onboard]", "info");
+    ctx.ui.notify("Flags:", "info");
+    ctx.ui.notify("  --skip-onboard  Skip the Harbor Master onboarding session.", "info");
+    ctx.ui.notify("  --help, -h      Show this help and exit.", "info");
+    return;
+  }
+
+  const projectRoot = ctx.cwd ?? process.cwd();
+  const { runInit } = await import("../installer/init-module.js");
+  const results = await runInit({
+    projectRoot,
+    notify: (message, level) => ctx.ui.notify(message, level),
+    skipOnboard: flags.skipOnboard,
+  });
+
+  let failures = 0;
+  for (const r of results) {
+    if (r.ok) {
+      ctx.ui.notify(`  ✓ ${r.name}: ${r.detail}`, "info");
+    } else {
+      ctx.ui.notify(`  ✗ ${r.name}: ${r.detail}`, "error");
+      failures++;
+    }
+  }
+  ctx.ui.notify("", "info");
+  if (failures > 0) {
+    ctx.ui.notify(`Init completed with ${failures} failed step(s).`, "warning");
+  } else {
+    ctx.ui.notify(`Init complete (${results.length} steps).`, "info");
+  }
 }
 
 async function handleConfig(parts: string[], ctx: ExtensionCommandContext): Promise<void> {

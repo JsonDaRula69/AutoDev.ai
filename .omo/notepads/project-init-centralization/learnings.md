@@ -880,3 +880,69 @@ Date: 2026-06-23
 - `bun run typecheck`: tsc --noEmit EXIT 0.
 - Pure LOC: `guardrails/index.ts` 719 (pre-existing, over 250 ceiling — T12 MUST NOT forbids split; carried smell), `dispatch.ts` 222 (healthy), `guardrails.test.ts` 121 (healthy), `dispatch.test.ts` 156 (healthy).
 - Evidence: `.omo/evidence/project-init-centralization/t12-engines-happy.md`, `t12-engines-failure.md`.
+
+# T14 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `scripts/cli.ts` `cmdDoctor()`: replaced the all-pass success message
+  `"All machine-level checks passed."` with Decision #21 text
+  `"Installation Successful! Use cd to navigate to your project folder and run autodev init to pair a project."`.
+  Added a `runDoctorOverride` DI option (matching the `runInitOverride` /
+  `runOnboardOverride` pattern already in cli.ts) so the success message is
+  unit-testable without `mock.module`.
+- `extensions/autodev/orchestrator/cli.ts` `handleDoctor()`: same message
+  replacement on the pi-extension command surface.
+- `scripts/__tests__/cli.test.ts`: 2 new tests (success message printed on
+  all-pass; NOT printed on failure). Uses DI (`runDoctorOverride`), not
+  `mock.module`, consistent with the rest of the file.
+- `test/doctor.test.ts`: 3 new tests:
+  - Install-state threshold excludes `"init"` scope (Decision #20): 10
+    completed `init` steps → `0/6` → check fails.
+  - `isFirstRun` reads `.env` from `dirname(authPath)` (central agent dir).
+  - Config checks fail when `packageRoot` is empty (central ~/.AutoDev/ not
+    populated).
+
+## Key decisions
+
+- **DI over `mock.module` for cmdDoctor.** The cli.test.ts file header
+  documents that DI is preferred over `mock.module` to "avoid poisoning other
+  tests in the same process." `mock.module` for `doctor.js` registered after
+  the first `await import("../cli.js")` does NOT override the cached dynamic
+  import inside cli.ts — confirmed empirically (happy-path test returned exit 1
+  because the real `runDoctor` ran with failing `execSync`). The
+  `runDoctorOverride` DI seam matches `runInitOverride`/`runOnboardOverride`
+  exactly.
+- **No change to the 10-check structure.** T4's 10 health checks are
+  untouched; T14 only verifies they resolve central paths and updates the
+  success message. `isFirstRun()` and the env check already resolve via
+  `dirname(authPath)` / `getAgentDir()`, so they pick up `~/.AutoDev/agent/`
+  automatically when `PI_CODING_AGENT_DIR` is set (T1's env wiring).
+- **Install-state threshold (`count >= 6` over `install` + `config` scopes)
+  does NOT include `"init"`.** The new test pins this: completing `init` steps
+  alone leaves the check at `0/6`. This is Decision #20.
+
+## Gotchas
+
+- **`mock.module` caching:** Bun's `mock.module` factory applies once per
+  specifier; registering a second mock for the same specifier after the module
+  is already imported has no effect. The DI approach sidesteps this entirely.
+- **`cmdDoctor` is exported.** It was previously a private function; T14
+  exports it (`export async function cmdDoctor(...)`) so the test can import
+  it. `cmdConfig` / `cmdStatus` etc. remain private — only the tested handlers
+  are exported, matching the existing `cmdInit` / `cmdOnboard` exports.
+- **`handleDoctor` in orchestrator/cli.ts is NOT exported** (pi-extension
+  command surface, not unit-tested directly). Its message was updated for
+  consistency but has no dedicated test; the cli.ts test covers the message
+  contract.
+
+## Verification
+
+- `bun test scripts/__tests__/cli.test.ts`: 8 pass, 0 fail.
+- `bun test test/doctor.test.ts`: 15 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit exit 0.
+- `bun test` (full suite): 579 pass, 0 fail.
+- Evidence: `.omo/evidence/project-init-centralization/t14-doctor-paths-happy.md`,
+  `t14-doctor-paths-failure.md`.
