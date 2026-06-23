@@ -199,10 +199,11 @@ export class BackgroundManager {
 
     state.triedModels.push(result.model);
     state.model = result.model;
+    const oldKey = state.providerKey;
     state.providerKey = result.providerKey;
     state.status = "pending";
 
-    this.dec(state.providerKey);
+    this.dec(oldKey);
     void this.startTask(id);
   }
 

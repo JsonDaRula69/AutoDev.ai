@@ -53,7 +53,7 @@ export interface FallbackResolution {
  */
 function parseFrontmatter(text: string): Record<string, string> {
   const result: Record<string, string> = {};
-  const match = /^---\n([\s\S]*?)\n---/.exec(text);
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
   if (match === null || match[1] === undefined) return result;
   for (const line of match[1].split("\n")) {
     const idx = line.indexOf(":");

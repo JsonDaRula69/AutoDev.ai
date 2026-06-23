@@ -324,8 +324,12 @@ function collectPlannedPaths(projectRoot: string): readonly string[] {
       const text = readFileSync(full, "utf8");
       // Collect backtick-quoted file paths and bare relative paths in lists.
       const codePathRegex = /`((?:[A-Za-z0-9_.\-]+\/)+[A-Za-z0-9_.\-]+)`/g;
+      const singlePathRegex = /`([A-Za-z0-9_.\-]+)`/g;
       let m: RegExpExecArray | null;
       while ((m = codePathRegex.exec(text)) !== null) {
+        if (m[1] !== undefined) paths.push(m[1]);
+      }
+      while ((m = singlePathRegex.exec(text)) !== null) {
         if (m[1] !== undefined) paths.push(m[1]);
       }
     }
