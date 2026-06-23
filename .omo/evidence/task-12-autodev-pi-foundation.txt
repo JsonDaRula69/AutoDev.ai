@@ -1,0 +1,55 @@
+TASK 12: Custom tools + skills port
+=============================================
+Date: 2026-06-23
+Branch: pi-foundation-3-knowledge
+Commit: 38c69cb
+
+DELIVERABLES:
+- extensions/autodev/tools/index.ts (131 LOC) — register(pi) wires 5 tools via pi.registerTool()
+- extensions/autodev/tools/handlers.ts (159 LOC) — todowrite + look_at handlers, isValidTodoFormat
+- extensions/autodev/tools/session-handlers.ts (146 LOC) — session_list/read/search handlers
+- test/mocks/session-manager.ts (83 LOC) — createMockSessionDeps() + mockMessageEntry()
+- test/tools.test.ts (236 LOC) — 20 tests, all pass
+- test/skills.test.ts (104 LOC) — 8 tests, all pass
+- .pi/skills/autodev-triage/SKILL.md
+- .pi/skills/autodev-implement/SKILL.md
+- .pi/skills/autodev-review/SKILL.md
+- .pi/skills/autodev-deploy/SKILL.md
+- .pi/skills/autodev-onboard/SKILL.md
+
+5 PI TOOLS REGISTERED:
+- todowrite — 4-element format enforcement ([WHERE] [HOW] to [WHY] - expect [RESULT])
+- look_at — media file analyzer for multimodal processing
+- session_list — list pi sessions via SessionManager.list()
+- session_read — read session messages via SessionManager.open().getEntries()
+- session_search — full-text search across sessions (50 session limit, 2000 char limit)
+
+5 SKILLS PORTED:
+- autodev-triage — triggered on new autodev-request issue
+- autodev-implement — executes plans with evidence
+- autodev-review — Oracle PR review
+- autodev-deploy — liaison coordination
+- autodev-onboard — Harbor Master onboarding protocol
+
+VERIFICATION:
+- bun test test/tools.test.ts: 20 pass, 0 fail
+- bun test test/skills.test.ts: 8 pass, 0 fail
+- tsc --noEmit: clean
+- All files under 250 pure LOC ceiling
+- No OmO/OpenCode references in ported skills (grep verified)
+- All skills have valid YAML frontmatter (name + description)
+- No duplicate of Magic Context tools (ctx_search, ctx_memory, etc.)
+
+ACCEPTANCE CRITERIA MET:
+- [x] todowrite tool available, calling with valid todos persists them
+- [x] look_at tool available
+- [x] session_list returns sessions
+- [x] 5 skill files exist at .pi/skills/autodev-*/SKILL.md
+- [x] Skills have valid YAML frontmatter and body content >100 chars
+- [x] Test loads autodev-triage skill and confirms it contains triage instructions
+- [x] No OmO/OpenCode references in ported skills
+
+KNOWN ISSUE:
+- Commit strategy violation: Plan specifies 3 separate commits (feat(loreguard), feat(docs), 
+  feat(tools)) but all work was combined into 1 commit (38c69cb). Cannot fix without 
+  rewriting git history.

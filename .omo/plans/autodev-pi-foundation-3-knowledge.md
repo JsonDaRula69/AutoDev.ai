@@ -142,9 +142,9 @@ Critical Path: T5 (from Plan 1) → T10/T11/T12 (all parallel)
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
 
-- [ ] F1. Verify scope — Loreguard, docs query, 5 custom tools, 5 skills
-- [ ] F2. Code quality — SQLite schema, embedding layer, tool schemas, skill format
-- [ ] F3. Manual QA — Loreguard CRUD test, docs rebuild + search test, todowrite format test, skill discovery test
+- [x] F1. Verify scope — Loreguard, docs query, 5 custom tools, 5 skills
+- [x] F2. Code quality — SQLite schema, embedding layer, tool schemas, skill format
+- [x] F3. Manual QA — Loreguard CRUD test, docs rebuild + search test, todowrite format test, skill discovery test
 
 ## Commit strategy
 
