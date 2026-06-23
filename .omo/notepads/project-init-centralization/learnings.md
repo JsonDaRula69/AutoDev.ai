@@ -560,3 +560,37 @@ Date: 2026-06-23
 - `bun test extensions/autodev/installer/__tests__/doctor-orchestrator.test.ts`: 2 pass, 0 fail.
 - `bun run typecheck`: tsc --noEmit exit 0.
 - `bun test` (full suite): 516 pass, 1 fail (the T4 pre-existing failure described above).
+
+# T4 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/installer/doctor.ts`: added a 10th standing health check named `"Magic Context"` that shells out to `bunx @cortexkit/magic-context@latest doctor` (same `exec` pattern as the Bun/gh checks, with `encoding: "utf-8"`, `stdio: "pipe"`, `timeout: 30_000`). On first failure it calls the new exported helper `writeMagicContextDefaults(getAgentDir())` (which writes the T1 `DEFAULT_MAGIC_CONTEXT_JSONC` block as a real file) and retries the doctor once.
+  - First success → `ok: true, detail: "healthy"`.
+  - First fail → write defaults → retry success → `ok: true, detail: "healthy (after defaults written)"`.
+  - Both attempts fail → `ok: false, detail: "MC doctor failed after retry: <error>"`.
+  - Defaults write itself fails → `ok: false, detail: "MC doctor failed; defaults write failed: ...; first error: ..."` (retry skipped).
+- `runHealthChecks` JSDoc updated to say "10 health checks" and enumerate `Magic Context` as the 10th.
+- `test/doctor.test.ts`: updated the "passes all checks" test to expect the 14-entry checks array (13 from `validateAndCreateConfig` + `Magic Context`), and added 4 new tests: happy path, first-fail-then-succeed (asserts the written file equals `DEFAULT_MAGIC_CONTEXT_JSONC` byte-for-byte), double-fail (asserts the `MC doctor failed after retry` detail), and a direct unit test of `writeMagicContextDefaults`.
+
+## Key decisions
+
+- **Reuse T1's `DEFAULT_MAGIC_CONTEXT_JSONC`** from `magic-context-defaults.ts` rather than duplicating the JSONC string. Single source of truth.
+- **`writeMagicContextDefaults` is exported** so T15 (doctor orchestrator mode) and future callers can invoke it directly without re-implementing the write.
+- **The MC check uses `getAgentDir()` from the pi SDK** (already imported in T1's `config-defaults.ts`) to resolve the central agent dir, honoring `PI_CODING_AGENT_DIR`. This is consistent with how the rest of the centralization wave resolves paths.
+- **The check is appended after `validateAndCreateConfig` results**, so the `magic-context.jsonc` config-defaults check (which may write the file on first run) runs before the MC doctor. This means on a fresh install the MC doctor's first attempt may already succeed because config-defaults wrote the file — the retry path is for the case where the file exists but is misconfigured/empty.
+- **Test stub `makeMcExecStub`** controls MC doctor behavior via a mutable call counter array, so first and second invocations can fail or succeed independently. Non-MC commands always succeed in the stub.
+
+## Gotchas
+
+- **`validateAndCreateConfig` writes `magic-context.jsonc` too** (via `writeMagicContext` in `config-defaults.ts`). So on a fully-configured machine, the file already exists before the MC check runs. The happy-path test originally asserted the file does NOT exist after a successful first attempt — that assertion was wrong because config-defaults wrote it earlier in the same `runDoctor` call. Fixed to assert it exists.
+- **`doctor.ts` is now 361 pure LOC** (was 295 before T4, already over the 250 ceiling). T4's MUST NOT constraint ("Do NOT touch files outside `doctor.ts`, its tests, and evidence") forbids the recommended split. The pre-existing smell is carried; a follow-up should extract `runMagicContextCheck` + `writeMagicContextDefaults` + `tryMcDoctor` into a sibling `magic-context-check.ts` module. Flagged here so it is not lost.
+- **`makeMcExecStub` type signature** needed `readonly ("ok" | "fail")[]` (not `"ok" | "fail"[]`) to satisfy `noUncheckedIndexedAccess` + the union element type. Without `readonly`, TS parses the union as `"ok" | ("fail"[])`.
+
+## Verification
+
+- `bun run typecheck`: tsc --noEmit EXIT 0.
+- `bun test test/doctor.test.ts`: 12 pass, 0 fail.
+- `bun test` (full suite): 521 pass, 0 fail.

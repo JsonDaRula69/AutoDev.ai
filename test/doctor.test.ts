@@ -1,11 +1,12 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runDoctor } from "../extensions/autodev/installer/doctor.js";
+import { runDoctor, writeMagicContextDefaults } from "../extensions/autodev/installer/doctor.js";
 import { setProviderKey } from "../extensions/autodev/installer/auth.js";
 import { setEnvVars } from "../extensions/autodev/installer/env.js";
 import { markStepCompleted } from "../extensions/autodev/installer/state.js";
+import { DEFAULT_MAGIC_CONTEXT_JSONC } from "../extensions/autodev/installer/magic-context-defaults.js";
 
 function createTempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "autodev-doctor-test-"));
@@ -21,10 +22,35 @@ const STUB_EXEC = (cmd: string): string => {
   if (cmd === "bun --version") return "1.2.3\n";
   if (cmd === "gh --version") return "gh version 2.40.0\n";
   if (cmd === "gh auth status") return "Logged in to github.com\n";
+  if (cmd.startsWith("bunx @cortexkit/magic-context")) return "MC doctor OK\n";
   throw new Error(`unexpected command: ${cmd}`);
 };
 
 const FAIL_EXEC = (): string => { throw new Error("command not found"); };
+
+/**
+ * Build an exec stub whose MC doctor behavior is controlled by a mutable
+ * call counter. Each entry in `mcResults` is consumed in order; subsequent
+ * calls (beyond the array length) repeat the last entry.
+ *
+ * Non-MC commands always succeed (Bun/gh present and authenticated).
+ */
+function makeMcExecStub(mcResults: readonly ("ok" | "fail")[]): (cmd: string) => string {
+  let mcCall = 0;
+  return (cmd: string): string => {
+    if (cmd === "bun --version") return "1.2.3\n";
+    if (cmd === "gh --version") return "gh version 2.40.0\n";
+    if (cmd === "gh auth status") return "Logged in to github.com\n";
+    if (cmd.startsWith("bunx @cortexkit/magic-context")) {
+      const idx = Math.min(mcCall, mcResults.length - 1);
+      const result = mcResults[idx] ?? mcResults[mcResults.length - 1];
+      mcCall++;
+      if (result === "ok") return "MC doctor OK\n";
+      throw new Error("MC doctor error: simulated failure");
+    }
+    throw new Error(`unexpected command: ${cmd}`);
+  };
+}
 
 const AGENT_NAMES = ["nemo", "aronnax", "ned-land", "conseil", "oracle", "momus", "metis", "harbor-master", "quartermaster", "boatswain", "navigator", "watch-officer", "explore"];
 
@@ -92,7 +118,11 @@ test("doctor passes all checks on a fully configured machine", async () => {
       "LLM credentials", "Environment vars", "Install state",
       "settings.json", "agents/*.md", "reference/", "skills/",
       "extensions/autodev", "config/", "magic-context.jsonc",
+      "Magic Context",
     ]);
+    const mcCheck = result.checks.find((c) => c.name === "Magic Context");
+    expect(mcCheck?.ok).toBe(true);
+    expect(mcCheck?.detail).toBe("healthy");
   } finally {
     if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = saved;
@@ -304,5 +334,113 @@ test("doctor detects VoyageAI fallback (empty key still ok)", async () => {
     cleanupTempDir(dir);
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
+  }
+});
+
+test("Magic Context check passes healthy on first attempt", async () => {
+  const dir = createTempDir();
+  const authPath = join(dir, "auth.json");
+  const packageRoot = createTempDir();
+  const centralDir = createTempDir();
+  const agentDir = join(centralDir, "agent");
+  const saved = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  try {
+    await setupFullConfig(dir, authPath);
+    createMockPackage(packageRoot);
+    const exec = makeMcExecStub(["ok"]);
+    const result = await runDoctor({
+      projectRoot: dir,
+      authPath,
+      execSyncOverride: exec,
+      packageRoot,
+    });
+    const mcCheck = result.checks.find((c) => c.name === "Magic Context");
+    expect(mcCheck?.ok).toBe(true);
+    expect(mcCheck?.detail).toBe("healthy");
+    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
+  } finally {
+    if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = saved;
+    cleanupTempDir(dir);
+    cleanupTempDir(centralDir);
+    cleanupTempDir(packageRoot);
+  }
+});
+
+test("Magic Context check recovers after writing defaults on first failure", async () => {
+  const dir = createTempDir();
+  const authPath = join(dir, "auth.json");
+  const packageRoot = createTempDir();
+  const centralDir = createTempDir();
+  const agentDir = join(centralDir, "agent");
+  const saved = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  try {
+    await setupFullConfig(dir, authPath);
+    createMockPackage(packageRoot);
+    const exec = makeMcExecStub(["fail", "ok"]);
+    const result = await runDoctor({
+      projectRoot: dir,
+      authPath,
+      execSyncOverride: exec,
+      packageRoot,
+    });
+    const mcCheck = result.checks.find((c) => c.name === "Magic Context");
+    expect(mcCheck?.ok).toBe(true);
+    expect(mcCheck?.detail).toBe("healthy (after defaults written)");
+    const written = readFileSync(join(agentDir, "magic-context.jsonc"), "utf-8");
+    expect(written).toBe(DEFAULT_MAGIC_CONTEXT_JSONC);
+  } finally {
+    if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = saved;
+    cleanupTempDir(dir);
+    cleanupTempDir(centralDir);
+    cleanupTempDir(packageRoot);
+  }
+});
+
+test("Magic Context check fails after retry when both attempts fail", async () => {
+  const dir = createTempDir();
+  const authPath = join(dir, "auth.json");
+  const packageRoot = createTempDir();
+  const centralDir = createTempDir();
+  const agentDir = join(centralDir, "agent");
+  const saved = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = agentDir;
+  try {
+    await setupFullConfig(dir, authPath);
+    createMockPackage(packageRoot);
+    const exec = makeMcExecStub(["fail", "fail"]);
+    const result = await runDoctor({
+      projectRoot: dir,
+      authPath,
+      execSyncOverride: exec,
+      packageRoot,
+    });
+    const mcCheck = result.checks.find((c) => c.name === "Magic Context");
+    expect(mcCheck?.ok).toBe(false);
+    expect(mcCheck?.detail).toContain("MC doctor failed after retry");
+    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
+  } finally {
+    if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = saved;
+    cleanupTempDir(dir);
+    cleanupTempDir(centralDir);
+    cleanupTempDir(packageRoot);
+  }
+});
+
+test("writeMagicContextDefaults writes the JSONC block to the agent dir", () => {
+  const centralDir = createTempDir();
+  const agentDir = join(centralDir, "agent");
+  try {
+    const result = writeMagicContextDefaults(agentDir);
+    expect(result.ok).toBe(true);
+    expect(result.detail).toBe("defaults written");
+    const written = readFileSync(join(agentDir, "magic-context.jsonc"), "utf-8");
+    expect(written).toBe(DEFAULT_MAGIC_CONTEXT_JSONC);
+  } finally {
+    cleanupTempDir(centralDir);
   }
 });
