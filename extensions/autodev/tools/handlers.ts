@@ -11,10 +11,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { extname } from "node:path";
 import type { SessionEntry, SessionInfo } from "@earendil-works/pi-coding-agent";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
 /** A single todo item enforced by the todowrite tool. */
 export interface TodoItem {
@@ -23,18 +20,18 @@ export interface TodoItem {
   readonly priority: "high" | "medium" | "low";
 }
 
-/** Text content block returned to the model. */
-interface TextContentBlock {
-  type: "text";
-  text: string;
-}
-
-/** Shape returned by every handler — matches pi's AgentToolResult contract. */
 export interface ToolResult {
-  content: TextContentBlock[];
+  content: (TextContent | ImageContent)[];
   details: Record<string, unknown>;
   isError?: boolean;
 }
+
+const VISUAL_MEDIA_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
 
 /** Injectable session access used by the three session_* tools. */
 export interface SessionDeps {
@@ -134,11 +131,13 @@ export async function executeLookAt(params: {
       isError: true,
     };
   }
+  const blocks: (TextContent | ImageContent)[] = [];
   const summaries: string[] = [];
   for (const rawPath of paths) {
     const abs = resolve(rawPath);
+    let buffer: Buffer;
     try {
-      await readFile(abs);
+      buffer = await readFile(abs);
     } catch {
       return {
         content: [{ type: "text", text: `Cannot read file: ${rawPath}` }],
@@ -146,15 +145,22 @@ export async function executeLookAt(params: {
         isError: true,
       };
     }
-    summaries.push(`${rawPath} (${mediaTypeFor(extname(rawPath))})`);
+    const mediaType = mediaTypeFor(extname(rawPath));
+    summaries.push(`${rawPath} (${mediaType})`);
+    if (VISUAL_MEDIA_TYPES.has(mediaType)) {
+      blocks.push({
+        type: "image",
+        data: buffer.toString("base64"),
+        mimeType: mediaType,
+      });
+    }
   }
+  blocks.unshift({
+    type: "text",
+    text: `Analyzing ${summaries.join(", ")} for: ${params.goal}`,
+  });
   return {
-    content: [
-      {
-        type: "text",
-        text: `Analyzing ${summaries.join(", ")} for: ${params.goal}`,
-      },
-    ],
+    content: blocks,
     details: { files: summaries, goal: params.goal },
   };
 }

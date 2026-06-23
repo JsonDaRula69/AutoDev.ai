@@ -9,6 +9,11 @@ import { test, expect, beforeEach } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TextContent } from "@earendil-works/pi-ai";
+
+function textOf(block: { type: string; text?: string } | undefined): string {
+  return block?.text ?? "";
+}
 
 import {
   executeLookAt,
@@ -60,7 +65,7 @@ test("todowrite rejects a malformed todo missing ' to '", async () => {
     ],
   });
   expect(result.isError).toBe(true);
-  expect(result.content[0]?.text).toContain("Invalid todo format");
+  expect(textOf(result.content[0])).toContain("Invalid todo format");
 });
 
 test("todowrite rejects a malformed todo missing ' - expect '", async () => {
@@ -83,7 +88,7 @@ test("isValidTodoFormat validates the 4-element pattern", () => {
   expect(isValidTodoFormat("A - expect B")).toBe(false); // missing " to "
 });
 
-test("todowrite rejects an empty todo array is accepted (no-op)", async () => {
+test("todowrite accepts an empty todo array as a no-op", async () => {
   const result = await executeTodowrite({ todos: [] });
   expect(result.isError).toBeFalsy();
   expect(result.details?.count).toBe(0);
@@ -102,8 +107,21 @@ test("look_at reads an existing file and returns a summary", async () => {
   writeFileSync(file, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   const result = await executeLookAt({ file_path: file, goal: "describe the image" });
   expect(result.isError).toBeFalsy();
-  expect(result.content[0]?.text).toContain("Analyzing");
+  expect(textOf(result.content[0])).toContain("Analyzing");
   expect(result.details?.goal).toBe("describe the image");
+});
+
+test("look_at returns base64 image content blocks for visual media", async () => {
+  const file = join(root, "img.png");
+  const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  writeFileSync(file, bytes);
+  const result = await executeLookAt({ file_path: file, goal: "describe the image" });
+  expect(result.isError).toBeFalsy();
+  expect(result.content).toHaveLength(2);
+  const imageBlock = result.content[1];
+  expect(imageBlock?.type).toBe("image");
+  expect((imageBlock as { data: string }).data).toBe(bytes.toString("base64"));
+  expect((imageBlock as { mimeType: string }).mimeType).toBe("image/png");
 });
 
 test("look_at errors on a missing file", async () => {
@@ -112,7 +130,7 @@ test("look_at errors on a missing file", async () => {
     goal: "describe",
   });
   expect(result.isError).toBe(true);
-  expect(result.content[0]?.text).toContain("Cannot read file");
+  expect(textOf(result.content[0])).toContain("Cannot read file");
 });
 
 test("look_at errors when no path is provided", async () => {
@@ -128,6 +146,8 @@ test("look_at accepts multiple file_paths", async () => {
   const result = await executeLookAt({ file_paths: [a, b], goal: "compare" });
   expect(result.isError).toBeFalsy();
   expect(result.details?.files).toHaveLength(2);
+  expect(result.content).toHaveLength(3);
+  expect(result.content.slice(1).every((c) => c.type === "image")).toBe(true);
 });
 
 // --- session_list ----------------------------------------------------------
@@ -163,8 +183,8 @@ test("session_list returns sessions from the mock", async () => {
   const result = await executeSessionList({}, deps, "/cwd");
   expect(result.isError).toBeFalsy();
   expect(result.details?.count).toBe(2);
-  expect(result.content[0]?.text).toContain("ses_1");
-  expect(result.content[0]?.text).toContain("ses_2");
+  expect(textOf(result.content[0])).toContain("ses_1");
+  expect(textOf(result.content[0])).toContain("ses_2");
 });
 
 test("session_list honors the limit param", async () => {
@@ -176,7 +196,7 @@ test("session_list honors the limit param", async () => {
 test("session_list reports empty when no sessions", async () => {
   const deps = createMockSessionDeps([]);
   const result = await executeSessionList({}, deps, "/cwd");
-  expect(result.content[0]?.text).toContain("No sessions found");
+  expect(textOf(result.content[0])).toContain("No sessions found");
 });
 
 // --- session_read ---------------------------------------------------------
@@ -186,8 +206,8 @@ test("session_read returns messages from a session", async () => {
   const result = await executeSessionRead({ session_id: "ses_1" }, deps, "/cwd");
   expect(result.isError).toBeFalsy();
   expect(result.details?.count).toBe(2);
-  expect(result.content[0]?.text).toContain("user");
-  expect(result.content[0]?.text).toContain("assistant");
+  expect(textOf(result.content[0])).toContain("user");
+  expect(textOf(result.content[0])).toContain("assistant");
 });
 
 test("session_read opens by path too", async () => {
@@ -205,7 +225,7 @@ test("session_read honors the limit param", async () => {
 test("session_read on a missing session fails gracefully", async () => {
   const deps = createMockSessionDeps(makeSessions());
   const result = await executeSessionRead({ session_id: "ses_missing" }, deps, "/cwd");
-  expect(result.content[0]?.text).toContain("Session not found");
+  expect(textOf(result.content[0])).toContain("Session not found");
 });
 
 // --- session_search --------------------------------------------------------
@@ -215,7 +235,7 @@ test("session_search finds matching content across sessions", async () => {
   const result = await executeSessionSearch({ query: "cookies" }, deps, "/cwd");
   expect(result.isError).toBeFalsy();
   expect(result.details?.count).toBe(1);
-  expect(result.content[0]?.text).toContain("ses_2");
+  expect(textOf(result.content[0])).toContain("ses_2");
 });
 
 test("session_search finds matches case-insensitively", async () => {
@@ -233,5 +253,5 @@ test("session_search limits to a specific session_id", async () => {
 test("session_search reports no matches cleanly", async () => {
   const deps = createMockSessionDeps(makeSessions());
   const result = await executeSessionSearch({ query: "zzzznotfound" }, deps, "/cwd");
-  expect(result.content[0]?.text).toContain("No matches");
+  expect(textOf(result.content[0])).toContain("No matches");
 });

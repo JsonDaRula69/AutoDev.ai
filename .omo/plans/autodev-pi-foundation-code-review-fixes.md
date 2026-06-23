@@ -55,7 +55,7 @@ Critical Path: T1 → (T2 ∥ T3 ∥ T4 ∥ T5) → T6
 
 ### Wave 0 — Critical Fixes (Sequential)
 
-- [ ] 1. Fix 3 TypeScript compile errors + 3 critical bugs
+- [x] 1. Fix 3 TypeScript compile errors + 3 critical bugs
 
   What to do: Fix all `tsc --noEmit` errors and critical bugs so the codebase compiles and core functionality works:
 
@@ -79,7 +79,7 @@ Critical Path: T1 → (T2 ∥ T3 ∥ T4 ∥ T5) → T6
   Acceptance criteria: `tsc --noEmit` passes with 0 errors. `guardrails.yaml` ci-is-the-hard-gate has no `check:` field. `defaultSessionFactory` passes `thinkingLevel` to `createAgentSession()`.
   Commit: Y | fix(critical): tsc errors + thinkingLevel factory + ci-gate YAML + ToolResult details
 
-- [ ] 2. Fix guardrail YAML check expressions (M2-M6)
+- [x] 2. Fix guardrail YAML check expressions (M2-M6)
 
   What to do: Fix 5 guardrail YAML check expressions that are broken in `.autodev/config/guardrails.yaml`:
 
@@ -102,7 +102,7 @@ Critical Path: T1 → (T2 ∥ T3 ∥ T4 ∥ T5) → T6
   Acceptance criteria: All YAML check expressions either work correctly with the GuardrailContext or have their `check:` field removed (relying on fallback). `no-secrets-in-code` check uses `action_type == 'write'`. `one-task-at-a-time` check uses `>= 1`. `never-modify-debate-transcripts` check uses `.autodev/debates/`. `follow-the-plan` and `never-deploy-directly` have no `check:` field.
   Commit: Y | fix(guardrails): correct YAML check expressions for 5 rules
 
-- [ ] 3. Fix background + delegation issues (M1, m7)
+- [x] 3. Fix background + delegation issues (M1, m7)
 
   What to do:
 
@@ -115,7 +115,7 @@ Critical Path: T1 → (T2 ∥ T3 ∥ T4 ∥ T5) → T6
   Acceptance criteria: Circuit breaker trip checks for terminal event flag before aborting. Fallback respawn goes through spawn() (concurrency checked). drainQueue called after slot freed.
   Commit: Y | fix(background): circuit breaker event-wins + fallback concurrency
 
-- [ ] 4. Fix tools + loreguard + notepad issues (M8-M11)
+- [x] 4. Fix tools + loreguard + notepad issues (M8-M11)
 
   What to do:
 
@@ -136,7 +136,7 @@ Critical Path: T1 → (T2 ∥ T3 ∥ T4 ∥ T5) → T6
 
 ### Wave 1 — Polish (Parallel after T1)
 
-- [ ] 5. Fix comment checker to actually strip (M7)
+- [x] 5. Fix comment checker to actually strip (M7)
 
   What to do: The comment checker currently only notifies — it never strips slop from files. The plan says "Strips AI-slop from comments after edit/write tool calls."
 
@@ -156,7 +156,7 @@ Critical Path: T1 → (T2 ∥ T3 ∥ T4 ∥ T5) → T6
   Acceptance criteria: After a write/edit with AI-slop comments, the file on disk has the slop stripped. Test verifies file content before and after.
   Commit: Y | fix(comment-checker): actually strip AI-slop from files, not just notify
 
-- [ ] 6. Add behavioral tests (M12, m1)
+- [x] 6. Add behavioral tests (M12, m1)
 
   What to do: Add the missing behavioral tests identified in the code review:
 
@@ -176,13 +176,13 @@ Critical Path: T1 → (T2 ∥ T3 ∥ T4 ∥ T5) → T6
 
 ## Final verification wave
 
-- [ ] F1. `tsc --noEmit` passes with 0 errors
-- [ ] F2. `bun test` passes with 273+ tests (all existing + new)
-- [ ] F3. All guardrail YAML check expressions are correct or removed
-- [ ] F4. Comment checker actually strips files (not just notifies)
-- [ ] F5. session_read returns full messages (no truncation)
-- [ ] F6. Loreguard search returns FTS-ranked results
-- [ ] F7. thinkingLevel is passed through to createAgentSession
+- [x] F1. `tsc --noEmit` passes with 0 errors
+- [x] F2. `bun test` passes with 273+ tests (all existing + new)
+- [x] F3. All guardrail YAML check expressions are correct or removed
+- [x] F4. Comment checker actually strips files (not just notifies)
+- [x] F5. session_read returns full messages (no truncation)
+- [x] F6. Loreguard search returns FTS-ranked results
+- [x] F7. thinkingLevel is passed through to createAgentSession
 
 ## Commit strategy
 

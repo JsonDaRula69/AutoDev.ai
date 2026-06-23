@@ -3,7 +3,7 @@
  *
  * Direct in-process bun:sqlite library (no MCP, no external service). The
  * `register()` function opens the default DB at
- * `.autodev/decisions/loreguard.db` and registers five pi tools:
+ * `.autodev/decisions/loreguard.db` and registers six pi tools:
  *
  *   suggest_lore  — create a draft ADR
  *   ratify_lore   — submit a draft for review (draft → under-review)
@@ -128,7 +128,7 @@ export function getLore(id: number): Decision | undefined {
 // --- pi registration --------------------------------------------------------
 
 /**
- * Register the five Loreguard tools with pi. Opens the default file DB and
+ * Register the six Loreguard tools with pi. Opens the default file DB and
  * wires up the tools. Tests bypass `register()` by calling {@link setDb}.
  */
 export function register(pi: ExtensionAPI): void {

@@ -168,7 +168,7 @@ export function parseGuardrailsYaml(text: string): GuardrailsConfig {
 
     // Continuation fields of the current item.
     if (current !== null) {
-      const descMatch = /^\s+description:\s*"?(.*)?"?\s*$/.exec(line);
+      const descMatch = /^\s+description:\s*"?([^"]*)"?\s*$/.exec(line);
       if (descMatch !== null && descMatch[1] !== undefined) {
         current.description = descMatch[1];
         continue;
