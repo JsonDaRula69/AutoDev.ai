@@ -90,7 +90,7 @@
       "plan_name": "autodev-pi-foundation-1-core",
       "status": "active",
       "started_at": "2026-06-23T05:21:15.784Z",
-      "updated_at": "2026-06-23T05:21:15.784Z",
+      "updated_at": "2026-06-23T05:27:26.920Z",
       "session_ids": [
         "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
       ],
@@ -98,13 +98,27 @@
         "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct"
       },
       "agent": "atlas",
-      "task_sessions": {}
+      "task_sessions": {
+        "todo:2": {
+          "task_key": "todo:2",
+          "task_label": "2",
+          "task_title": "Verify identity blocks in src-agents/",
+          "session_id": "opencode:ses_10d11c385ffehd53JYB4WHqF44",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-06-23T05:27:26.920Z",
+          "started_at": "2026-06-23T05:23:35.011Z",
+          "status": "completed",
+          "ended_at": "2026-06-23T05:27:26.920Z",
+          "elapsed_ms": 231909
+        }
+      }
     }
   },
   "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-1-core.md",
   "started_at": "2026-06-23T05:21:15.784Z",
   "status": "active",
-  "updated_at": "2026-06-23T05:21:15.784Z",
+  "updated_at": "2026-06-23T05:27:26.920Z",
   "session_ids": [
     "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
   ],
@@ -112,6 +126,20 @@
     "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct"
   },
   "plan_name": "autodev-pi-foundation-1-core",
-  "task_sessions": {},
+  "task_sessions": {
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "Verify identity blocks in src-agents/",
+      "session_id": "opencode:ses_10d11c385ffehd53JYB4WHqF44",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-06-23T05:27:26.920Z",
+      "started_at": "2026-06-23T05:23:35.011Z",
+      "status": "completed",
+      "ended_at": "2026-06-23T05:27:26.920Z",
+      "elapsed_ms": 231909
+    }
+  },
   "agent": "atlas"
 }

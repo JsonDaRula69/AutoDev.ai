@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Secrets — never commit credentials
+.pi/auth.json
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Debug
+.autodev/debug.log

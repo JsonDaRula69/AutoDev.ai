@@ -1,0 +1,48 @@
+TASK 1: Clean workspace and delete old code
+=============================================
+Date: 2026-06-23
+Branch: pi-foundation
+Commit: 5d02faa
+
+ACCEPTANCE CRITERIA:
+- [x] git branch --show-current returns pi-foundation
+- [x] find src-agents/ -type f | wc -l returns 26
+- [x] ls .autodev/reference/onboarding-protocol.md succeeds
+- [x] ls .autodev/reference/workflow-specification.md succeeds
+- [x] ls docs-corpus/MANIFEST.md succeeds
+- [x] git status shows clean working tree after commit
+
+PRESERVED (verified present):
+- src-agents/ (26 files: 12 agents × 2 + engineer × 2)
+- .autodev/reference/ (4 files: discord-setup.md, onboarding-protocol.md, README.md, workflow-specification.md)
+- .autodev/config/ (6 files: debate-protocol.yaml, dispatch-rules.yaml, guardrails.yaml, mcp.json, standing-orders.md, team-spec.json)
+- .autodev/memory/ (4 files: activeContext.md, harbor-log.md, projectbrief.md, techContext.md)
+- .autodev/skills/ (5 skill dirs)
+- .autodev/scripts/ (6 scripts)
+- .autodev/templates/ (5 templates)
+- .autodev/decisions/ (present)
+- .autodev/research/ (present)
+- docs-corpus/ (with MANIFEST.md)
+- AGENTS.md, CONTEXT.md, README.md, ARCHITECTURE.md, STRUCTURE.md, ROADMAP.md
+- .omo/ (plans + evidence + drafts)
+
+DELETED (verified absent):
+- src/ - absent
+- .opencode/ - absent
+- package.json - absent
+- package-lock.json - absent
+- node_modules/ - absent
+- dist/ - absent
+- tsconfig.json - absent
+- .autodev/embeddings/ - absent
+- .autodev/discord/ - absent
+- .autodev/debates/ - absent
+- .autodev/work-items/ - absent
+- .autodev/metrics/ - absent
+- .autodev/agents/ - absent
+
+GLOBAL CONFIGS (untouched):
+- ~/.config/opencode/ - NOT touched
+- ~/.local/share/cortexkit/magic-context/ - NOT touched
+
+RESULT: PASS - Workspace is clean, all identity/design artifacts preserved, all old code deleted.

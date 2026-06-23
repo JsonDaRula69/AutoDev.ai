@@ -1,0 +1,176 @@
+# Task 3 — Set up project dependencies and config files
+
+**Branch:** pi-foundation
+**Date:** 2026-06-22
+**Status:** PASS — all acceptance criteria met
+
+## Task summary
+
+Set up AutoDev as a deployable pi extension: package.json with pi + magic-context deps,
+.pi/ runtime config (settings.json, magic-context.jsonc, auth.json template), tsconfig.json,
+.autodev/config/models.json. Verify bun install succeeds and imports resolve.
+
+## Files created
+
+| File | Purpose | Pure LOC |
+|------|---------|----------|
+| `package.json` | Project manifest; deps + `pi.extensions` key + bun packageManager | 27 |
+| `.gitignore` | Ignores node_modules/, dist/, .pi/auth.json, .DS_Store, logs | 6 |
+| `.pi/settings.json` | Pi project settings: defaultProvider ollama-cloud, defaultModel glm-5.2:cloud, compaction disabled (Magic Context owns it), enabledModels, extensions array registering `./extensions/autodev` | 21 |
+| `.pi/magic-context.jsonc` | Magic Context Pi extension config: Voyage embedding via `${VOYAGE_API_KEY}`, dreamer model `ollama-cloud/glm-5.2:cloud`, enabled features (git commit indexing, key files pinning, sidekick, user memories) | 39 |
+| `.pi/auth.json` | Template documenting LLM credential format (gitignored — installer T19 populates at deploy time) | 31 |
+| `tsconfig.json` | TypeScript strict config: ES2022 target, ESNext module, bundler resolution, noUncheckedIndexedAccess, exactOptionalPropertyTypes, verbatimModuleSyntax | 25 |
+| `.autodev/config/models.json` | JSON array with the 2 valid model strings: `["ollama-cloud/glm-5.2:cloud", "ollama-cloud/deepseek-v4-pro"]` | 4 |
+| `test/import-check.ts` | Import resolution test — imports 10 pi SDK symbols + magic-context package, asserts all callable | 106 |
+
+Total: 8 files, 259 pure LOC (all files well under 250-LOC ceiling; test file at 106 is largest).
+
+## Verification: bun install
+
+```
+$ bun install
+bun install v1.3.13 (bf2e2cec)
+Resolving dependencies
+Resolved, downloaded and extracted [454]
+Saved lockfile
+
++ @types/bun@1.3.14
++ typescript@6.0.3
++ @cortexkit/pi-magic-context@0.26.0
++ @earendil-works/pi-coding-agent@0.79.9
+
+179 packages installed [5.74s]
+```
+
+Result: PASS. 179 packages installed in 5.74s. Resolved:
+- `@earendil-works/pi-coding-agent@0.79.9`
+- `@cortexkit/pi-magic-context@0.26.0`
+- `typescript@6.0.3`
+- `@types/bun@1.3.14`
+
+Two peer-dep warnings (non-blocking):
+- `@earendil-works/pi-coding-agent@0.79.9` peer mismatch
+- `@earendil-works/pi-tui@0.79.9` peer mismatch
+
+One postinstall blocked (standard bun security measure; `bun pm untrusted` for details).
+
+## Verification: import resolution test
+
+```
+$ bun run test/import-check.ts
+[PASS] createAgentSession export: typeof = function
+[PASS] SessionManager export: typeof = function; inMemory = function
+[PASS] SessionManager.inMemory() factory: inMemory() is callable
+[PASS] SessionManager.create() factory: create() is callable
+[PASS] AuthStorage export: typeof = function; create = function
+[PASS] ModelRegistry export: typeof = function; create = function
+[PASS] DefaultResourceLoader export: typeof = function
+[PASS] defineTool export: typeof = function
+[PASS] CONFIG_DIR_NAME export: value = ".pi"
+[PASS] getAgentDir export: typeof = function
+[PASS] @cortexkit/pi-magic-context importable: named exports: default, persistPiMessageEndModelMeta, persistPiPressureFromMessageEnd, resolveDreamerFromConfig, resolveHistorianFromConfig, resolveSidekickFromConfig
+
+PASS: 11/11
+All import checks passed. AutoDev pi SDK imports resolve correctly.
+```
+
+Result: PASS. 11/11 checks passed. All required SDK exports verified callable:
+- `createAgentSession` (function)
+- `SessionManager.inMemory()`, `SessionManager.create()` (callable)
+- `AuthStorage.create()` (callable)
+- `ModelRegistry.create()` (callable)
+- `DefaultResourceLoader` (class)
+- `defineTool` (function)
+- `CONFIG_DIR_NAME === ".pi"` (matches pi's config dir convention)
+- `getAgentDir` (function)
+- `@cortexkit/pi-magic-context` importable; exports `default`, `persistPiMessageEndModelMeta`, `persistPiPressureFromMessageEnd`, `resolveDreamerFromConfig`, `resolveHistorianFromConfig`, `resolveSidekickFromConfig`
+
+## Verification: .pi/auth.json gitignored
+
+```
+$ git check-ignore .pi/auth.json
+.pi/auth.json
+$ git status --short --ignored | grep auth
+!! .pi/auth.json
+```
+
+Result: PASS. `.pi/auth.json` is correctly gitignored. No credentials will be committed.
+
+## Config decisions
+
+### `.pi/settings.json`
+- `defaultProvider: "ollama-cloud"`, `defaultModel: "glm-5.2:cloud"` — AutoDev's triage/plan/deploy model per ROADMAP model routing.
+- `compaction.enabled: false` — Magic Context owns context management; pi's built-in compaction would conflict.
+- `enabledModels` lists both valid models for Ctrl+P cycling.
+- `extensions: ["./extensions/autodev"]` — registers the AutoDev extension (created in T5).
+- `$schema` references pi's settings schema for editor validation.
+
+### `.pi/magic-context.jsonc`
+- `embedding`: VoyageAI (`voyage-3-large` model) via `openai-compatible` provider; API key referenced as `${VOYAGE_API_KEY}` env var (installer T19 prompts at deploy time).
+- `dreamer.enabled: true`, model `ollama-cloud/glm-5.2:cloud`, fallback `ollama-cloud/deepseek-v4-pro`.
+- `dreamer.user_memories.enabled: true` — required per task spec.
+- `dreamer.pin_key_files.enabled: true` — required per task spec.
+- `memory.git_commit_indexing.enabled: true` — required per task spec.
+- `sidekick.enabled: true` — required per task spec.
+- `historian` + `dreamer` + `sidekick` all use `ollama-cloud/glm-5.2:cloud` primary with `deepseek-v4-pro` fallback.
+- `$schema` references Magic Context's schema for editor validation.
+
+### `.pi/auth.json` (template, gitignored)
+- Documents pi's auth resolution order per providers.md.
+- `ollama-cloud` provider key template references `$OLLAMA_CLOUD_API_KEY` env var.
+- All comments use `_comment_N` keys (JSON doesn't support native comments; this is a `.json` file not `.jsonc`).
+- Explicitly notes the installer (T19) populates this file — no credentials extracted during development.
+
+### `tsconfig.json`
+- `target: ES2022`, `module: ESNext`, `moduleResolution: bundler` — pi uses jiti for TS loading without compilation; bundler resolution matches the runtime.
+- Strict mode suite: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `isolatedModules`.
+- `types: ["bun-types"]` — Bun runtime types.
+- `include: ["extensions/**/*.ts", "test/**/*.ts", "src/**/*.ts"]`.
+
+### `.autodev/config/models.json`
+- Simple JSON array of the 2 valid model strings, matching the task spec exactly.
+
+## Acceptance criteria checklist
+
+- [x] `package.json` exists with `@earendil-works/pi-coding-agent` (latest) + `@cortexkit/pi-magic-context` (latest) as deps
+- [x] `package.json` has `pi` key: `"pi": { "extensions": ["./extensions/autodev"] }`
+- [x] `package.json` uses bun as packageManager (`bun@1.3.14`)
+- [x] `bun install` succeeds (179 packages, 5.74s)
+- [x] Import test resolves `createAgentSession` and `SessionManager` from `@earendil-works/pi-coding-agent` (11/11 PASS)
+- [x] `.pi/settings.json` exists with AutoDev project settings (extension registration, model config)
+- [x] `.pi/magic-context.jsonc` exists with `${VOYAGE_API_KEY}` env var reference and dreamer model `ollama-cloud/glm-5.2:cloud`
+- [x] `.pi/magic-context.jsonc` enables: git commit indexing, key files pinning, sidekick agent, user memories
+- [x] `.pi/auth.json` template exists and is gitignored
+- [x] `tsconfig.json` exists (ES2022, ESNext, strict)
+- [x] `.autodev/config/models.json` exists with the 2 valid model strings
+- [x] `.gitignore` exists with node_modules/, dist/, .pi/auth.json, .DS_Store
+- [x] `test/import-check.ts` exists and passes via `bun run test/import-check.ts`
+- [x] No real agent session was run (import resolution only — no model calls, no API keys needed)
+- [x] No credentials extracted or prompted (installer T19 handles that)
+- [x] No OmO or OpenCode packages installed
+- [x] No pushes to main (branch: pi-foundation)
+
+## Constraints honored
+
+- **No secrets in code.** `.pi/auth.json` is a gitignored template; key field uses `$OLLAMA_CLOUD_API_KEY` env var reference, not a literal key.
+- **Evidence or it didn't happen.** This file is the proof artifact.
+- **No OmO dependency.** Only pi + magic-context in package.json.
+- **pi-foundation branch.** All work on this branch; no pushes to main.
+- **No global installs.** pi and Magic Context are package.json deps, installed locally via bun.
+
+## Post-write architectural review
+
+1. **Single responsibility?** Each config file owns one concern: package.json = manifest, settings.json = pi runtime config, magic-context.jsonc = memory config, auth.json = credentials, tsconfig.json = TS compiler config, models.json = model list. No file does two things.
+2. **Boundary purity?** Config files are boundary artifacts — they declare, they don't contain logic.
+3. **Escape hatches?** None in config. Test file uses `(error as Error).message` in the catch block — necessary for typed error handling in the import-check test.
+4. **File size?** All files well under 250 pure LOC ceiling (max is 106 in the test file).
+5. **Tests?** Import resolution locked by `test/import-check.ts` — would fail if SDK exports changed.
+
+## Files for downstream tasks
+
+- `package.json` — T4 (port agents), T5 (base extension), T6 (Magic Context tests) all depend on these deps being installed.
+- `.pi/settings.json` — T5 registers the extension here; T4 references model config.
+- `.pi/magic-context.jsonc` — T6 tests Magic Context integration against this config.
+- `.pi/auth.json` template — T19 (installer) populates it.
+- `tsconfig.json` — T4, T5, T7-T19 all type-check against this config.
+- `.autodev/config/models.json` — T4 (model routing per agent), T8 (model fallback chains) reference this.
