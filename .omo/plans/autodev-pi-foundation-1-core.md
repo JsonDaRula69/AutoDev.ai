@@ -143,13 +143,13 @@ Critical Path: T1 → T2 → T4 → T5 → T6
   - **team-mode/** — parallel multi-agent coordination with shared mailbox, tasklist, and member management. Adapted for AutoDev: hyperplan after onboarding (5 hostile critics critique onboarding results), always-watching during work (team members observe and flag issues via mailbox), mailbox during onboarding (other agents chime in without interrupting). 12 team_* tools: team_create, team_delete, team_shutdown_request, team_approve_shutdown, team_reject_shutdown, team_send_message, team_task_create, team_task_list, team_task_update, team_task_get, team_status, team_list.
   - **comment-checker/** — strips AI-slop from comments after write/edit tool calls. Runs as a tool_call event handler that inspects write/edit results and flags AI-generated comment patterns.
   - **intent-gate/** — analyzes true user intent before classification. Applied in Harbor Master onboarding (surfaces hidden intentions from project description) and Nemo triage (detects bug vs feature vs refactor vs question before Cynefin classification).
-  - **notepad/** — Loreguard-backed wisdom accumulation across subagent tasks. Learnings stored as ARCHITECTURE memories (ctx_memory), decisions as ADRs (Loreguard), issues as CONSTRAINTS memories, verification as evidence files, problems as research notes.
+  - **notepad/** — Loreguard-backed wisdom accumulation across subagent tasks. Learnings stored as ARCHITECTURE memories (ctx_memory), decisions stored as ARCHITECTURE memories (ctx_memory) UNTIL Loreguard (T10) is built — then the notepad's decision-storage path is updated to use `suggest_lore()` instead. Issues stored as CONSTRAINTS memories, verification as evidence files, problems as research notes. The notepad's `register()` function checks if the `search_lore` tool is available; if not, it falls back to ctx_memory for all storage.
 
   Phase 2 acceptance per-module:
   - team-mode: 12 team_* tools registered + registration tests for each
   - comment-checker: 1 tool_call event handler + 1 test for AI-slop detection
   - intent-gate: 2 call-site hooks (Harbor Master onboarding + Nemo triage) + 1 test each
-  - notepad: 5 storage mappings (ctx_memory × 2, Loreguard, evidence, research) + 1 integration test
+  - notepad: 5 storage mappings (ctx_memory × 2, ctx_memory fallback for decisions until Loreguard T10 lands, evidence, research) + 1 integration test verifying the `search_lore`-availability check falls back to ctx_memory
 
   The remaining 11 modules (guardrails T7, background T8, delegation T9, loreguard T10, docs T11, tools T12 — real logic in sub-plans 2-3; lsp, tmux, mcp-integrations, rules-injection, watch-officer-monitor — real logic in sub-plan 4) keep their stub `register()` functions in this todo. Register the extension in `package.json` under the `pi` key: `"pi": { "extensions": ["./extensions/autodev"] }`. Magic Context feature configuration (git commit indexing, key files pinning, sidekick agent, workspace memory sharing, user memories, dependency docs import) is configured in `.pi/magic-context.jsonc` (created in T3) — the extension reads it but does not re-implement Magic Context features. Harbor Master as sole user-facing contact and GitHub as sole PM channel are enforced via agent prompts (T4) and guardrails (T7), not re-registered here.
   Must NOT do: Do NOT register tools in the 12 stub modules (T7-T12 and sub-plan 4 handle those). Do NOT hardcode context file paths — resolve from project root. Do NOT break pi's default context loading — augment, don't replace. Do NOT implement real logic for the 12 deferred modules in this todo.
@@ -160,7 +160,7 @@ Critical Path: T1 → T2 → T4 → T5 → T6
   QA scenarios: happy — extension loads, context injected, /autodev command works, 4 foundation modules have real logic + tests, 12 stub modules register without error. Failure — extension fails to load (syntax error); or context not injected (wrong path); or /autodev command not registered; or a foundation module missing real logic; or a stub module not created. Evidence: `.omo/evidence/task-5-autodev-pi-foundation.txt` (extension file + module tree + test session output + context verification).
   Commit: Y | feat(extension): base AutoDev pi extension with context injection + 4 foundation modules
 
-- [ ] 6. Write Magic Context integration tests with mocks
+- [x] 6. Write Magic Context integration tests with mocks
   What to do: Create the `test/` and `test/mocks/` directories if they do not exist, then create `test/mocks/magic-context.ts` as the shared mock fixture. This file exports mock implementations of all 5 ctx_* tools (ctx_search, ctx_memory, ctx_note, ctx_expand, ctx_reduce) using `bun:test`'s mock module. T6's tests import from this fixture. Then write integration tests that verify the AutoDev extension correctly integrates with Magic Context's tool interface. Since this is a development environment (no real running services), tests mock the Magic Context tools: (a) Mock `ctx_memory` write/read — test that the extension calls it correctly and persists data. (b) Mock `ctx_search` — test that search queries are formed correctly and results are handled. (c) Mock `ctx_note` write. (d) Mock `ctx_expand` and `ctx_reduce`. (e) Test config override: verify the extension reads `.pi/magic-context.jsonc` and uses the correct dreamer model (glm-5.2:cloud). These tests verify the integration contract — the real Magic Context behavior is verified at deployment time by the installer (T19).
   Must NOT do: Do NOT reimplement any Magic Context feature. Do NOT disable Magic Context's historian or dreamer. Do NOT modify Magic Context's config beyond what setup created. Do NOT run a real Magic Context DB during tests — use mocks.
   Parallelization: Wave 1 | Blocked by: T3, T5 | Blocks: nothing | Can parallelize with: T7, T8, T9
@@ -173,9 +173,9 @@ Critical Path: T1 → T2 → T4 → T5 → T6
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
 
-- [ ] F1. Verify scope — workspace clean, 13 agents ported (12 + explore authored), 15 modules registered (4 foundation with logic + 11 stubs), config files created, mocked tests pass
-- [ ] F2. Code quality — extension structure, agent definitions, config files
-- [ ] F3. Manual QA — `bun install` succeeds, imports resolve, agent files valid, extension loads (mocked)
+- [x] F1. Verify scope — workspace clean, 13 agents ported (12 + explore authored), 15 modules registered (4 foundation with logic + 11 stubs), config files created, mocked tests pass
+- [x] F2. Code quality — extension structure, agent definitions, config files
+- [x] F3. Manual QA — `bun install` succeeds, imports resolve, agent files valid, extension loads (mocked)
 
 ## Commit strategy
 

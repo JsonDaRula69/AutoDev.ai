@@ -1,0 +1,150 @@
+Task 6: Magic Context integration tests with mocks
+Branch: pi-foundation
+Date: 2026-06-22
+Status: PASS (verification-only, no commit per plan)
+
+================================================================
+1. MOCK FIXTURE — test/mocks/magic-context.ts
+================================================================
+
+Shared mock fixture exporting mock implementations of all 5 ctx_* tools
+using `bun:test`'s `mock()` primitive.
+
+Exported mocks:
+  - mockCtxSearch  — (query, options?) -> { results: [memory, message], total: 2 }
+  - mockCtxMemory  — (action, options?) -> { id?, action, success, memories?, total? }
+                     write -> id 999; list/read -> empty memories, total 0
+  - mockCtxNote    — (action, options?) -> { success, note_id: 1 }
+  - mockCtxExpand  — (options) -> { content, messages: [] }
+  - mockCtxReduce  — (options) -> { success, dropped: <drop string> }
+
+Helper exports:
+  - resetCtxMocks()   — clears call history on all 5 mocks (for beforeEach)
+  - ALL_CTX_MOCKS     — tuple of all 5 for aggregate assertions
+  - Type interfaces:  CtxSearchHit, CtxSearchResult, CtxMemoryResult,
+                       CtxNoteResult, CtxExpandResult, CtxReduceResult
+
+No real Magic Context DB is stood up during tests — mocks only.
+
+================================================================
+2. INTEGRATION TESTS — test/magic-context-integration.test.ts
+================================================================
+
+28 tests across 6 groups, 76 expect() calls. All pass.
+
+Group 1: ctx_memory write/read (4 tests)
+  - storeLearning -> ctx_memory ARCHITECTURE category, mock called with
+    { category: "ARCHITECTURE", content: <learning> }
+  - storeIssue -> ctx_memory CONSTRAINTS category, mock called with
+    { category: "CONSTRAINTS", content: <issue> }
+  - ctx_memory 'list' returns empty memories with total 0
+  - ctx_memory 'write' returns fixed id 999
+
+Group 2: ctx_search (3 tests)
+  - storeDecision produces loreguard:adr descriptor (NOT ctx_memory)
+  - ctx_search mock returns memory + message hits echoing query
+  - ctx_search accepts sources + limit options
+
+Group 3: ctx_note write (2 tests)
+  - ctx_note accepts 'write' action, returns note_id 1
+  - ctx_note accepts 'dismiss' action
+
+Group 4: ctx_expand + ctx_reduce (4 tests)
+  - ctx_expand returns expanded content + messages array
+  - ctx_expand accepts single message ordinal
+  - ctx_reduce echoes back dropped tag range
+  - ctx_reduce accepts single tag id
+
+Group 5: Config override (8 tests) — reads .pi/magic-context.jsonc
+  - config file exists and is non-empty
+  - dreamer.model == "ollama-cloud/glm-5.2:cloud"         PASS
+  - dreamer.fallback_models includes "ollama-cloud/deepseek-v4-pro"  PASS
+  - embedding.api_key == "${VOYAGE_API_KEY}"              PASS
+  - memory.git_commit_indexing.enabled == true           PASS
+  - dreamer.pin_key_files.enabled == true                PASS
+  - sidekick.enabled == true                             PASS
+  - dreamer.user_memories.enabled == true                PASS
+
+Group 6: Notepad-to-MagicContext integration (6 tests)
+  - storeLearning  -> backend "ctx_memory:ARCHITECTURE", written false
+  - storeDecision  -> backend "loreguard:adr",           written false
+  - storeIssue     -> backend "ctx_memory:CONSTRAINTS",  written false
+  - storeVerification -> backend "evidence-file",        written true
+  - storeProblem   -> backend "research-note",           written true
+  - All 5 store* functions cover 5 DISTINCT backends (size == 5)
+  - All 5 ctx_* mocks independently callable after reset
+
+================================================================
+3. TEST OUTPUT
+================================================================
+
+$ bun test
+  88 pass, 0 fail, 202 expect() calls
+  Ran 88 tests across 5 files in 532ms
+
+Full-suite breakdown (no regressions from T5):
+  test/notepad.test.ts                       8 pass
+  test/intent-gate.test.ts                  18 pass
+  test/comment-checker.test.ts              10 pass
+  test/magic-context-integration.test.ts    28 pass  (NEW)
+  test/extension-load.test.ts                24 pass
+
+================================================================
+4. CONFIG OVERRIDE VERIFICATION
+================================================================
+
+Source: .pi/magic-context.jsonc (44 lines, JSONC with comments)
+
+Required field                | Value                          | Result
+------------------------------|--------------------------------|--------
+dreamer.model                 | ollama-cloud/glm-5.2:cloud     | PASS
+dreamer.fallback_models[0]    | ollama-cloud/deepseek-v4-pro   | PASS
+embedding.api_key             | ${VOYAGE_API_KEY}              | PASS
+memory.git_commit_indexing.enabled | true                    | PASS
+dreamer.pin_key_files.enabled| true                           | PASS
+sidekick.enabled              | true                           | PASS
+dreamer.user_memories.enabled | true                           | PASS
+
+JSONC parsing note: A naive regex-based comment stripper (remove //.*$)
+corrupts the embedding endpoint URL "https://api.voyageai.com/v1" by
+treating "://" as a line comment. The test uses a string-aware
+state-machine stripper that tracks in-string state and only strips
+// and /* */ outside string literals.
+
+================================================================
+5. INTEGRATION MAPPING VERIFICATION
+================================================================
+
+Notepad store* function -> StorageDescriptor backend (verified by tests):
+
+  storeLearning    -> ctx_memory:ARCHITECTURE   (caller invokes ctx_memory write)
+  storeDecision    -> loreguard:adr             (caller invokes suggest_lore)
+  storeIssue       -> ctx_memory:CONSTRAINTS    (caller invokes ctx_memory write)
+  storeVerification -> evidence-file            (writes .omo/evidence/<name>.txt)
+  storeProblem     -> research-note             (writes .autodev/research/<name>.md)
+
+5 store* functions -> 5 distinct backends (Set.size == 5, verified).
+
+Magic Context ctx_* tool coverage in mocks:
+  ctx_search  — query + sources/limit options
+  ctx_memory  — write/list/read actions, ARCHITECTURE + CONSTRAINTS categories
+  ctx_note    — write + dismiss actions
+  ctx_expand  — start/end range + single message ordinal
+  ctx_reduce  — drop range string + single tag id
+
+================================================================
+6. FILES CREATED/MODIFIED
+================================================================
+
+Created:
+  - test/mocks/magic-context.ts              (106 LOC, mock fixture)
+  - test/magic-context-integration.test.ts    (236 LOC, 28 tests)
+  - .omo/evidence/task-6-autodev-pi-foundation.txt (this file)
+
+Side effects (from storeVerification/storeProblem tests):
+  - .omo/evidence/t6-intg-config.txt
+  - .autodev/research/t6-intg-research.md
+  - .omo/evidence/t6-backends.txt
+  - .autodev/research/t6-backends.md
+
+No commit (T6 is verification-only per plan).

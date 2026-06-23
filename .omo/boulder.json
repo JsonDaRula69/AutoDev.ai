@@ -90,12 +90,18 @@
       "plan_name": "autodev-pi-foundation-1-core",
       "status": "active",
       "started_at": "2026-06-23T05:21:15.784Z",
-      "updated_at": "2026-06-23T05:46:31.160Z",
+      "updated_at": "2026-06-23T05:53:57.937Z",
       "session_ids": [
-        "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
+        "opencode:ses_10d130cabffebBTpGUgnaPzsPQ",
+        "opencode:ses_10cf76c43ffeefvUJqwh5hGQ2I",
+        "opencode:ses_10cf76c1fffeLoycbhJqtr4aVv",
+        "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC"
       ],
       "session_origins": {
-        "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct"
+        "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct",
+        "opencode:ses_10cf76c43ffeefvUJqwh5hGQ2I": "appended",
+        "opencode:ses_10cf76c1fffeLoycbhJqtr4aVv": "appended",
+        "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC": "appended"
       },
       "agent": "atlas",
       "task_sessions": {
@@ -137,6 +143,51 @@
           "status": "completed",
           "ended_at": "2026-06-23T05:46:31.160Z",
           "elapsed_ms": 24494
+        },
+        "todo:6": {
+          "task_key": "todo:6",
+          "task_label": "6",
+          "task_title": "Write Magic Context integration tests with mocks",
+          "session_id": "opencode:ses_10cfb6de1ffevb80N4X8983N5b",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-06-23T05:50:58.404Z",
+          "started_at": "2026-06-23T05:50:42.329Z",
+          "status": "completed",
+          "ended_at": "2026-06-23T05:50:58.404Z",
+          "elapsed_ms": 16075
+        },
+        "final-wave:f1": {
+          "task_key": "final-wave:f1",
+          "task_label": "F1",
+          "task_title": "Verify scope — workspace clean, 13 agents ported (12 + explore authored), 15 modules registered (4 foundation with logic + 11 stubs), config files created, mocked tests pass",
+          "session_id": "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC",
+          "agent": "oracle",
+          "started_at": "2026-06-23T05:53:19.940Z",
+          "status": "completed",
+          "updated_at": "2026-06-23T05:53:43.673Z",
+          "ended_at": "2026-06-23T05:53:43.673Z",
+          "elapsed_ms": 23733
+        },
+        "final-wave:f2": {
+          "task_key": "final-wave:f2",
+          "task_label": "F2",
+          "task_title": "Code quality — extension structure, agent definitions, config files. Review all code produced by T1-T6 for quality, correctness, and adherence to design specs.",
+          "session_id": "opencode:ses_10cf76c1fffeLoycbhJqtr4aVv",
+          "agent": "oracle",
+          "updated_at": "2026-06-23T05:53:53.595Z",
+          "ended_at": "2026-06-23T05:53:53.595Z",
+          "status": "completed"
+        },
+        "final-wave:f3": {
+          "task_key": "final-wave:f3",
+          "task_label": "F3",
+          "task_title": "Manual QA — `bun install` succeeds, imports resolve, agent files valid, extension loads (mocked). Run the actual verification commands and confirm everything works.",
+          "session_id": "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC",
+          "agent": "oracle",
+          "updated_at": "2026-06-23T05:53:57.937Z",
+          "ended_at": "2026-06-23T05:53:57.937Z",
+          "status": "completed"
         }
       }
     }
@@ -144,12 +195,18 @@
   "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-1-core.md",
   "started_at": "2026-06-23T05:21:15.784Z",
   "status": "active",
-  "updated_at": "2026-06-23T05:46:31.160Z",
+  "updated_at": "2026-06-23T05:53:57.937Z",
   "session_ids": [
-    "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
+    "opencode:ses_10d130cabffebBTpGUgnaPzsPQ",
+    "opencode:ses_10cf76c43ffeefvUJqwh5hGQ2I",
+    "opencode:ses_10cf76c1fffeLoycbhJqtr4aVv",
+    "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC"
   ],
   "session_origins": {
-    "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct"
+    "opencode:ses_10d130cabffebBTpGUgnaPzsPQ": "direct",
+    "opencode:ses_10cf76c43ffeefvUJqwh5hGQ2I": "appended",
+    "opencode:ses_10cf76c1fffeLoycbhJqtr4aVv": "appended",
+    "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC": "appended"
   },
   "plan_name": "autodev-pi-foundation-1-core",
   "task_sessions": {
@@ -191,6 +248,51 @@
       "status": "completed",
       "ended_at": "2026-06-23T05:46:31.160Z",
       "elapsed_ms": 24494
+    },
+    "todo:6": {
+      "task_key": "todo:6",
+      "task_label": "6",
+      "task_title": "Write Magic Context integration tests with mocks",
+      "session_id": "opencode:ses_10cfb6de1ffevb80N4X8983N5b",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-06-23T05:50:58.404Z",
+      "started_at": "2026-06-23T05:50:42.329Z",
+      "status": "completed",
+      "ended_at": "2026-06-23T05:50:58.404Z",
+      "elapsed_ms": 16075
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "Verify scope — workspace clean, 13 agents ported (12 + explore authored), 15 modules registered (4 foundation with logic + 11 stubs), config files created, mocked tests pass",
+      "session_id": "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC",
+      "agent": "oracle",
+      "started_at": "2026-06-23T05:53:19.940Z",
+      "status": "completed",
+      "updated_at": "2026-06-23T05:53:43.673Z",
+      "ended_at": "2026-06-23T05:53:43.673Z",
+      "elapsed_ms": 23733
+    },
+    "final-wave:f2": {
+      "task_key": "final-wave:f2",
+      "task_label": "F2",
+      "task_title": "Code quality — extension structure, agent definitions, config files. Review all code produced by T1-T6 for quality, correctness, and adherence to design specs.",
+      "session_id": "opencode:ses_10cf76c1fffeLoycbhJqtr4aVv",
+      "agent": "oracle",
+      "updated_at": "2026-06-23T05:53:53.595Z",
+      "ended_at": "2026-06-23T05:53:53.595Z",
+      "status": "completed"
+    },
+    "final-wave:f3": {
+      "task_key": "final-wave:f3",
+      "task_label": "F3",
+      "task_title": "Manual QA — `bun install` succeeds, imports resolve, agent files valid, extension loads (mocked). Run the actual verification commands and confirm everything works.",
+      "session_id": "opencode:ses_10cf76bd8ffe404MTSOLKi1hCC",
+      "agent": "oracle",
+      "updated_at": "2026-06-23T05:53:57.937Z",
+      "ended_at": "2026-06-23T05:53:57.937Z",
+      "status": "completed"
     }
   },
   "agent": "atlas"
