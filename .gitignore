@@ -15,3 +15,7 @@ dist/
 
 # Debug
 .autodev/debug.log
+
+# Runtime SQLite databases (regenerable binary state)
+.autodev/decisions/*.db
+.autodev/embeddings/*.db

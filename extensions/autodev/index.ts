@@ -23,6 +23,9 @@ import { register as registerLsp } from "./lsp/index.js";
 import { register as registerTmux } from "./tmux/index.js";
 import { register as registerRulesInjection } from "./rules-injection/index.js";
 import { register as registerWatchOfficerMonitor } from "./watch-officer-monitor/index.js";
+import { register as registerOrchestrator } from "./orchestrator/index.js";
+import { register as registerDiscord } from "./discord/index.js";
+import { register as registerDebate } from "./debate/index.js";
 
 /** Canonical module registration order. */
 const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: ExtensionAPI) => void }> = [
@@ -36,11 +39,14 @@ const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: Ex
   { name: "comment-checker", register: registerCommentChecker },
   { name: "notepad", register: registerNotepad },
   { name: "intent-gate", register: registerIntentGate },
+  { name: "discord", register: registerDiscord },
   { name: "mcp-integrations", register: registerMcpIntegrations },
   { name: "lsp", register: registerLsp },
   { name: "tmux", register: registerTmux },
   { name: "rules-injection", register: registerRulesInjection },
   { name: "watch-officer-monitor", register: registerWatchOfficerMonitor },
+  { name: "orchestrator", register: registerOrchestrator },
+  { name: "debate", register: registerDebate },
 ];
 
 export const MODULE_NAMES: readonly string[] = MODULES.map((m) => m.name);
@@ -55,19 +61,7 @@ export default function autodevExtension(pi: ExtensionAPI): void {
     return undefined;
   });
 
-  // /autodev status command.
-  pi.registerCommand("autodev", {
-    description: "Show AutoDev status",
-    handler: async (_args, ctx) => {
-      ctx.ui.notify("AutoDev — Autonomous Engineering Team", "info");
-      ctx.ui.notify(
-        `${MODULES.length} modules loaded. pi-foundation branch.`,
-        "info",
-      );
-    },
-  });
-
-  // Register all 15 modules in canonical order.
+  // Register all 17 modules in canonical order.
   for (const mod of MODULES) {
     mod.register(pi);
   }

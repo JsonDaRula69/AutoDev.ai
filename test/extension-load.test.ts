@@ -43,7 +43,7 @@ test("entry point exports MODULE_NAMES with 15 entries", async () => {
   const mod = await import(join(ROOT, "extensions", "autodev", "index.ts"));
   expect(mod.MODULE_NAMES).toBeDefined();
   expect(Array.isArray(mod.MODULE_NAMES)).toBe(true);
-  expect(mod.MODULE_NAMES.length).toBe(15);
+  expect(mod.MODULE_NAMES.length).toBe(18);
 });
 
 for (const name of MODULES) {
