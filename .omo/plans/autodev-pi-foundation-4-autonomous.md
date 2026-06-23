@@ -18,9 +18,9 @@
 
 ## TL;DR (For humans)
 
-**What you'll get:** Autonomous system: heartbeat with multi-project GitHub polling, crew dispatch with Cynefin classification, Discord bridge, 5-phase debate protocol, auto-merge with evidence/CI/review gates, boulder state for cross-session tracking, continuation loops, multi-project support, debug mode, and the deployment installer.
+**What you'll get:** Autonomous system: heartbeat with multi-project GitHub polling, crew dispatch with Cynefin classification, Discord bridge, 5-phase debate protocol, auto-merge with evidence/CI/review gates, boulder state for cross-session tracking, continuation loops, debug mode, and the deployment installer.
 
-**Effort:** XL — 8 todos across 2 waves.
+**Effort:** XL — 7 todos across 2 waves.
 **Risk:** High — this is the autonomous loop that makes the crew self-sustaining. Mitigated by: all infrastructure from Plans 1-3 in place, clear design specs, and test-first approach.
 
 ## Design Specification
@@ -77,23 +77,24 @@ This plan follows the "no building in place" approach: tests use mocks, not real
 
 - **T13 (Heartbeat + dispatch)**: Tests mock `gh` CLI output (issues, PRs, labels). Tests mock `createAgentSession` to verify dispatch routing. No real GitHub API calls.
 - **T14 (Discord)**: Tests mock Discord REST API (fetch responses). No real Discord bot token needed. Verify message routing logic with mock payloads.
-- **T15 (Debate)**: Tests mock `createAgentSession` for each of the 5 sessions (proposer, opposer, 3 judges). Mock sessions return predetermined arguments. Verify phase transitions, session isolation, and transcript file creation.
+- **T15 (Debate)**: Tests mock `createAgentSession` for each of the 6 sessions (5 independent: proposer, opposer, 3 judges + 1 shared cross-examination). Mock sessions return predetermined arguments. Verify phase transitions, session isolation, and transcript file creation.
 - **T16 (Auto-merge + boulder + continuation)**: Tests mock `gh pr checks`, `gh pr merge`, and `gh issue edit` (label transitions). Mock boulder.json state for resume tests. Mock session events for continuation loop tests.
 - **T17 (Multi-project)**: Tests mock 2 project configs and verify session scoping. No real GitHub repos needed.
 - **T18 (Debug mode)**: Tests verify logging is off by default, on when env var set, and secrets are redacted. Use a temp log file.
 - **T19 (Installer)**: This is the ONLY todo that performs real verification. The installer runs real `bun install`, real Magic Context setup, and real `autodev doctor`. But in tests, mock the interactive prompts and external services. The actual installer is tested end-to-end at deployment time, not during development.
+- **T20 (Integration modules)**: Tests verify each module registers its tools/handlers. LSP tools return error when no server (mock). Tmux tool returns error when no tmux (mock). Context7/Grep.app mocked. Rules injection no-ops when .omo/rules/ empty. Watch Officer event handler tested with mock tool_call events.
 
 ## Dependency matrix
 
 | Todo | Depends on | Blocks | Can parallelize with |
 | --- | --- | --- | --- |
-| T13 (Heartbeat + crew dispatch) | T7, T8, T9, T10, T11, T12 | T14, T15, T16 | — |
+| T13 (Heartbeat + crew dispatch) | T7, T8, T9, T10, T11, T12 | T14, T15, T16, T19 | — |
 | T14 (Discord bridge) | T13 | — | T15, T16 |
 | T15 (Debate protocol) | T13 | — | T14, T16 |
 | T16 (Auto-merge + boulder + continuation) | T13 | — | T14, T15 |
-| T17 (Multi-project support) | T13 | — | T14, T15, T16, T18 |
-| T18 (Debug mode) | T5 | — | T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17 |
-| T19 (Installer) | T13 | — | T14, T15, T16, T17, T18 |
+| T18 (Debug mode) | T5 | — | T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16 |
+| T19 (Installer) | T13 | — | T14, T15, T16, T18 |
+| T20 (Integration modules) | T5 | — | T14, T15, T16, T18, T19 |
 
 Critical Path: T13 → T16
 
@@ -103,12 +104,12 @@ Critical Path: T13 → T16
 ### Wave 4 — Autonomous Loop (Parallel after T13)
 
 - [ ] 13. Build heartbeat, crew dispatch, and CLI commands
-  What to do: Build the autonomous orchestrator — the main loop. (a) Heartbeat timer: `setInterval` (default 5 min) that polls GitHub for new `autodev-request` issues across ALL configured project repositories via `gh issue list --label autodev-request --state open --json`. Also checks stalled PRs (autodev-ci-running label > 30 min). Also checks for blocked issues. Uses `gh` CLI. State persisted to .autodev/work-items/. (b) Crew dispatch: for each new issue, create a pi AgentSession for Nemo, IntentGate (from T5) first analyzes the issue text to detect true intent (bug, feature, refactor, question). Then dispatch the issue text + IntentGate analysis for triage. Nemo classifies (Simple/Complicated/Complex/Chaotic via Cynefin) and routes: Simple → Ned Land (task category=quick); Complicated+ → Aronnax (plan, then Ned Land implements). Track state transitions via GitHub labels (autodev-request → autodev-planned → autodev-in-progress → autodev-review → autodev-ready → autodev-merged). (c) CLI commands via pi.registerCommand(): `autodev onboard` (launch Harbor Master session), `autodev doctor` (health check: agents loaded, guardrails active, Magic Context healthy, Loreguard DB accessible, docs corpus indexed), `autodev status` (current work items, heartbeat state), `autodev docs query/rebuild`, `autodev debate start/status`.
+  What to do: Build the autonomous orchestrator — the main loop. (a) Heartbeat timer: `setInterval` (default 5 min) that polls GitHub for new `autodev-request` issues across ALL configured project repositories via `gh issue list --label autodev-request --state open --json`. Also checks stalled PRs (autodev-ci-running label > 30 min). Also checks for blocked issues. Uses `gh` CLI. State persisted to .autodev/work-items/. Multi-project support: create a project registry at `.autodev/projects.json` listing all active projects with their working directory, GitHub repo, and current state. The heartbeat polls across ALL registered project repos. Each project gets its own agent sessions scoped to its working directory. Harbor Master tracks the active project and can switch between projects. (b) Crew dispatch: for each new issue, create a crew session via T8's background agent manager (manager.create(...)), NOT raw createAgentSession() — this provides concurrency control, circuit breaker, and model fallback. IntentGate (from T5) first analyzes the issue text to detect true intent (bug, feature, refactor, question). Then dispatch the issue text + IntentGate analysis for triage. Nemo classifies (Simple/Complicated/Complex/Chaotic via Cynefin) and routes: Simple → Ned Land (task category=quick); Complicated+ → Aronnax (plan, then Ned Land implements). Track state transitions via GitHub labels (autodev-request → autodev-planned → autodev-in-progress → autodev-review → autodev-ready → autodev-merged). (c) CLI commands via pi.registerCommand(): `autodev onboard` (launch Harbor Master session), `autodev doctor` (health check: agents loaded, guardrails active, Magic Context healthy, Loreguard DB accessible, docs corpus indexed), `autodev status` (current work items, heartbeat state), `autodev docs query/rebuild`, `autodev debate start/status`.
   Must NOT do: Do NOT poll GitHub more frequently than configured (rate limits). Do NOT create duplicate sessions for the same issue. Do NOT skip label transitions — every state change must update the GitHub label. Do NOT block the heartbeat on a single issue — TRIAGE concurrent (multiple Nemo sessions), but only ONE issue in autodev-in-progress (implementation) at a time via T7 guardrail.
-  Parallelization: Wave 4 | Blocked by: T7, T8, T9, T10, T11, T12 (all from Plans 1-3) | Blocks: T14, T15, T16, T17, T19
-  References: Pi registerCommand(): `pi.registerCommand("autodev", { description, handler })`. Pi createAgentSession(): same as T8. GitHub labels from .autodev/reference/workflow-specification.md §5 Label-as-Truth Convention. `gh` CLI: `gh issue list --label autodev-request --state open --json number,title,body`. `gh pr merge --squash --delete-head`. Cynefin framework from .autodev/reference/workflow-specification.md §3 Debate Protocol. Harbor Master onboarding from .autodev/reference/onboarding-protocol.md.
+  Parallelization: Wave 4 | Blocked by: T7, T8, T9, T10, T11, T12 (all from Plans 1-3) | Blocks: T14, T15, T16, T19
+  References: Pi registerCommand(): `pi.registerCommand("autodev", { description, handler })`. T8's background agent manager: manager.create({ agent, prompt, ... }) — route all session creation through this, NOT raw createAgentSession(). GitHub labels from .autodev/reference/workflow-specification.md §5 Label-as-Truth Convention. `gh` CLI: `gh issue list --label autodev-request --state open --json number,title,body`. `gh pr merge --squash --delete-head`. Cynefin framework from .autodev/reference/workflow-specification.md §3 Debate Protocol. Harbor Master onboarding from .autodev/reference/onboarding-protocol.md.
   Design refs: ARCHITECTURE.md §3 Crew Dispatch Model, ARCHITECTURE.md §14 Heartbeat, ARCHITECTURE.md §30 CLI Commands
-  Acceptance criteria: Heartbeat starts and polls GitHub (mock `gh` output in test). A mock `autodev-request` issue → Nemo session created → triage result returned → label transitioned to autodev-planned. CLI commands are registered and their handlers exist: `autodev doctor`, `autodev onboard`, `autodev status`, `autodev docs`, `autodev debate`. `autodev doctor` runs a health check (mocked). `autodev status` shows heartbeat state and work items. Heartbeat stops on `autodev status --stop` or process exit. (Real session verification is a deployment-time activity handled by the installer T19.)
+  Acceptance criteria: Heartbeat starts and polls GitHub (mock `gh` output in test). A mock `autodev-request` issue → Nemo session created → triage result returned → label transitioned to autodev-planned. CLI commands are registered and their handlers exist: `autodev doctor`, `autodev onboard`, `autodev status`, `autodev docs`, `autodev debate`. `autodev doctor` runs a health check (mocked). `autodev status` shows heartbeat state and work items. Heartbeat stops on `autodev status --stop` or process exit. A test that configures 2 projects and confirms each gets its own agent sessions, working directory, and GitHub repo. Harbor Master tracks the active project and can switch. No context leaks. Heartbeat polls both repos. (Real session verification is a deployment-time activity handled by the installer T19.)
   QA scenarios: happy — heartbeat polls, dispatches, transitions labels; CLI commands work. Failure — heartbeat crashes on gh error (no error handling); or duplicate sessions for same issue; or label not transitioned (gh command fails silently). Evidence: `.omo/evidence/task-13-autodev-pi-foundation.txt` (heartbeat output + dispatch trace + CLI command outputs).
   Commit: Y | feat(orchestrator): heartbeat + crew dispatch + CLI commands
 
@@ -123,7 +124,7 @@ Critical Path: T13 → T16
   Commit: Y | feat(discord): bidirectional Discord bridge as pi extension
 
 - [ ] 15. Build debate protocol
-  What to do: Build the 5-phase debate protocol for Complex decisions. Phase 1: Independent preparation — each participant prepares their position in SEPARATE pi sessions (6 sessions total: 5 independent (Aronnax proposer, Momus opposer, Nemo judge-1, Oracle judge-2, Conseil judge-3) + 1 shared cross-examination session for Phase 3). Each judge must be in its own session to ensure independence. Phase 2: Structured arguments — every claim follows Claim→Evidence→Warrant format. Phase 3: Cross-examination (Complex only) — proposer and opposer question each other's evidence (in a shared cross-examination session). Phase 4: Verdict — 3 judges each vote independently in their own sessions (approve/reject/needs-revision), majority rules. Phase 5: Implementation verification — 3-judge panel verifies implementation matches approved plan. Debate transcripts written to .autodev/debates/<slug>/: metadata.yaml, proposer-arguments.md, opposer-arguments.md, cross-examination.md, verdict.md, implementation-verification.md. Cynefin classification determines protocol: Simple (no debate), Complicated (single-round), Complex (full 5-phase), Chaotic (Watch Officer emergency). Register as pi command: `autodev debate start "topic"`.
+  What to do: Build the 5-phase debate protocol for Complex decisions. Phase 1: Independent preparation — each participant prepares their position in SEPARATE pi sessions (created via T8's background agent manager for circuit breaker protection — NOT raw createAgentSession()) (6 sessions total: 5 independent (Aronnax proposer, Momus opposer, Nemo judge-1, Oracle judge-2, Conseil judge-3) + 1 shared cross-examination session for Phase 3). Each judge must be in its own session to ensure independence. Phase 2: Structured arguments — every claim follows Claim→Evidence→Warrant format. Phase 3: Cross-examination (Complex only) — proposer and opposer question each other's evidence (in a shared cross-examination session). Phase 4: Verdict — 3 judges each vote independently in their own sessions (approve/reject/needs-revision), majority rules. Phase 5: Implementation verification — 3-judge panel verifies implementation matches approved plan. Debate transcripts written to .autodev/debates/<slug>/: metadata.yaml, proposer-arguments.md, opposer-arguments.md, cross-examination.md, verdict.md, implementation-verification.md. Cynefin classification determines protocol: Simple (no debate), Complicated (single-round), Complex (full 5-phase), Chaotic (Watch Officer emergency). Register as pi command: `autodev debate start "topic"`.
   Must NOT do: Do NOT skip Phase 1 (independent preparation) — independence is the source of diversity. Do NOT allow unsupported claims in Phase 2. Do NOT let judges collaborate before voting in Phase 4.
   Parallelization: Wave 4 | Blocked by: T13 | Blocks: nothing | Can parallelize with: T14, T16
   References: Debate spec: .autodev/reference/workflow-specification.md section 3 (debate phases, Cynefin classification, transcript format). Pi createAgentSession(): create separate sessions for proposer, opposer, each judge. Pi session.subscribe(): collect arguments from each session. Pi session.prompt(): dispatch debate prompts. Cynefin: Simple/Complicated/Complex/Chaotic from .autodev/reference/workflow-specification.md §3 Debate Protocol.
@@ -133,7 +134,7 @@ Critical Path: T13 → T16
   Commit: Y | feat(debate): 5-phase debate protocol with 3-judge panel
 
 - [ ] 16. Build auto-merge, boulder state, and continuation loops
-  What to do: Build three systems: (a) Auto-merge — a custom pi tool `auto_merge_pr` that checks: CI status (gh pr checks --json), evidence exists in .omo/evidence/, Oracle review passed (label autodev-review on PR). If all green: `gh pr merge --squash --delete-head`. Transition label to autodev-merged. Post completion comment on the issue. (b) Boulder state — cross-session work plan tracking. .omo/boulder.json with {active_plan, session_ids, started_at, plan_name, completed_todos}. On `/start-work`: if boulder.json exists → resume (read state, calculate progress, inject continuation prompt); if not → init (find latest plan in .omo/plans/, create boulder.json, begin execution). (c) Continuation loops — ralph loop (self-referential until `<promise>DONE</promise>`), ULW loop (ultrawork mode, maximum intensity), todo continuation enforcer (inject system reminder when agent has incomplete todos). `/stop-continuation` stops all loops. The liaison role is optional. It applies when the project is consumed by other agents (e.g., an MCP server for Openclaw agents) — the liaison handles end-user testing. For standard human-consumed projects (web apps, APIs, tools), the crew coordinates deployment directly. The deployment protocol conditionally includes the liaison based on project type, determined during Harbor Master onboarding.
+  What to do: Build three systems: (a) Auto-merge — a custom pi tool `auto_merge_pr` that checks: CI status (gh pr checks --json), evidence exists in .omo/evidence/, Oracle review passed (label autodev-review on PR). If all green: `gh pr merge --squash --delete-head`. Transition label to autodev-merged. Post completion comment on the issue. (b) Boulder state — cross-session work plan tracking. .omo/boulder.json with {active_plan, session_ids, started_at, plan_name, completed_todos}. On `/start-work`: if boulder.json exists → resume (read state, calculate progress, inject continuation prompt); if not → init (find latest plan in .omo/plans/, create boulder.json, begin execution). (c) Continuation loops — ralph loop (self-referential until completion signal). DONE detection supports both methods: (1) regex scan `/<promise>DONE<\/promise>/` on agent output after each agent_end event, AND (2) a `loop_done` pi tool the agent can call. Either signal stops the loop. Max iterations (100) is the backstop. ULW loop (ultrawork mode, maximum intensity), todo continuation enforcer (inject system reminder when agent has incomplete todos). `/stop-continuation` stops all loops. The liaison role is optional. It applies when the project is consumed by other agents (e.g., an MCP server for Openclaw agents) — the liaison handles end-user testing. For standard human-consumed projects (web apps, APIs, tools), the crew coordinates deployment directly. The deployment protocol conditionally includes the liaison based on project type, determined during Harbor Master onboarding.
   Must NOT do: Do NOT auto-merge if any gate fails (CI red, no evidence, no review). Do NOT merge without the autodev-ready label. Do NOT let ralph loop run indefinitely (max iterations default 100). Do NOT block the session on continuation loops — they work via event injection.
   Parallelization: Wave 4 | Blocked by: T13 | Blocks: nothing | Can parallelize with: T14, T15
   References: Pi defineTool(): register auto_merge_pr tool. Pi events: pi.on("agent_end") for continuation detection. GitHub merge: `gh pr merge --squash --delete-head --pr <number>`. CI check: `gh pr checks <number> --json name,state`. Label transition: `gh issue edit <number> --remove-label autodev-ready --add-label autodev-merged`. Plan files at .omo/plans/<slug>.md.
@@ -144,23 +145,13 @@ Critical Path: T13 → T16
 
 ### Wave 4b — Multi-Project, Debug, and Installer (Parallel after T13)
 
-- [ ] 17. Build multi-project support
-  What to do: Implement multi-project support. Each project is self-contained in its own working directory, linked to its own GitHub repository. Each project has an independent team of agents (separate pi sessions, scoped to the project's working directory). Harbor Master tracks which project is currently active and maintains awareness of all other projects and their current states — when the user switches context, Harbor Master notes the switch and the crew adjusts. The heartbeat (T13) already polls across all configured project repos. Background agents (T8) must be scoped to their project's working directory. Each project has its own `.autodev/` state directory (reference, memory, evidence, plans, config, skills, decisions). The `task` tool (T9) must route work to the correct project's crew. Config: a project registry (e.g., `.autodev/projects.json` or `.pi/projects.json`) listing all active projects with their working directory, GitHub repo, and current state.
-  Must NOT do: Do NOT let projects share agent sessions — each project gets its own. Do NOT leak context between projects. Do NOT mix up GitHub labels across projects.
-  Parallelization: Wave 4b | Blocked by: T13 | Blocks: nothing | Can parallelize with: T14, T15, T16
-  References: ARCHITECTURE.md §32 Multi-Project Support. Harbor Master agent description in T4. Heartbeat multi-project polling in T13.
-  Design refs: ARCHITECTURE.md §32 Multi-Project Support
-  Acceptance criteria: A test that configures 2 projects and confirms each gets its own agent sessions, working directory, and GitHub repo. Harbor Master tracks the active project and can switch between them. Background agents are scoped to the correct project. No context leaks between projects. The heartbeat polls both project repos.
-  QA scenarios: happy — 2 projects work independently, no context leaks. Failure — projects share sessions (context leaks); or Harbor Master loses track of active project; or heartbeat only polls one repo. Evidence: `.omo/evidence/task-17-autodev-pi-foundation.txt` (multi-project test output).
-  Commit: Y | feat(multi-project): simultaneous multi-project support with independent crews
-
 - [ ] 18. Build debug mode
   What to do: Implement debug mode logging. When enabled (via `autodev doctor --debug on` or `AUTODEV_DEBUG=true` env var), every agent session logs: model prompts and responses, tool calls and results, guardrail inspections (pass/block decisions), background task lifecycle events, heartbeat poll results. Output goes to a configurable log file (default: `.autodev/debug.log`) or stdout. Debug mode is OFF by default. The logging should be structured (JSON lines) for easy parsing. Add a `--debug` flag to CLI commands that enables debug output for that command's session. Use pi's event system to capture events for logging.
   Must NOT do: Do NOT enable debug mode by default — it's too verbose for normal operation. Do NOT log secrets (API keys, tokens) — redact them. Do NOT block the session on logging — use async logging.
   Parallelization: Wave 4b | Blocked by: T5 | Blocks: nothing | Can parallelize with: T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
   References: ARCHITECTURE.md §31 Debug Mode. Pi events: pi.on("tool_call"), pi.on("agent_end"), session.subscribe(). Config: AUTODEV_DEBUG env var, `autodev doctor --debug on/off`.
   Design refs: ARCHITECTURE.md §31 Debug Mode
-  Acceptance criteria: With AUTODEV_DEBUG=true, agent sessions log model prompts, tool calls, guardrail decisions, and heartbeat results to `.autodev/debug.log`. With debug off (default), no debug logging occurs. `autodev doctor --debug on` enables debug mode. Secrets are redacted in logs. A `--debug` flag on CLI commands enables debug for that session.
+  Acceptance criteria: With AUTODEV_DEBUG=true, the debug logging infrastructure is active: log file created at `.autodev/debug.log`, structured as JSON lines, captures pi events (tool_call, agent_end). Event-specific logging (guardrail decisions from T7, background events from T8, heartbeat results from T13) is wired but fully verified at deployment by T19 — development tests verify infra, env toggle, and redaction only. With debug off (default), no debug logging occurs. `autodev doctor --debug on` enables debug mode. Secrets are redacted in logs. A `--debug` flag on CLI commands enables debug for that session.
   QA scenarios: happy — debug logging works, secrets redacted, off by default. Failure — debug logs contain secrets (redaction failed); or debug mode is on by default (too verbose); or logging blocks the session (sync logging). Evidence: `.omo/evidence/task-18-autodev-pi-foundation.txt` (debug log sample + redaction test + off-by-default test).
   Commit: Y | feat(debug): structured debug mode logging for agent thinking and actions
 
@@ -170,14 +161,14 @@ Critical Path: T13 → T16
   Parallelization: Wave 4b | Blocked by: T13 | Blocks: nothing | Can parallelize with: T14, T15, T16, T17, T18
   References: ARCHITECTURE.md §30 CLI Commands. Pi registerCommand(). GitHub labels from .autodev/reference/workflow-specification.md §5 Label-as-Truth Convention. Magic Context setup: npx @cortexkit/magic-context@latest setup --harness pi.
   Design refs: ARCHITECTURE.md §30 CLI Commands. NOTE: T19 is the only todo that performs real verification (bun install, Magic Context setup, doctor check). All other todos use mocks during development. T19 bridges development and deployment.
-  Acceptance criteria: `autodev install` command exists and is registered. Running it (in a test env) prompts for credentials, sets up config files, creates GitHub labels, and runs doctor. A `--non-interactive` flag reads from env vars. Evidence: `.omo/evidence/task-19-autodev-pi-foundation.txt`.
+  Acceptance criteria: `autodev install` command exists and is registered. Running it (in a test env) prompts for credentials, sets up config files, creates GitHub labels, and runs doctor. A `--non-interactive` flag reads from env vars. Tests: the `--non-interactive` path is tested with env vars (deterministic). The interactive path is tested by mocking process.stdin/readline to return predetermined values. Both paths covered. Evidence: `.omo/evidence/task-19-autodev-pi-foundation.txt`.
   QA scenarios: happy — installer runs end to end, config files created, labels created, doctor passes. Failure — installer crashes (no error handling); or credentials hardcoded (security); or doctor check skipped. Evidence: `.omo/evidence/task-19-autodev-pi-foundation.txt`.
   Commit: Y | feat(installer): autodev install command for deployment-time setup
 
 - [ ] 20. Fill in 5 integration module stubs (lsp, tmux, mcp-integrations, rules-injection, watch-officer-monitor)
   What to do: Replace stub register() functions in 5 modules with real logic: (a) lsp/ — 6 LSP tools via defineTool(), degrades gracefully if no LSP server. (b) tmux/ — interactive_bash tool, errors if tmux not installed. (c) mcp-integrations/ — Context7 + Grep.app tools, NOT Exa. (d) rules-injection/ — load .omo/rules/*.md into context, no-op if empty. (e) watch-officer-monitor/ — tool_call event handler for plan deviations, API mismatches, flags via team mailbox.
   Must NOT do: Do NOT require LSP server for extension load. Do NOT hardcode API keys. Do NOT block working agent.
-  Parallelization: Wave 4b | Blocked by: T5, T13 | Blocks: nothing | Can parallelize with: T14, T15, T16, T17, T18, T19
+  Parallelization: Wave 4b | Blocked by: T5 | Blocks: nothing | Can parallelize with: T14, T15, T16, T18, T19
   References: ARCHITECTURE.md §24-27, §33. Pi defineTool() and pi.on("tool_call").
   Design refs: ARCHITECTURE.md §24, §25, §26, §27, §33
   Acceptance criteria: All 5 modules have real register() logic. lsp_diagnostics registered. interactive_bash registered. Context7 + Grep.app registered. Rules injection works. Watch Officer flags via mailbox.
@@ -187,14 +178,14 @@ Critical Path: T13 → T16
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
 
-- [ ] F1. Verify scope — heartbeat, dispatch, Discord, debate, auto-merge, boulder, continuation, multi-project, debug, installer
+- [ ] F1. Verify scope — heartbeat (with multi-project polling), dispatch, Discord, debate, auto-merge, boulder, continuation, debug, installer, 5 integration modules filled in
 - [ ] F2. Code quality — heartbeat logic, dispatch state machine, debate session isolation, merge gate logic, installer flow
 - [ ] F3. Manual QA — mock GitHub issue → triage → plan → implement → review → merge pipeline (mocked), Discord mock, debate mock, installer mock
 
 ## Commit strategy
 
-- One commit per code-changing todo (T13, T14, T15, T16, T17, T18, T19).
-- Commit types: `feat(orchestrator)` (T13), `feat(discord)` (T14), `feat(debate)` (T15), `feat(autonomy)` (T16), `feat(multi-project)` (T17), `feat(debug)` (T18), `feat(installer)` (T19).
+- One commit per code-changing todo (T13, T14, T15, T16, T18, T19, T20).
+- Commit types: `feat(orchestrator)` (T13), `feat(discord)` (T14), `feat(debate)` (T15), `feat(autonomy)` (T16), `feat(debug)` (T18), `feat(installer)` (T19), `feat(integration)` (T20).
 - Evidence committed alongside code in `.omo/evidence/`.
 - Atomic commits — each todo is independently revertable.
 - All commits land on the `pi-foundation` branch.
@@ -209,10 +200,11 @@ Critical Path: T13 → T16
 6. Boulder state tracks work plans across sessions (resume/init mode).
 7. Continuation loops (ralph, ULW, todo enforcer) drive agents to completion.
 8. CLI commands work: autodev onboard, autodev doctor, autodev status, autodev docs, autodev debate.
-9. Multi-project support works (independent crews per project, no context leaks).
+9. Multi-project support works (part of T13's heartbeat — independent crews per project, no context leaks).
 10. Debug mode implemented (off by default).
 11. Installer module works (autodev install handles deployment-time setup).
 12. `grep -r "@opencode-ai" extensions/ .pi/ src/` returns zero (zero OpenCode package imports).
 13. `grep -r "oh-my-openagent\|oh-my-opencode" package.json` returns zero (zero OmO dependencies).
 14. Liaison role is conditional on project type (agent-consumed vs human-consumed).
 15. All planning and PM goes through GitHub (issues, PRs, labels, CI).
+16. All 15 extension modules have real register() logic — zero stubs remaining (4 foundation from T5 + 6 core from Plans 2-3 + 5 integration from T20).
