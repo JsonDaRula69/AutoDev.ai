@@ -197,7 +197,21 @@ async function handleDiscord(deps: ConfigModuleDeps): Promise<ConfigResult> {
     return { subcommand: "discord", step: STEP_DISCORD, status: "skipped", message: "Already configured." };
   }
 
-  const setupDiscord = await deps.prompter.confirm("Do you want to set up Discord integration?", false);
+  const setupText = `Do you want to set up Discord integration?
+
+AutoDev uses Discord as its crew-to-liaison bridge. To create and invite a bot:
+
+1. Discord Developer Portal → Applications → New Application
+2. Bot tab → Reset Token → copy it
+3. Enable Message Content Intent
+4. OAuth2 → URL Generator → scopes: bot → permissions: Send Messages, Read Message History
+5. Open URL → invite bot to server
+6. Enable Developer Mode (User Settings → Advanced → Developer Mode)
+7. Right-click channel → Copy ID
+
+Full setup guide: ~/.AutoDev/reference/discord-setup.md`;
+
+  const setupDiscord = await deps.prompter.confirm(setupText, false);
   if (!setupDiscord) {
     await markStepCompleted(deps.projectRoot, STEP_DISCORD, CONFIG_SCOPE);
     return { subcommand: "discord", step: STEP_DISCORD, status: "skipped", message: "Discord integration skipped." };

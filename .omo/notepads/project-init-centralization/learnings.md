@@ -417,3 +417,29 @@ Date: 2026-06-23
 
 - `bun test`: 489 pass, 0 fail.
 - `bun run typecheck`: tsc --noEmit EXIT 0.
+
+# T6 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `extensions/autodev/installer/config-module.ts`: `handleDiscord` confirm prompt rewritten to embed a 7-step Discord bot setup walkthrough (Developer Portal → New Application, Bot tab → Reset Token, Message Content Intent, OAuth2 URL Generator with bot scope + Send Messages/Read Message History perms, invite bot, enable Developer Mode, Copy channel ID) and a pointer to `~/.AutoDev/reference/discord-setup.md`. Confirm default remains `false` (skip). Env-writing logic unchanged.
+- New test file `extensions/autodev/installer/__tests__/config-module.test.ts` (6 tests): happy, skip, no-TTY, already-configured, walkthrough-text presence, confirm-defaults-false.
+
+## Key decisions
+
+- The 7-step walkthrough lives in the **confirm** prompt text (not a separate `prompt` call), so the user sees the full setup guide before deciding whether to proceed. This mirrors `handleGithub`, which embeds its PAT-generation steps in the `prompt` text. Discord's flow is a yes/no first (do you want to set up?), so the walkthrough belongs on the confirm.
+- `MockPrompter` discards the question text (`_question`), so the walkthrough-presence test uses a custom recording prompter that captures the `confirm` and `prompt` question strings and asserts `toContain` for each of the 7 steps + the reference pointer.
+- The no-TTY test uses a custom prompter (`confirm → true`, `prompt → ""`) rather than `MockPrompter`, because `MockPrompter.confirm` returns the default when the answer queue is empty, and the Discord confirm default is `false` — which would skip before reaching the token prompt. The real `createNoTtyPrompter.confirm` returns `defaultYes` (so it would also skip for Discord). The no-TTY **warning** path is only reachable when confirm passes but the token prompt returns empty — e.g. a partially-interactive terminal. The test pins that branch.
+
+## Gotchas
+
+- `agentEnvPath(deps)` = `join(dirname(deps.authPath), ".env")`. Tests must create `authPath` inside a subdirectory (e.g. `<tmp>/agent/auth.json`) so the `.env` lands at `<tmp>/agent/.env`, not `<tmp>/.env`.
+- `markStepCompleted` for `STEP_DISCORD=5` uses `scope="config"` (the `CONFIG_SCOPE` constant). Tests that pre-mark the step must pass `"config"` as the scope, not the default `"install"`.
+- The pre-existing `bun run typecheck` has errors in `install-module.ts`, `doctor.ts`, and `tools.ts` (unrelated to T6). T6's changed files (`config-module.ts`, `config-module.test.ts`) produce zero typecheck errors.
+
+## Verification
+
+- `bun test extensions/autodev/installer/__tests__/config-module.test.ts`: 6 pass, 0 fail.
+- `bun run typecheck`: no errors referencing config-module files.
