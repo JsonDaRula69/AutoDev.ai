@@ -132,7 +132,7 @@ Critical Path: T1 → T2 → T4 → T5 → T6
   QA scenarios: happy — 13 agents loaded (12 ported + 1 authored), identities present, models validated against allowlist. Failure — an agent missing; or identity text not in system prompt; or model string not in allowlist; or explore.md not authored. Evidence: `.omo/evidence/task-4-autodev-pi-foundation.txt` (file list + frontmatter + test output + allowlist check).
   Commit: Y | feat(agents): port 12 + author 1 Nautilus crew agents to pi format
 
-- [ ] 5. Build base AutoDev pi extension and context injection
+- [x] 5. Build base AutoDev pi extension and context injection
   What to do: This todo has TWO phases. T5 stays as one todo (no numbering change) but the two phases are clearly separated so implementation can be verified incrementally.
 
   **Phase 1 — Skeleton + context injection + 15 stub modules:**

@@ -90,7 +90,7 @@
       "plan_name": "autodev-pi-foundation-1-core",
       "status": "active",
       "started_at": "2026-06-23T05:21:15.784Z",
-      "updated_at": "2026-06-23T05:32:15.672Z",
+      "updated_at": "2026-06-23T05:46:31.160Z",
       "session_ids": [
         "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
       ],
@@ -124,6 +124,19 @@
           "status": "completed",
           "ended_at": "2026-06-23T05:32:15.672Z",
           "elapsed_ms": 17756
+        },
+        "todo:5": {
+          "task_key": "todo:5",
+          "task_label": "5",
+          "task_title": "Build base AutoDev pi extension and context injection",
+          "session_id": "opencode:ses_10d082ca0ffeqTbr5uLPDdfdtM",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "updated_at": "2026-06-23T05:46:31.160Z",
+          "started_at": "2026-06-23T05:46:06.666Z",
+          "status": "completed",
+          "ended_at": "2026-06-23T05:46:31.160Z",
+          "elapsed_ms": 24494
         }
       }
     }
@@ -131,7 +144,7 @@
   "active_plan": "/Users/djtchill/Projects/autodev-pi/.omo/plans/autodev-pi-foundation-1-core.md",
   "started_at": "2026-06-23T05:21:15.784Z",
   "status": "active",
-  "updated_at": "2026-06-23T05:32:15.672Z",
+  "updated_at": "2026-06-23T05:46:31.160Z",
   "session_ids": [
     "opencode:ses_10d130cabffebBTpGUgnaPzsPQ"
   ],
@@ -165,6 +178,19 @@
       "status": "completed",
       "ended_at": "2026-06-23T05:32:15.672Z",
       "elapsed_ms": 17756
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "Build base AutoDev pi extension and context injection",
+      "session_id": "opencode:ses_10d082ca0ffeqTbr5uLPDdfdtM",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-06-23T05:46:31.160Z",
+      "started_at": "2026-06-23T05:46:06.666Z",
+      "status": "completed",
+      "ended_at": "2026-06-23T05:46:31.160Z",
+      "elapsed_ms": 24494
     }
   },
   "agent": "atlas"
