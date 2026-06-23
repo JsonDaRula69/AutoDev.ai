@@ -8,6 +8,7 @@
 import { test, expect } from "bun:test";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import type { ContextFile } from "../extensions/autodev/context.js";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 
@@ -89,4 +90,28 @@ test("context.ts exports loadContextFiles and augmentSystemPrompt", async () => 
   const mod = await import(join(ROOT, "extensions", "autodev", "context.ts"));
   expect(typeof mod.loadContextFiles).toBe("function");
   expect(typeof mod.augmentSystemPrompt).toBe("function");
+});
+
+test("loadContextFiles returns AGENTS.md, CONTEXT.md, and memory files", async () => {
+  const { loadContextFiles } = await import(join(ROOT, "extensions", "autodev", "context.ts"));
+  const files = loadContextFiles(ROOT);
+
+  // Must include AGENTS.md
+  const agents = files.find((f: ContextFile) => f.path === "/autodev/AGENTS.md");
+  expect(agents).toBeDefined();
+  expect(agents!.content.length).toBeGreaterThan(0);
+
+  // Must include CONTEXT.md
+  const context = files.find((f: ContextFile) => f.path === "/autodev/CONTEXT.md");
+  expect(context).toBeDefined();
+  expect(context!.content.length).toBeGreaterThan(0);
+
+  // Must include at least one .autodev/memory/*.md file
+  const memoryFiles = files.filter((f: ContextFile) => f.path.startsWith("/autodev/memory/"));
+  expect(memoryFiles.length).toBeGreaterThanOrEqual(1);
+
+  // Verify actual file content is loaded (not just path presence)
+  for (const file of files) {
+    expect(file.content.length).toBeGreaterThan(0);
+  }
 });
