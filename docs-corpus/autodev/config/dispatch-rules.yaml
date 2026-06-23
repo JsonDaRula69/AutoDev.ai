@@ -1,0 +1,232 @@
+# AutoDev Dispatch State Machine
+# IMMUTABLE REFERENCE — Do not modify without human ratification via Loreguard.
+# See .autodev/reference/workflow-specification.md Section 2 for full specification.
+
+state_machine:
+  states:
+    - name: request
+      label: autodev-request
+      description: "New work requested"
+      evidence_required: "GitHub issue with autodev-request label"
+      
+    - name: triage
+      label: autodev-planned
+      description: "Triage complete, scope assessed, decision complexity classified"
+      evidence_required: "Triage comment with type, priority, scope, route, decision complexity"
+      gates:
+        - agent: nemo
+          checks:
+            - issue_acknowledged
+            - type_classified
+            - priority_assessed
+            - scope_estimated
+            - decision_complexity_classified
+
+    - name: classify
+      label: autodev-planned
+      description: "Decision classified, route determined"
+      evidence_required: "Classification comment (Simple/Complicated/Complex/Chaotic)"
+      gates:
+        - agent: nemo
+          checks:
+            - decision_complexity_classified
+            - route_determined
+
+    - name: debate
+      label: autodev-planned
+      description: "Under debate for Complicated/Complex decisions"
+      evidence_required: "Debate transcript at .autodev/debates/<slug>/"
+      gates:
+        - agent: aronnax
+          role: proposer
+          checks:
+            - proposer_arguments_complete
+        - agent: momus
+          role: opposer
+          checks:
+            - opposer_arguments_complete
+        - agent: nemo
+          role: judge
+          checks:
+            - verdict_recorded
+
+    - name: plan
+      label: autodev-planned
+      description: "Approved plan exists at .autodev/plans/<slug>.md"
+      evidence_required: "Plan file with acceptance criteria"
+      gates:
+        - agent: aronnax
+          checks:
+            - plan_exists
+            - acceptance_criteria_defined
+            - debate_verdict_approved_or_not_required
+
+    - name: implement
+      label: autodev-in-progress
+      description: "Implementation in progress"
+      evidence_required: "Evidence at .autodev/evidence/<date>-<slug>/"
+      gates:
+        - agent: ned_land
+          checks:
+            - evidence_exists
+            - tests_pass
+
+    - name: review
+      label: autodev-review
+      description: "PR opened, under review"
+      evidence_required: "Clean review from Oracle + Momus"
+      gates:
+        - agent: oracle
+          role: reviewer
+          checks:
+            - review_clean
+            - all_acceptance_criteria_met
+
+    - name: deploy
+      label: autodev-ready
+      description: "CI green, ready for deployment"
+      evidence_required: "CI green + deployment confirmation"
+      gates:
+        - agent: navigator
+          checks:
+            - ci_green
+            - deployment_healthy
+
+    - name: close
+      label: autodev-merged
+      description: "Deployed, verified, complete"
+      evidence_required: "Deployment verified, completion comment on issue"
+      gates:
+        - agent: nemo
+          checks:
+            - deployment_verified
+            - completion_comment_posted
+
+    - name: blocked
+      label: autodev-blocked
+      description: "Blocked, needs attention"
+      evidence_required: "Blocker description and escalation path"
+      enter_from: any
+      exit_to: previous_state
+      gates:
+        - agent: watch_officer
+          checks:
+            - blocker_description_exists
+            - escalation_path_defined
+
+  transitions:
+    - from: request
+      to: triage
+      agent: nemo
+      trigger: new_issue
+      evidence_gate: triage_complete
+
+    - from: triage
+      to: classify
+      agent: nemo
+      trigger: triage_complete
+      evidence_gate: decision_complexity_classified
+
+    - from: classify
+      to: plan
+      agent: nemo
+      trigger: simple_decision
+      route: ned_land
+      evidence_gate: scope_assessed
+
+    - from: classify
+      to: debate
+      agent: nemo
+      trigger: complicated_or_complex_decision
+      evidence_gate: debate_protocol_initiated
+
+    - from: debate
+      to: plan
+      agent: aronnax
+      trigger: debate_verdict_approved
+      evidence_gate: verdict_approved
+
+    - from: debate
+      to: blocked
+      agent: momus_or_oracle
+      trigger: debate_verdict_needs_revision
+      evidence_gate: revision_requirements_specified
+
+    - from: plan
+      to: implement
+      agent: ned_land
+      trigger: plan_approved
+      route: ned_land
+      evidence_gate: evidence_files_created
+
+    - from: implement
+      to: review
+      agent: oracle
+      trigger: implementation_complete
+      evidence_gate: review_requested
+
+    - from: review
+      to: deploy
+      agent: navigator
+      trigger: review_clean
+      evidence_gate: ci_green
+
+    - from: review
+      to: implement
+      agent: ned_land
+      trigger: review_requested_changes
+      evidence_gate: changes_addressed
+
+    - from: deploy
+      to: close
+      agent: nemo
+      trigger: deployment_verified
+      evidence_gate: liaison_or_navigator_confirmation
+
+    - from: any
+      to: blocked
+      agent: watch_officer
+      trigger: blocker_detected
+      evidence_gate: blocker_documented
+
+dispatch_rules:
+  - trigger: plan_complete
+    from: aronnax
+    to: ned_land
+    condition: "plan_exists AND (debate_verdict == 'approved' OR debate_not_required)"
+    evidence: ".autodev/plans/<slug>.md"
+
+  - trigger: implementation_complete
+    from: ned_land
+    to: oracle
+    condition: "evidence_exists AND tests_pass"
+    evidence: ".autodev/evidence/<date>-<slug>/"
+
+  - trigger: review_clean
+    from: oracle
+    to: navigator
+    condition: "review_approved AND ci_green"
+    evidence: "PR review comments"
+
+  - trigger: deployment_verified
+    from: navigator
+    to: nemo
+    condition: "deployment_healthy"
+    evidence: "deployment verification logs"
+
+  - trigger: blocker_detected
+    from: any
+    to: watch_officer
+    condition: "NOT resolvable_by_current_agent"
+    evidence: "blocker description"
+
+  - trigger: triage_new_issue
+    from: nemo
+    to: "aronnax OR ned_land"
+    condition: "issue_exists AND scope_assessed"
+    evidence: "issue triage comment"
+    route:
+      simple: ned_land
+      complicated: aronnax
+      complex: aronnax
+      chaotic: watch_officer

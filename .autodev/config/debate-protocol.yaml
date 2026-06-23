@@ -1,0 +1,151 @@
+# AutoDev Debate Protocol
+# IMMUTABLE REFERENCE — Do not modify without human ratification via Loreguard.
+# See .autodev/reference/workflow-specification.md Section 3 for full specification.
+
+decision_classification:
+  # Based on the Cynefin framework (Snowden, 1999)
+  # Determines debate intensity for each decision
+
+  simple:
+    description: "Known knowns. Best practice applies."
+    protocol: linear_escalation
+    debate_required: false
+    examples:
+      - "Bug fix with clear solution"
+      - "Standard PR review"
+      - "Obvious one-liner change"
+    route: "Nemo dispatches directly to specialist"
+
+  complicated:
+    description: "Known unknowns. Expert analysis needed."
+    protocol: single_round_debate
+    debate_required: true
+    phases:
+      - proposer_presents
+      - opposer_critiques
+      - judge_decides
+    examples:
+      - "Architecture choice between known patterns"
+      - "Technology selection"
+      - "Refactoring with known approach"
+    route: "Aronnax (proposer) → Momus (opposer) → Nemo (judge)"
+
+  complex:
+    description: "Unknown unknowns. Probe-sense-respond."
+    protocol: full_debate
+    debate_required: true
+    phases:
+      - independent_preparation
+      - structured_arguments
+      - cross_examination
+      - verdict
+      - implementation_verification
+    examples:
+      - "New feature design"
+      - "Cross-cutting refactor"
+      - "Security architecture"
+      - "Any decision affecting 11+ files"
+    route: "Aronnax (proposer) → Momus (opposer) → Nemo/Oracle/Conseil (3-judge panel)"
+
+  chaotic:
+    description: "Crisis. Act-sense-respond."
+    protocol: emergency_response
+    debate_required: false
+    examples:
+      - "Production incident"
+      - "Data corruption"
+      - "Security breach"
+    route: "Watch Officer takes emergency action, retrospective debate follows"
+
+debate_phases:
+  # Full 5-phase protocol for Complex decisions
+
+  phase_1_independent_preparation:
+    description: "Each participant develops their position independently"
+    mandatory: true
+    duration_minutes: null  # No time limit, but must complete before phase 2
+    rules:
+      - "No collaboration before debate — independence is the source of diversity"
+      - "Proposer develops full argument with evidence citations"
+      - "Opposer develops critique with counter-evidence"
+      - "Judges review standing orders, reference docs, and relevant Loreguard records"
+    output: "Position documents in .autodev/debates/<slug>/"
+
+  phase_2_structured_arguments:
+    description: "Every claim follows Claim → Evidence → Warrant format"
+    mandatory: true
+    rules:
+      - "Every claim must have all three components: Claim, Evidence, Warrant"
+      - "Claim: the assertion being made"
+      - "Evidence: specific data point, code reference, or test result"
+      - "Warrant: why the evidence supports the claim"
+      - "No unsupported claims allowed"
+    output: ".autodev/debates/<slug>/proposer-arguments.md, opposer-arguments.md"
+
+  phase_3_cross_examination:
+    description: "Proposer and Opposer question each other's evidence"
+    mandatory: false  # Only for Complex decisions
+    rules:
+      - "Proposer and Opposer question each other's evidence"
+      - "Judges may ask clarifying questions"
+      - "All questions and answers are logged"
+    output: ".autodev/debates/<slug>/cross-examination.md"
+
+  phase_4_verdict:
+    description: "3-judge panel votes independently"
+    mandatory: true
+    judges: [nemo, oracle, conseil]
+    verdict_options:
+      - value: approve
+        description: "Proceed with the proposed approach"
+      - value: reject
+        description: "Do not proceed; restart or escalate"
+      - value: needs_revision
+        description: "Proceed after specific revisions"
+    each_judge_provides:
+      - verdict (approve/reject/needs-revision)
+      - reasoning (text)
+      - confidence (high/medium/low)
+    decision_rule: "Majority rules for approve/reject. Needs-revision loops back to Phase 2."
+    output: ".autodev/debates/<slug>/verdict.md"
+
+  phase_5_implementation_verification:
+    description: "Implementation follows approved approach with evidence checkpoints"
+    mandatory: true
+    rules:
+      - "Implementation follows the approved approach"
+      - "Evidence checkpoints at each implementation phase"
+      - "3-judge panel verifies implementation matches approved plan"
+    output: ".autodev/debates/<slug>/implementation-verification.md"
+
+premortem:
+  # Mandatory for HEAVY-tier tasks (11+ files)
+  # Based on Klein (2007) pre-mortem analysis
+  
+  description: "Before implementation, imagine the task failed. What went wrong?"
+  required_for: "HEAVY-tier tasks (11+ files affected)"
+  steps:
+    - "Generate failure hypotheses classified by likelihood and impact"
+    - "Classify: High/Medium/Low likelihood × High/Medium/Low impact"
+    - "Add mitigations to the plan as explicit steps"
+    - "Log pre-mortem to .autodev/debates/<slug>/premortem.md"
+  output: ".autodev/debates/<slug>/premortem.md"
+
+retrospective:
+  # After every task completion (Kaizen loop)
+  
+  description: "Structured retrospective after task completion"
+  required_for: "All tasks"
+  steps:
+    - "What went well?"
+    - "What could be improved?"
+    - "What did the debate protocol catch that linear review would have missed?"
+    - "EVM metrics: CPI, SPI, defect escape rate"
+    - "Process improvement suggestions"
+  output: ".autodev/evidence/<date>-<slug>/retrospective.md"
+
+debate_effectiveness_metric:
+  description: "Ratio of issues caught by debate vs. issues caught by linear review"
+  formula: "debate_caught / (debate_caught + linear_review_caught)"
+  target: "> 0.5"
+  logged_in: ".autodev/metrics/debate-effectiveness.jsonl"

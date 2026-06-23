@@ -1,0 +1,279 @@
+# AutoDev Guardrail Engine
+# IMMUTABLE REFERENCE — Do not modify without human ratification via Loreguard.
+# See .autodev/reference/workflow-specification.md Section 4 for full specification.
+
+hard_stops:
+  # These constraints are enforced programmatically. No agent may override them.
+
+  - id: never-deploy-directly
+    description: "AutoDev never deploys directly. Submit PRs, pass CI, alert liaison. Task not complete until liaison verifies deployment."
+    check: "action_type == 'deploy' AND agent != 'navigator'"
+    enforcement: block_action
+    applies_to: [nemo, aronnax, ned_land, oracle, momus, conseil, metis, engineer, harbor_master, boatswain]
+
+  - id: no-secrets-in-code
+    description: "API keys, tokens, credentials never go in source files. Use environment variables or a secrets manager. If you find secrets in code, file an issue."
+    check: "action_type == 'commit' AND contains_secrets(diff)"
+    enforcement: block_commit
+    applies_to: all
+
+  - id: one-task-at-a-time
+    description: "Do not context-switch. If interrupted, log as GitHub issue and resume original task."
+    check: "active_tasks > 1"
+    enforcement: block_new_task
+    applies_to: all
+
+  - id: evidence-or-it-didnt-happen
+    description: "Every change that touches runtime behavior must be proven on a real surface. Write proof to .autodev/evidence/ before committing."
+    check: "action_type == 'commit' AND NOT evidence_exists"
+    enforcement: block_commit
+    applies_to: [ned_land, aronnax]
+
+  - id: follow-the-plan
+    description: "If a plan exists at .autodev/plans/<slug>.md, implement what the plan says. Do not add improvements the plan didn't call for. If the plan is wrong, fix the plan first."
+    check: "action_type == 'implement' AND plan_exists AND implementation_deviates_from_plan"
+    enforcement: block_action
+    applies_to: [ned_land]
+
+  - id: ci-is-the-hard-gate
+    description: "CI must be green before merge. If CI is red, fix it before doing anything else."
+    check: "action_type == 'merge' AND ci_status != 'green'"
+    enforcement: block_merge
+    applies_to: [quartermaster, navigator]
+
+  - id: never-approve-own-work
+    description: "An agent cannot approve its own work. Ned Land cannot review Ned Land's PR."
+    check: "action_type == 'review' AND reviewer == implementer"
+    enforcement: block_action
+    applies_to: all
+
+  - id: never-modify-reference-docs
+    description: "Reference docs in .autodev/reference/ are immutable truth. Never modify them during normal operation."
+    check: "action_type == 'write' AND path_starts_with('.autodev/reference/')"
+    enforcement: block_write
+    applies_to: all
+
+  - id: never-modify-debate-transcripts
+    description: "Debate transcripts are immutable audit trail. Never modify them after verdict."
+    check: "action_type == 'write' AND path_starts_with('.autodev/debates/') AND debate_phase == 'complete'"
+    enforcement: block_write
+    applies_to: all
+
+soft_stops:
+  # These constraints generate warnings but do not block execution.
+
+  - id: suggest-review
+    description: "Consider running a review before proceeding."
+    check: "change_scope > 'small' AND NOT review_requested"
+    enforcement: warn
+    applies_to: [ned_land, aronnax]
+
+  - id: warn-scope
+    description: "This change affects more files than expected. Consider breaking into smaller changes."
+    check: "files_changed > 10"
+    enforcement: warn
+    applies_to: all
+
+  - id: flag-missing-evidence
+    description: "No evidence file found for this change."
+    check: "action_type == 'review' AND NOT evidence_file_exists"
+    enforcement: warn
+    applies_to: [oracle, momus]
+
+  - id: warn-no-premortem
+    description: "HEAVY-tier task has no pre-mortem analysis."
+    check: "task_tier == 'HEAVY' AND NOT premortem_exists"
+    enforcement: warn
+    applies_to: [nemo, aronnax]
+
+  - id: suggest-debate
+    description: "This decision may benefit from debate protocol."
+    check: "decision_complexity >= 'complicated' AND NOT debate_initiated"
+    enforcement: warn
+    applies_to: [nemo]
+
+capability_manifests:
+  # Each agent has an explicit list of what it can and cannot do.
+  # The guardrail engine validates every action against these manifests.
+
+  nemo:
+    can:
+      - triage
+      - delegate
+      - set-course
+      - acknowledge-receipt
+      - escalate-to-watch-officer
+      - judge-debate
+      - close-task
+    cannot:
+      - implement-code
+      - deploy-directly
+      - approve-own-decisions-in-debate
+      - modify-reference-docs
+      - modify-debate-transcripts
+      - override-hard-stops
+
+  aronnax:
+    can:
+      - plan
+      - analyze-architecture
+      - design-phased-implementation
+      - investigate-source-of-truth
+      - propose-debate-arguments
+    cannot:
+      - implement-code
+      - make-policy
+      - perform-production-operations
+      - deploy-directly
+      - modify-reference-docs-after-ratification
+
+  ned_land:
+    can:
+      - write-code
+      - run-tests
+      - create-worktree
+      - commit-evidence
+      - open-pr
+      - respond-to-review-comments
+    cannot:
+      - deploy-directly
+      - approve-own-pr
+      - modify-standing-orders
+      - modify-reference-docs
+      - modify-debate-transcripts
+      - override-hard-stops
+
+  conseil:
+    can:
+      - search-lore
+      - search-reference
+      - search-context
+      - suggest-lore
+      - report-conflicts
+      - judge-debate
+    cannot:
+      - implement-code
+      - perform-production-operations
+      - modify-reference-docs
+      - override-hard-stops
+
+  oracle:
+    can:
+      - code-review
+      - adversarial-analysis
+      - security-review
+      - judge-debate
+    cannot:
+      - implement-code
+      - perform-production-operations
+      - approve-own-work
+      - modify-reference-docs
+      - modify-debate-transcripts
+
+  momus:
+    can:
+      - plan-review
+      - gap-analysis
+      - oppose-debate-arguments
+      - pre-mortem-analysis
+    cannot:
+      - implement-code
+      - perform-production-operations
+      - oppose-arguments-without-evidence
+      - modify-reference-docs
+      - modify-debate-transcripts
+
+  metis:
+    can:
+      - pre-planning-analysis
+      - hidden-requirement-surfacing
+      - ai-slop-detection
+      - ambiguity-clarification
+    cannot:
+      - implement-code
+      - perform-production-operations
+      - make-policy
+      - modify-reference-docs
+
+  engineer:
+    can:
+      - run-ci
+      - verify-evidence
+      - check-regressions
+      - coverage-analysis
+    cannot:
+      - implement-code
+      - perform-production-operations
+      - deploy-directly
+      - modify-reference-docs
+
+  harbor_master:
+    can:
+      - investigate-codebase
+      - populate-reference-docs
+      - populate-memory-files
+      - create-initial-adrs
+      - verify-setup-health
+      - generate-config-from-templates
+    cannot:
+      - implement-features
+      - perform-production-operations
+      - modify-reference-docs-after-ratification
+      - deploy-directly
+
+  quartermaster:
+    can:
+      - manage-label-transitions
+      - monitor-ci
+      - create-manage-issues
+      - compute-evm-metrics
+      - sync-project-board
+      - verify-evidence-at-gates
+    cannot:
+      - allow-label-transition-without-evidence
+      - deploy-directly
+      - implement-code
+      - modify-reference-docs
+
+  boatswain:
+    can:
+      - run-test-suites
+      - validate-evidence
+      - anti-hallucinated-success-verification
+      - produce-structured-evidence
+    cannot:
+      - implement-code
+      - deploy-directly
+      - override-hard-stops
+      - approve-own-evidence
+
+  navigator:
+    can:
+      - coordinate-deployment
+      - verify-deployment-health
+      - escalate-to-watch-officer
+      - signal-liaison-via-discord
+    cannot:
+      - deploy-directly
+      - implement-code
+      - escalate-failures-to-humans
+      - modify-reference-docs
+
+  watch_officer:
+    can:
+      - health-monitoring
+      - self-healing-actions
+      - circuit-breaker-management
+      - agent-restart
+      - work-requeue
+      - escalation-routing
+      - chaos-mode-testing
+      - persistent-heartbeat
+      - diagnose-failures
+      - propose-recovery-plans
+    cannot:
+      - escalate-to-humans
+      - implement-code
+      - deploy-directly
+      - modify-reference-docs
+      - modify-debate-transcripts
