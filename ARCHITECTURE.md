@@ -144,9 +144,13 @@ extensions/autodev/
   tmux/index.ts          <- interactive bash + team visualization
   comment-checker/index.ts <- AI-slop stripping
   intent-gate/index.ts   <- intent analysis before classification
+  notepad/index.ts         <- Loreguard-backed wisdom accumulation
+  mcp-integrations/index.ts <- Context7 + Grep.app
+  rules-injection/index.ts <- .omo/rules/ loading
+  watch-officer-monitor/index.ts <- proactive deviation detection
 ```
 
-Each module exports a registration function that the entry point calls with the shared `ExtensionAPI` instance. Adding a new module means creating a directory and adding one import line to `index.ts`. No two parallel todos touch the same file. The extension is declared in `package.json` under the `pi` manifest key. Implemented by T5 in the pi-foundation plan.
+The 16 modules are grouped into three waves of implementation: **foundation modules** (team-mode, comment-checker, intent-gate, notepad) get real registration logic in the pi-foundation plan (T5); **core modules** (guardrails, background, delegation, loreguard, docs, tools) get real logic in sub-plans 2-3 (T7-T12); **integration modules** (lsp, tmux, mcp-integrations, rules-injection, watch-officer-monitor) get real logic in sub-plan 4. In the foundation plan, all 16 module directories are created with a canonical stub — `export function register(pi: ExtensionAPI): void { /* implemented in T<NN> */ }` — and the 4 foundation modules are filled in with real logic. Each module exports a registration function that the entry point calls with the shared `ExtensionAPI` instance. Adding a new module means creating a directory and adding one import line to `index.ts`. No two parallel todos touch the same file. The extension is declared in `package.json` under the `pi` manifest key. Implemented by T5 in the pi-foundation plan.
 
 ---
 
