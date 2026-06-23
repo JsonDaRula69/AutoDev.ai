@@ -14,9 +14,10 @@
  *   5. Config override — .pi/magic-context.jsonc field assertions
  *   6. Notepad-to-MagicContext integration — all 5 store* backends routed
  */
-import { test, expect, beforeEach } from "bun:test";
+import { test, expect, beforeEach, afterEach } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Database } from "bun:sqlite";
 import {
   mockCtxSearch,
   mockCtxMemory,
@@ -35,6 +36,7 @@ import {
   MEMORY_CATEGORY_ARCHITECTURE,
   MEMORY_CATEGORY_CONSTRAINTS,
 } from "../extensions/autodev/notepad/index.js";
+import { setDb, resetDb, createSchema, checkSqliteVersion } from "../extensions/autodev/loreguard/index.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 const CONFIG_PATH = resolve(PROJECT_ROOT, ".pi", "magic-context.jsonc");
@@ -85,8 +87,19 @@ function parseJsonc(text: string): Record<string, unknown> {
   return JSON.parse(out) as Record<string, unknown>;
 }
 
+let memDb: Database;
+
 beforeEach(() => {
   resetCtxMocks();
+  memDb = new Database(":memory:");
+  checkSqliteVersion(memDb);
+  createSchema(memDb);
+  setDb(memDb);
+});
+
+afterEach(() => {
+  resetDb();
+  memDb.close();
 });
 
 // ---------------------------------------------------------------------------
@@ -148,7 +161,8 @@ test("storeDecision produces a loreguard:adr descriptor, not ctx_memory", () => 
   expect(d.backend).toBe("loreguard:adr");
   expect(d.backend).not.toMatch(/^ctx_memory/);
   expect(d.content).toContain("ADR: Use Bun as runtime");
-  expect(d.note).toContain("suggest_lore");
+  expect(d.note).toContain("ratify_lore");
+  expect(d.written).toBe(true);
 });
 
 test("ctx_search mock returns memory + message hits echoing the query", async () => {
@@ -277,7 +291,7 @@ test("storeDecision routes to loreguard:adr backend", () => {
   expect(d.kind).toBe("decision");
   expect(d.backend).toBe("loreguard:adr");
   expect(d.target).toContain("loreguard");
-  expect(d.written).toBe(false);
+  expect(d.written).toBe(true);
 });
 
 test("storeIssue routes to ctx_memory:CONSTRAINTS backend", () => {
