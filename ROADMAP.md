@@ -10,6 +10,8 @@ This roadmap tracks what comes AFTER that foundation is solid. It's organized by
 
 Multi-project support has been moved into the initial pi-foundation wave — it is no longer a future-wave item.
 
+The installer has been moved into the initial pi-foundation wave — it is no longer a future-wave item.
+
 Each entry says what the feature is, why it's deferred, which wave it belongs to, and what depends on it. No implementation details here. This is a roadmap, not a plan.
 
 ## Near-term enhancements
@@ -34,9 +36,9 @@ Desktop alerts when a task completes. "Ned Land finished implementing the auth f
 
 ### Additional CLI commands
 
-Three commands beyond the core set: `autodev install` for a guided setup wizard, `autodev cleanup` to remove stale sessions and temp files, `autodev refresh-model-capabilities` to re-validate which models are actually available from your provider.
+Two commands beyond the core set: `autodev cleanup` to remove stale sessions and temp files, `autodev refresh-model-capabilities` to re-validate which models are actually available from your provider. (The `autodev install` command is part of the pi-foundation wave — see the implementation plan.)
 
-- **Why deferred:** The core CLI commands (onboard, doctor, status, docs, debate) cover essential operations. These three are conveniences.
+- **Why deferred:** The core CLI commands (onboard, doctor, status, docs, debate) plus the installer cover essential operations. These two are conveniences.
 - **Wave:** Near-term.
 - **Depends on:** CLI command system (T13).
 
@@ -80,21 +82,13 @@ Full agent monitoring beyond the circuit breaker. The initial wave's background 
 
 Major features that require significant effort. Each one reshapes how AutoDev operates.
 
-### Installer
-
-One-command setup. `curl ... | sh` or `npx autodev-init`. The installer handles pi installation, Magic Context setup, credential configuration, GitHub label creation, and knowledge base seeding in a single guided flow.
-
-- **Why deferred:** The manual setup steps are documented and manageable for early adopters. A polished installer is for broader adoption.
-- **Wave:** Long-term.
-- **Depends on:** Complete pi-foundation.
-
 ### Single binary
 
 Compiled distribution via `bun build --compile`. The result is a standalone binary with no Node.js, no Bun, no npm required on the target machine. You download one file and run it.
 
 - **Why deferred:** Bun is a lightweight prerequisite, and source-level execution keeps development iteration fast during the foundation phase.
 - **Wave:** Long-term.
-- **Depends on:** Complete pi-foundation, installer.
+- **Depends on:** Complete pi-foundation.
 
 ## Magic Context future options
 

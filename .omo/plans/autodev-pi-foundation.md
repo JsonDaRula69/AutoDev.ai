@@ -10,9 +10,9 @@
 
 **Why this approach:** Pi provides in-process sessions, custom tools, lifecycle events, and extensions with a minimalist philosophy that aligns with AutoDev's autonomy goal. Magic Context already has a Pi extension, so semantic memory comes for free.
 
-**What it will NOT do:** No OmO dependency — build directly on pi primitives. Zero OpenCode dependencies. No installer or single binary — those are future waves. Multi-project support IS in scope for this wave.
+**What it will NOT do:** No OmO dependency — build directly on pi primitives. Zero OpenCode dependencies. No single binary — future wave. Multi-project support IS in scope for this wave. The installer IS in scope for this wave.
 
-**Effort:** XL — 16 todos across 5 waves, building an entire autonomous multi-agent system from scratch.
+**Effort:** XL — 19 todos across 6 waves, building an entire autonomous multi-agent system from scratch.
 **Risk:** High — large scope, new foundation. Mitigated by: existing design specs (onboarding protocol, workflow specification, guardrail definitions), Magic Context handling memory, and pi's proven extension API.
 **Decisions I made for you:** (1) In-process sessions via createAgentSession() instead of subprocess spawning — lower latency, shared memory. (2) Magic Context installed as Pi extension — provides semantic memory, historian, dreamer, no need to reimplement. (3) No OmO dependency — build directly on pi primitives. (4) Agent definitions port to pi's Markdown+YAML format — same format, minimal changes. (5) Guardrails via pi's tool_call event. (6) Model routing per crew role from techContext.md. (7) Loreguard as direct bun:sqlite library — no MCP needed. (8) bun:sqlite for all SQLite (pi runs on Bun).
 
@@ -20,7 +20,7 @@ Your next move: review the plan, then start work with `$start-work` or run a hig
 
 ---
 
-> TL;DR (machine): XL effort, High risk — fresh start on pi: delete all code, keep identity/design artifacts, install pi + Magic Context, build 13 crew agents + guardrails + crew dispatch + background agents + model fallback + Loreguard + docs query + custom tools + skills + heartbeat + Discord + debate + auto-merge + boulder state + continuation loops + multi-project support + debug mode as pi extensions — 18 todos across 5 waves
+> TL;DR (machine): XL effort, High risk — fresh start on pi: delete all code, keep identity/design artifacts, set up project dependencies + config files, build 13 crew agents + guardrails + crew dispatch + background agents + model fallback + Loreguard + docs query + custom tools + skills + heartbeat + Discord + debate + auto-merge + boulder state + continuation loops + multi-project support + debug mode + installer as pi extensions — 19 todos across 6 waves
 
 ## Design Specification
 
@@ -36,13 +36,13 @@ This plan implements the design described in the following documents. If this pl
 ## Scope
 ### Must have
 
-- **Fresh branch with clean slate (PROJECT REPO ONLY).** New branch `pi-foundation` on JsonDaRula69/AutoDev.ai. Stash uncommitted changes before branch creation. Delete ALL existing code except identity/design artifacts: `src/` (except `src/agents/`), `.opencode/` (the IN-REPO config — NOT the user's global `~/.config/opencode/`), `package.json`, `package-lock.json`, `node_modules/`, `dist/`, `tsconfig.json`, `.autodev/embeddings/`, `.autodev/discord/`, `.autodev/debates/`, `.autodev/work-items/`, `.autodev/metrics/`, `.autodev/agents/` (empty). Keep: `src/agents/` (26 files), `.autodev/reference/`, `.autodev/config/`, `.autodev/memory/`, `.autodev/skills/`, `.autodev/scripts/`, `.autodev/templates/`, `.autodev/decisions/`, `.autodev/research/`, `.autodev/*.md` docs, `.autodev/nautilus-charter.md`, `.autodev/autodev-root`, `docs-corpus/` (commit to branch so it's tracked), `AGENTS.md`, `CONTEXT.md`, `README.md`, `.omo/` (this plan + drafts + evidence). IMPORTANT COEXISTENCE: This deletion is scoped to the project repo only. The user's global OpenCode config, global Magic Context config, and Magic Context DB are NOT touched. AutoDev on pi coexists with any existing OpenCode setup — `.pi/` and `.opencode/` can both exist in the same project.
+- **Clean workspace on existing pi-foundation branch (PROJECT REPO ONLY).** The `pi-foundation` branch already exists with docs work committed. Delete ALL existing code except identity/design artifacts: `src/` (except `src/agents/`), `.opencode/` (the IN-REPO config — NOT the user's global `~/.config/opencode/`), `package.json`, `package-lock.json`, `node_modules/`, `dist/`, `tsconfig.json`, `.autodev/embeddings/`, `.autodev/discord/`, `.autodev/debates/`, `.autodev/work-items/`, `.autodev/metrics/`, `.autodev/agents/` (empty). Keep: `src/agents/` (26 files), `.autodev/reference/`, `.autodev/config/`, `.autodev/memory/`, `.autodev/skills/`, `.autodev/scripts/`, `.autodev/templates/`, `.autodev/decisions/`, `.autodev/research/`, `.autodev/*.md` docs, `.autodev/nautilus-charter.md`, `.autodev/autodev-root`, `docs-corpus/` (commit to branch so it's tracked), `AGENTS.md`, `CONTEXT.md`, `README.md`, `ARCHITECTURE.md`, `STRUCTURE.md`, `ROADMAP.md`, `.omo/` (this plan + drafts + evidence). IMPORTANT COEXISTENCE: This deletion is scoped to the project repo only. The user's global OpenCode config, global Magic Context config, and Magic Context DB are NOT touched. AutoDev on pi coexists with any existing OpenCode setup — `.pi/` and `.opencode/` can both exist in the same project. Do NOT extract credentials or API keys — that is the installer's job (T19).
 - **Extract identity blocks from src/agents/.** The 10 Nautilus crew identity blocks are stored in `src/agents/<name>-identity.md`. Each block contains the `prompt_append` text for a crew member. Save each block to `src/agents/<name>-identity.md` (a separate file from the existing .md/.yaml). The Engineer block is shared by quartermaster/boatswain/navigator/watch-officer. The Explore block maps to the Explore subagent.
-- **Migrate LLM credentials with user prompting.** During setup (T3), prompt the user with options: (a) extract from `.opencode/auth.json` (in-repo, deleted in T1) and write to `.pi/auth.json` (gitignored), (b) enter credentials manually, (c) use environment variables. The user's global auth is NOT touched.
-- **Extract VoyageAI API key to env var.** Read the VoyageAI key from the in-repo `.opencode/magic-context.jsonc` before deletion in T1. Set as `VOYAGE_API_KEY` env var. Reference as `${VOYAGE_API_KEY}` in the new `.pi/magic-context.jsonc`. Do NOT alter the user's global `~/.config/opencode/magic-context.jsonc`.
+- **Migrate LLM credentials with user prompting.** During deployment (T19 installer), prompt the user with options: (a) enter credentials manually, (b) use environment variables, (c) read from an existing `.opencode/auth.json` if present. Write to `.pi/auth.json` (gitignored). The user's global auth is NOT touched. T1 does NOT extract credentials — that is the installer's job.
+- **Extract VoyageAI API key to env var.** Reference as `${VOYAGE_API_KEY}` in `.pi/magic-context.jsonc` (created in T3). The actual key is prompted for at deployment time by the installer (T19). Do NOT alter the user's global `~/.config/opencode/magic-context.jsonc`.
 - **Reuse existing Magic Context DB.** The existing SQLite DB at `~/.local/share/cortexkit/magic-context/context.db` (shared across harnesses) is reused by the Pi extension. Existing memories, compartments, and tags are accessible from Pi sessions. No deletion, no fresh start.
-- **Install pi as foundation.** Install `@earendil-works/pi-coding-agent` (latest). Verify pi runs: `pi --version`, `pi --help`, create a test session via `createAgentSession()`.
-- **Install Magic Context Pi extension.** Run `npx @cortexkit/magic-context@latest setup --harness pi`. Verify ctx_search, ctx_memory, ctx_note tools are available. This provides semantic memory, historian, dreamer, auto-search, temporal awareness — no need to reimplement.
+- **pi as package.json dependency.** `@earendil-works/pi-coding-agent` (latest) is a dependency in `package.json` (T3). Verify `bun install` succeeds and `import { createAgentSession, SessionManager }` resolves. Not a global install — pi is a development dependency.
+- **Magic Context as package.json dependency.** `@cortexkit/pi-magic-context` is a dependency in `package.json` (T3). The Magic Context setup wizard (`npx @cortexkit/magic-context@latest setup --harness pi`) and doctor check are run at deployment time by the installer (T19). During development, tests mock the ctx_* tools (T6).
 - **Port 12 crew agents to pi format.** Convert src/agents/*.md + *.yaml (Nemo, Aronnax, Ned Land, Conseil, Oracle, Momus, Metis, Harbor Master, Quartermaster, Boatswain, Navigator, Watch Officer) to pi's Markdown+YAML frontmatter format (name, description, tools, model, systemPrompt). Merge the 10 prompt_append identity blocks into the agent system prompts. Configure model routing per role (triage/plan/deploy=glm-5.2:cloud, execute=deepseek-v4-pro, review=deepseek-v4-pro).
 - **Build base AutoDev pi extension.** A TypeScript extension module that registers AutoDev's tools, commands, and event handlers via pi's ExtensionAPI. Entry point: `extensions/autodev/index.ts`. Registers: custom tools, slash commands, lifecycle event handlers, context injection.
 - **Context injection.** Load AGENTS.md, CONTEXT.md, .autodev/memory/*.md via pi's DefaultResourceLoader with agentsFilesOverride. Inject .autodev/reference/ docs as virtual context. Verify agents see the Nautilus crew operating protocol in their system prompt.
@@ -75,6 +75,7 @@ This plan implements the design described in the following documents. If this pl
 - **Debug mode.** Debug mode enables logging for all agent thinking and actions (model prompts, tool calls, guardrail decisions, background task events, heartbeat results). Off by default. Configurable log file (default: `.autodev/debug.log`) or stdout. Enable via `autodev doctor --debug on` or `AUTODEV_DEBUG=true` env var.
 - **Harbor Master as sole user-facing contact.** Harbor Master is the ONLY agent the user interacts with. All other agents are invisible. If any agent needs clarification or hits a blocker, it alerts Harbor Master via the team mailbox. Harbor Master contacts the user via CLI or Discord. Harbor Master is a permanent interface, not just an onboarding agent.
 - **Watch Officer proactive monitoring.** The Watch Officer monitors implementation in real time to detect deviations before they happen: plan deviations, API mismatches, dependency incompatibilities, incorrect agent assumptions. This is a proactive role, not just reactive self-healing. The Watch Officer flags issues through the team mailbox before they propagate into committed code.
+- **Installer module.** An `autodev install` CLI command handles deployment-time setup: dependency installation, credential prompting, Magic Context setup, GitHub label creation, knowledge base seeding, and health verification. Interactive by default, non-interactive mode for CI/automation.
 - **GitHub as sole project management channel.** All planning, progress tracking, and project management happens through GitHub. Issues are the work queue, labels are the state machine, PRs are the delivery mechanism, CI is the quality gate, comments are the communication channel. No external PM tools.
 
 ### Must NOT have (guardrails, anti-slop, scope boundaries)
@@ -83,7 +84,7 @@ This plan implements the design described in the following documents. If this pl
 - **Must NOT install or depend on OmO (oh-my-openagent).** Build directly on pi primitives.
 - **Must NOT depend on OpenCode packages.** Zero OpenCode dependencies.
 - **Must NOT reimplement semantic memory.** Magic Context Pi extension provides ctx_search, ctx_memory, ctx_note, ctx_expand, ctx_reduce, historian, dreamer. Install it, don't rebuild it.
-- **Must NOT build installer or single binary.** Future wave. Out of scope.
+- **Must NOT build a single binary.** Future wave. Out of scope. (The installer IS in scope.)
 - **Must NOT make the liaison role mandatory.** The liaison is optional — it applies only when the project is consumed by other agents (e.g., an MCP for Openclaw agents). For human-consumed projects, the crew coordinates deployment directly.
 - **Must NOT delete identity/design artifacts.** src/agents/, .autodev/reference/, .autodev/config/, .autodev/memory/, .autodev/skills/, docs-corpus/, AGENTS.md, CONTEXT.md are the design to implement. They survive the fresh start.
 - **Must NOT delete or alter preexisting config files.** The user's global `~/.config/opencode/`, `~/.local/share/cortexkit/magic-context/`, and any other global developer tool configs are NOT touched. AutoDev's pi-based setup lives in `.pi/` and coexists with any existing `.opencode/` setup in the same project. No preexisting connections between Magic Context, OpenCode, or other tools are broken.
@@ -102,7 +103,6 @@ These features are documented as future work and are NOT in this wave's scope:
 - **Additional CLI commands** — install, cleanup, refresh-model-capabilities (add as needed)
 - **Think mode per agent** — pi supports thinkingLevel but per-agent configuration is a future enhancement
 - **Unstable agent babysitter** — partially covered by T8's circuit breaker; full babysitter is future work
-- **Installer** — future wave
 - **Single binary** — future wave
 
 ## Verification strategy
@@ -113,7 +113,7 @@ These features are documented as future work and are NOT in this wave's scope:
 - **Evidence:** `.omo/evidence/task-<N>-autodev-pi-foundation.<ext>` — every todo writes proof before commit.
 - **Guardrail tests:** For each hard stop, a test that plants a violation and confirms it's blocked, plus a test that confirms compliant actions pass.
 - **Integration tests:** For crew dispatch, a test that creates a mock GitHub issue, runs the heartbeat, and confirms an agent session is created and triaged.
-- **Magic Context verification:** After install, run `npx @cortexkit/magic-context@latest doctor --harness pi` and confirm PASS. Call ctx_search, ctx_memory from a pi session.
+- **Magic Context verification:** During development, tests mock the ctx_* tools (T6). At deployment time, the installer (T19) runs `npx @cortexkit/magic-context@latest doctor --harness pi` and confirms PASS, then calls ctx_search, ctx_memory from a pi session to verify real behavior.
 - **Agent loading verification:** After porting agents, create a pi session for each crew role and confirm the system prompt contains the Nautilus identity.
 - **End-to-end flow test:** Create a test GitHub issue with autodev-request label, run heartbeat, confirm: triage → plan → implement → review → merge pipeline executes (with mock CI).
 
@@ -121,22 +121,22 @@ These features are documented as future work and are NOT in this wave's scope:
 
 ### Parallel execution waves
 
-**Wave 0 (Sequential — Fresh Setup):** T1 (fresh branch + delete) → T2 (extract identities) → T3 (install pi + Magic Context)
-**Wave 1 (Sequential — Foundation):** T4 (port agents) → T5 (base extension + context injection) → T6 (Magic Context verification)
+**Wave 0 (Sequential — Fresh Setup):** T1 (clean workspace + delete) → T2 (extract identities) → T3 (set up dependencies + config files)
+**Wave 1 (Sequential — Foundation):** T4 (port agents) → T5 (base extension + context injection) → T6 (Magic Context integration tests with mocks)
 **Wave 2 (Parallel — Crew Engine):** T7 (guardrails), T8 (background agent + model fallback), T9 (category system + task delegation) — T7 and T8 parallel after T5; T9 after T8
 **Wave 3 (Parallel — Knowledge + Tools):** T10 (Loreguard), T11 (docs query), T12 (custom tools + skills) — all parallel after T5
 **Wave 4 (Parallel — Autonomous Loop):** T13 (heartbeat + crew dispatch), T14 (Discord bridge), T15 (debate protocol), T16 (auto-merge + boulder state + continuation) — T13 after T7+T8+T9; T14/T15/T16 parallel after T13
-**Wave 4b (Parallel — Multi-Project + Debug):** T17 (multi-project support), T18 (debug mode) — T17 after T13; T18 after T5 — both parallel with T14/T15/T16
+**Wave 4b (Parallel — Multi-Project + Debug + Installer):** T17 (multi-project support), T18 (debug mode), T19 (installer) — T17 after T13; T18 after T5; T19 after T13 — all parallel with T14/T15/T16
 
 ### Dependency matrix
 | Todo | Depends on | Blocks | Can parallelize with |
 | --- | --- | --- | --- |
-| T1 (Fresh branch + delete) | — | T2, T3, all | — |
+| T1 (Clean workspace + delete) | — | T2, T3, all | — |
 | T2 (Extract identity blocks) | T1 | T4 | T3 |
-| T3 (Install pi + Magic Context) | T1 | T4, T5, T6 | T2 |
+| T3 (Set up dependencies + config) | T1 | T4, T5, T6 | T2 |
 | T4 (Port 12 crew agents) | T2, T3 | T5, T7, T8, T9, T13 | — |
 | T5 (Base extension + context injection) | T4 | T6, T7, T8, T9, T10, T11, T12 | — |
-| T6 (Magic Context verification) | T3, T5 | — | T7, T8, T9 |
+| T6 (Magic Context integration tests) | T3, T5 | — | T7, T8, T9 |
 | T7 (Guardrails via tool_call) | T5 | T13 | T6, T8, T9, T10, T11, T12 |
 | T8 (Background agent + model fallback) | T5 | T9, T13 | T6, T7, T10, T11, T12 |
 | T9 (Category system + task delegation) | T8 | T13 | T6, T7, T10, T11, T12 |
@@ -149,6 +149,7 @@ These features are documented as future work and are NOT in this wave's scope:
 | T16 (Auto-merge + boulder + continuation) | T13 | — | T14, T15 |
 | T17 (Multi-project support) | T13 | — | T14, T15, T16, T18 |
 | T18 (Debug mode) | T5 | — | T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17 |
+| T19 (Installer) | T13 | — | T14, T15, T16, T17, T18 |
 
 Critical Path: T1 → T2 → T4 → T5 → T8 → T9 → T10/T11/T12 → T13 → T16
 
@@ -157,15 +158,15 @@ Critical Path: T1 → T2 → T4 → T5 → T8 → T9 → T10/T11/T12 → T13 →
 
 ### Wave 0 — Fresh Setup (Sequential)
 
-- [ ] 1. Create fresh branch and delete all code
-  What to do: The `pi-foundation` branch already exists (created before the docs plan). FIRST: `git stash` to save uncommitted changes. Then delete all existing code except identity/design artifacts: `src/` (except `src/agents/`), `.opencode/` (IN-REPO config only — do NOT touch `~/.config/opencode/`), `package.json`, `package-lock.json`, `node_modules/`, `dist/`, `tsconfig.json`, `.autodev/embeddings/`, `.autodev/discord/`, `.autodev/debates/`, `.autodev/work-items/`, `.autodev/metrics/`, `.autodev/agents/` (empty). Keep: `src/agents/` (26 files), `.autodev/reference/`, `.autodev/config/`, `.autodev/memory/`, `.autodev/skills/`, `.autodev/scripts/`, `.autodev/templates/`, `.autodev/decisions/`, `.autodev/research/`, `.autodev/ARCHITECTURE.md`, `.autodev/KNOWLEDGE-ARCHITECTURE.md`, `.autodev/HEARTBEAT.md`, `.autodev/SETUP.md`, `.autodev/AUDITOR.md`, `.autodev/nautilus-charter.md`, `.autodev/autodev-root`, `docs-corpus/` (ADD AND COMMIT to the new branch so it's tracked), `AGENTS.md`, `CONTEXT.md`, `README.md`, `.omo/` (plans + evidence + drafts). Commit the deletion + docs-corpus addition. ALSO: read the VoyageAI API key from `.opencode/magic-context.jsonc` BEFORE deletion and save it to a temporary env var or file for T3 to use. ALSO: read `.opencode/auth.json` BEFORE deletion and save its contents for T3's credential migration prompt.
-  Must NOT do: Do NOT delete src/agents/, .autodev/reference/, .autodev/config/, .autodev/memory/, .autodev/skills/, docs-corpus/, AGENTS.md, CONTEXT.md. Do NOT delete .omo/plans/autodev-pi-foundation.md (this plan) or .omo/drafts/autodev-pi-foundation.md. Do NOT touch `~/.config/opencode/` or `~/.local/share/cortexkit/magic-context/` — those are the user's global configs and must be preserved.
+- [ ] 1. Clean workspace and delete old code
+  What to do: The `pi-foundation` branch already exists with the docs plan work committed. Delete all existing code except identity/design artifacts: `src/` (except `src/agents/`), `.opencode/` (in-repo config — do NOT touch the user's global `~/.config/opencode/`), `package.json`, `package-lock.json`, `node_modules/`, `dist/`, `tsconfig.json`, `.autodev/embeddings/`, `.autodev/discord/`, `.autodev/debates/`, `.autodev/work-items/`, `.autodev/metrics/`, `.autodev/agents/` (empty). Keep: `src/agents/` (26 files), `.autodev/reference/`, `.autodev/config/`, `.autodev/memory/`, `.autodev/skills/`, `.autodev/scripts/`, `.autodev/templates/`, `.autodev/decisions/`, `.autodev/research/`, `.autodev/*.md` docs, `.autodev/nautilus-charter.md`, `.autodev/autodev-root`, `docs-corpus/` (commit to branch so it's tracked), `AGENTS.md`, `CONTEXT.md`, `README.md`, `ARCHITECTURE.md`, `STRUCTURE.md`, `ROADMAP.md`, `.omo/` (plans + evidence + drafts). Commit the deletion. Do NOT extract credentials or API keys — that is the installer's job (T19), not a development task.
+  Must NOT do: Do NOT delete src/agents/, .autodev/reference/, .autodev/config/, .autodev/memory/, .autodev/skills/, docs-corpus/, AGENTS.md, CONTEXT.md. Do NOT delete .omo/plans/autodev-pi-foundation.md (this plan) or .omo/drafts/autodev-pi-foundation.md. Do NOT touch `~/.config/opencode/` or `~/.local/share/cortexkit/magic-context/` — those are the user's global configs and must be preserved. Do NOT extract credentials or API keys — that is the installer's job (T19).
   Parallelization: Wave 0 | Blocked by: nothing | Blocks: T2, T3, all
   References: Current repo at /Users/djtchill/Documents/Projects/AutoDev.ai. src/agents/ has 26 files (13 .md + 13 .yaml). .autodev/reference/ has 4 files (discord-setup.md, onboarding-protocol.md, README.md, workflow-specification.md). .autodev/config/ has config files. .autodev/memory/ has projectbrief.md, techContext.md, activeContext.md. .autodev/skills/ has custom skill definitions. docs-corpus/ has 218 files. AGENTS.md is the Nautilus standing orders. CONTEXT.md is the operating protocol.
   Design refs: STRUCTURE.md §1 Project Layout (target directory structure established by fresh start)
-  Acceptance criteria: `git branch --show-current` returns `pi-foundation` (already created). `find src/ -type f | wc -l` returns 26 (only src/agents/). `ls .opencode/` fails (deleted). `ls .autodev/reference/onboarding-protocol.md .autodev/reference/workflow-specification.md` succeeds (preserved). `ls docs-corpus/MANIFEST.md` succeeds. `ls src/agents/nemo.md src/agents/nemo.yaml` succeeds. `git status` shows clean working tree after commit.
-  QA scenarios: happy — branch created, code deleted, identities preserved, commit clean. Failure — src/agents/ accidentally deleted (BLOCKS everything); or .autodev/reference/ deleted (loses immutable specs); or docs-corpus/ deleted (loses knowledge base). Evidence: `.omo/evidence/task-1-autodev-pi-foundation.txt` (git branch + find counts + ls of preserved dirs + git log).
-  Commit: Y | chore(fresh-start): initialize clean workspace, keep identity/design artifacts
+  Acceptance criteria: `git branch --show-current` returns `pi-foundation`. `find src/ -type f | wc -l` returns 26 (only src/agents/). `ls .autodev/reference/onboarding-protocol.md .autodev/reference/workflow-specification.md` succeeds. `ls docs-corpus/MANIFEST.md` succeeds. `git status` shows clean working tree after commit.
+  QA scenarios: happy — workspace clean, code deleted, identities preserved, commit clean. Failure — src/agents/ accidentally deleted (BLOCKS everything); or .autodev/reference/ deleted (loses immutable specs); or docs-corpus/ deleted (loses knowledge base). Evidence: `.omo/evidence/task-1-autodev-pi-foundation.txt` (git branch + find counts + ls of preserved dirs + git log).
+  Commit: Y | chore(workspace): delete old code, keep identity/design artifacts
 
 - [ ] 2. Extract identity blocks from src/agents/
   What to do: The 10 Nautilus crew identity blocks are stored in `src/agents/<name>-identity.md`. Each block has a `displayName`, `description`, and `prompt_append` text for a Nautilus crew member (Harbor Master, Captain Nemo, Professor Aronnax, Metis, Oracle, Momus, Ned Land, Conseil, Explore, Engineer). Save each block's text to `src/agents/<name>-identity.md` (a separate file from the existing .md/.yaml). These identity texts will be merged into the pi agent system prompts in T4. Note: the Engineer identity block is shared across quartermaster, boatswain, navigator, and watch-officer (per the README: "The last four share the Engineer slot"). The Explore identity block maps to the Explore subagent used by T9's task delegation — add Explore as a 13th pi agent in T4.
@@ -177,15 +178,15 @@ Critical Path: T1 → T2 → T4 → T5 → T8 → T9 → T10/T11/T12 → T13 →
   QA scenarios: happy — 10 files extracted, content matches. Failure — fewer than 10 files (some identities lost); or content doesn't match (corrupted extraction). Evidence: `.omo/evidence/task-2-autodev-pi-foundation.txt` (file list + content diff).
   Commit: Y | chore(identity): extract 10 Nautilus identity blocks for pi port
 
-- [ ] 3. Install pi and Magic Context
-  What to do: PREREQUISITE: verify Bun is installed (`bun --version` >= 1.0). If not, install: `curl -fsSL https://bun.sh | bash`. Install pi (`@earendil-works/pi-coding-agent`) via `curl -fsSL https://pi.dev/install.sh | sh` (verify URL exists first) or `bun add -g @earendil-works/pi-coding-agent` (verify package exists). Verify pi runs: `pi --version` (>= 0.74.0), `pi --help`. Create a test session: write a minimal TypeScript script that calls `createAgentSession()` with `SessionManager.inMemory()`, sends a prompt, and verifies a response. Then install Magic Context: `npx @cortexkit/magic-context@latest setup --harness pi` (npm/npx is fine for Magic Context's setup wizard). The setup wizard should detect the existing DB at `~/.local/share/cortexkit/magic-context/context.db` and configure the Pi extension to reuse it. Run `npx @cortexkit/magic-context@latest doctor --harness pi` and confirm PASS. CREDENTIAL MIGRATION: prompt the user with options for LLM credentials: (a) extract from the saved .opencode/auth.json contents (from T1) and write to `.pi/auth.json` (gitignored) in pi's auth format, (b) enter credentials manually, (c) use environment variables. VOYAGEAI KEY: set `VOYAGE_API_KEY` env var from the key saved in T1. Create `.pi/magic-context.jsonc` with `"embedding": { "provider": "openai-compatible", "api_key": "${VOYAGE_API_KEY}", "endpoint": "https://api.voyageai.com/v1/", "model": "voyage-code-3" }` and `"dreamer": { "model": "ollama-cloud/glm-5.2:cloud" }` (force glm-5.2:cloud, not the user-level glm-5.1). Create a `package.json` for the new project with pi + magic-context as dependencies. Create `.pi/settings.json` with AutoDev project settings. Set up `bun install`.
-  Must NOT do: Do NOT install OmO or any OpenCode packages. Do NOT skip the Magic Context doctor check. Do NOT use npm for pi installation — pi requires Bun. (npm may be used for the Magic Context setup wizard via `npx`.)
+- [ ] 3. Set up project dependencies and config files
+  What to do: Set up the project as a deployable pi extension, not a running service. (a) Create `package.json` with `@earendil-works/pi-coding-agent` and `@cortexkit/pi-magic-context` as dependencies. Add `bun install`. (b) Create `.pi/settings.json` with AutoDev project settings (extension registration, model config). (c) Create `.pi/magic-context.jsonc` with embedding config referencing `${VOYAGE_API_KEY}` env var and dreamer model `ollama-cloud/glm-5.2:cloud`. (d) Create `.pi/auth.json` template (gitignored) documenting the expected format for LLM provider credentials. (e) Create `tsconfig.json` for TypeScript. (f) Verify `bun install` succeeds and imports resolve: write a test that imports `createAgentSession` and `SessionManager` from the pi package and confirms they are callable (no real session needed — just import resolution). Do NOT globally install pi or run a real session — this is a development environment, not a deployment. The installer (T19) handles deployment-time setup.
+  Must NOT do: Do NOT globally install pi or Magic Context — they are package.json dependencies. Do NOT run a real agent session — tests use mocks. Do NOT prompt for credentials — that is the installer's job (T19). Do NOT install OmO or any OpenCode packages.
   Parallelization: Wave 0 | Blocked by: T1 | Blocks: T4, T5, T6 | Can parallelize with: T2
-  References: pi is at https://github.com/earendil-works/pi (packages/coding-agent). Install pi: `curl -fsSL https://pi.dev/install.sh | sh` (verify URL exists first with `curl -sI https://pi.dev/install.sh`). Alternatively: `bun add -g @earendil-works/pi-coding-agent` (verify package exists with `npm view @earendil-works/pi-coding-agent`). Magic Context Pi extension: `npx @cortexkit/magic-context@latest setup --harness pi` (requires Pi >= 0.74.0; npm/npx is fine for Magic Context's setup wizard). Pi SDK: `import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent"`. Bun: https://bun.sh (pi's packageManager is bun@1.3.14). LLM provider credentials: configure in `.pi/settings.json` or `.pi/auth.json` (gitignored) — document the expected format per pi's auth docs at https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md.
+  References: pi is at https://github.com/earendil-works/pi (packages/coding-agent). Pi SDK: `import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent"`. Magic Context Pi extension: `@cortexkit/pi-magic-context`. Bun: https://bun.sh (pi's packageManager is bun@1.3.14). LLM provider credentials format: document the expected format per pi's auth docs at https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md in `.pi/auth.json` template (gitignored).
   Design refs: ARCHITECTURE.md §2 Process Topology, ARCHITECTURE.md §29 Magic Context Integration
-  Acceptance criteria: `pi --version` returns a version >= 0.74.0. `bun --version` returns >= 1.0. A test script that calls `createAgentSession()` succeeds (creates session, sends prompt, gets response). `npx @cortexkit/magic-context@latest doctor --harness pi` returns PASS. `package.json` has `@earendil-works/pi-coding-agent` and `@cortexkit/pi-magic-context` as dependencies. `.pi/settings.json` exists.
-  QA scenarios: happy — pi installed, test session works, Magic Context doctor passes. Failure — pi version too old (< 0.74.0); or createAgentSession fails (API key missing); or Magic Context doctor fails (conflict detected). Evidence: `.omo/evidence/task-3-autodev-pi-foundation.txt` (pi version + bun version + test session output + doctor output + package.json).
-  Commit: Y | feat(foundation): install pi + Magic Context as AutoDev runtime base
+  Acceptance criteria: `package.json` exists with pi + magic-context as dependencies. `bun install` succeeds. A test that imports `createAgentSession` from `@earendil-works/pi-coding-agent` resolves without error. `.pi/settings.json` exists. `.pi/magic-context.jsonc` exists with VOYAGE_API_KEY reference and glm-5.2:cloud dreamer model. `.pi/auth.json` template exists (gitignored). `tsconfig.json` exists.
+  QA scenarios: happy — package.json created, bun install succeeds, imports resolve, config files created. Failure — bun install fails (package not found); or import fails (module not exported); or config files missing. Evidence: `.omo/evidence/task-3-autodev-pi-foundation.txt` (package.json + bun install output + import test + config files).
+  Commit: Y | feat(project): set up dependencies, config files, and TypeScript
 
 ### Wave 1 — Foundation (Sequential)
 
@@ -209,14 +210,14 @@ Critical Path: T1 → T2 → T4 → T5 → T8 → T9 → T10/T11/T12 → T13 →
   QA scenarios: happy — extension loads, context injected, /autodev command works. Failure — extension fails to load (syntax error); or context not injected (wrong path); or /autodev command not registered. Evidence: `.omo/evidence/task-5-autodev-pi-foundation.txt` (extension file + test session output + context verification).
   Commit: Y | feat(extension): base AutoDev pi extension with context injection
 
-- [ ] 6. Verify Magic Context integration
-  What to do: With the base extension loaded (T5) and Magic Context installed (T3), verify all Magic Context tools work in an AutoDev pi session. Call `ctx_memory(action="write", category="ARCHITECTURE", content="AutoDev runs on pi")` and confirm it persists. Call `ctx_search(query="AutoDev foundation")` and confirm it returns results (including from the existing OpenCode DB if present). Call `ctx_note(action="write", content="Test note")` and confirm it's stored. Verify temporal awareness (gap markers in messages). VERIFY DB REUSE: check that existing memories/compartments from the OpenCode DB are accessible from the Pi session (call `ctx_search` for a term from an earlier session). VERIFY CONFIG OVERRIDE: confirm the Pi session's dreamer model is glm-5.2:cloud (from .pi/magic-context.jsonc), NOT glm-5.1 (from user-level ~/.config/opencode/magic-context.jsonc). If the user-level config overrides, create a project-level .pi/magic-context.jsonc entry to force the correct model. Write a test that exercises all 5 ctx_* tools + verifies DB reuse + verifies config override.
-  Must NOT do: Do NOT reimplement any Magic Context feature. Do NOT disable Magic Context's historian or dreamer. Do NOT modify Magic Context's config beyond what setup created.
+- [ ] 6. Write Magic Context integration tests with mocks
+  What to do: Write integration tests that verify the AutoDev extension correctly integrates with Magic Context's tool interface. Since this is a development environment (no real running services), tests mock the Magic Context tools: (a) Mock `ctx_memory` write/read — test that the extension calls it correctly and persists data. (b) Mock `ctx_search` — test that search queries are formed correctly and results are handled. (c) Mock `ctx_note` write. (d) Mock `ctx_expand` and `ctx_reduce`. (e) Test config override: verify the extension reads `.pi/magic-context.jsonc` and uses the correct dreamer model (glm-5.2:cloud). These tests verify the integration contract — the real Magic Context behavior is verified at deployment time by the installer (T19).
+  Must NOT do: Do NOT reimplement any Magic Context feature. Do NOT disable Magic Context's historian or dreamer. Do NOT modify Magic Context's config beyond what setup created. Do NOT run a real Magic Context DB during tests — use mocks.
   Parallelization: Wave 1 | Blocked by: T3, T5 | Blocks: nothing | Can parallelize with: T7, T8, T9
-  References: Magic Context tools: ctx_search, ctx_memory, ctx_note, ctx_expand, ctx_reduce. Config at `.pi/magic-context.jsonc` or `magic-context.jsonc`. Doctor: `npx @cortexkit/magic-context@latest doctor --harness pi`. Magic Context Pi extension: `@cortexkit/pi-magic-context`. Shared SQLite DB at `~/.local/share/cortexkit/magic-context/context.db`.
+  References: Magic Context tools: ctx_search, ctx_memory, ctx_note, ctx_expand, ctx_reduce. Config at `.pi/magic-context.jsonc`. Magic Context Pi extension: `@cortexkit/pi-magic-context`. Mock pattern: use `bun:test`'s mock module to stub the Magic Context tool implementations.
   Design refs: ARCHITECTURE.md §29 Magic Context Integration
-  Acceptance criteria: `ctx_memory write` persists (read back returns the memory). `ctx_search` returns results for a query about written memories. `ctx_note write` persists. `ctx_expand` returns transcript for a range. `ctx_reduce` queues content for removal. Magic Context doctor passes. All 5 tools available in the session.
-  QA scenarios: happy — all 5 ctx_* tools work, doctor passes. Failure — a tool not available (extension not loaded); or ctx_memory write fails (DB locked); or ctx_search returns nothing (embeddings not configured). Evidence: `.omo/evidence/task-6-autodev-pi-foundation.txt` (tool call outputs + doctor output).
+  Acceptance criteria: Integration tests exist that mock all 5 ctx_* tools and verify the extension's interaction with them. Config override test confirms glm-5.2:cloud is read from .pi/magic-context.jsonc. All tests pass with `bun test`.
+  QA scenarios: happy — all 5 mocked ctx_* tools tested, config override confirmed. Failure — a tool not exercised (mock missing); or config override not tested (wrong model read). Evidence: `.omo/evidence/task-6-autodev-pi-foundation.txt` (test outputs).
   Commit: N (verification; no product change)
 
 ### Wave 2 — Crew Engine (Parallel after T5)
@@ -347,18 +348,28 @@ Critical Path: T1 → T2 → T4 → T5 → T8 → T9 → T10/T11/T12 → T13 →
   QA scenarios: happy — debug logging works, secrets redacted, off by default. Failure — debug logs contain secrets (redaction failed); or debug mode is on by default (too verbose); or logging blocks the session (sync logging). Evidence: `.omo/evidence/task-18-autodev-pi-foundation.txt` (debug log sample + redaction test + off-by-default test).
   Commit: Y | feat(debug): structured debug mode logging for agent thinking and actions
 
+- [ ] 19. Build installer module
+  What to do: Build the `autodev install` CLI command that handles deployment-time setup. This is the single entry point for deploying AutoDev to a new environment. The installer: (a) verifies Bun is installed (>= 1.0) — if not, prompts to install it; (b) runs `bun install` to install pi + Magic Context dependencies; (c) prompts for LLM provider credentials and writes to `.pi/auth.json` (gitignored); (d) sets up Magic Context: `npx @cortexkit/magic-context@latest setup --harness pi` and runs `doctor`; (e) prompts for or detects the VoyageAI API key and writes to `.pi/magic-context.jsonc`; (f) creates GitHub labels on the project repo (autodev-request, autodev-planned, etc.); (g) seeds the knowledge base from onboarding if `.autodev/reference/` is empty; (h) runs `autodev doctor` to verify everything works. The installer is interactive (prompts the user) but can also run non-interactively with env vars for CI/automation. Register as a pi command: `autodev install`.
+  Must NOT do: Do NOT hardcode credentials — always prompt or read from env vars. Do NOT skip the doctor check at the end. Do NOT make the installer mandatory for development — developers use `bun install` directly.
+  Parallelization: Wave 4b | Blocked by: T13 | Blocks: nothing | Can parallelize with: T14, T15, T16, T17, T18
+  References: ARCHITECTURE.md §30 CLI Commands. Pi registerCommand(). GitHub labels from .autodev/reference/workflow-specification.md section 2.3. Magic Context setup: npx @cortexkit/magic-context@latest setup --harness pi.
+  Design refs: ARCHITECTURE.md §30 CLI Commands
+  Acceptance criteria: `autodev install` command exists and is registered. Running it (in a test env) prompts for credentials, sets up config files, creates GitHub labels, and runs doctor. A `--non-interactive` flag reads from env vars. Evidence: `.omo/evidence/task-19-autodev-pi-foundation.txt`.
+  QA scenarios: happy — installer runs end to end, config files created, labels created, doctor passes. Failure — installer crashes (no error handling); or credentials hardcoded (security); or doctor check skipped. Evidence: `.omo/evidence/task-19-autodev-pi-foundation.txt`.
+  Commit: Y | feat(installer): autodev install command for deployment-time setup
+
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
 
-- [ ] F1. Plan compliance audit — verify every todo matches the approved scope, no scope creep into installer/single-binary (multi-project IS in scope), all Must-NOT-Have constraints honored (zero OpenCode dependencies, zero OmO dependencies, no code migration, no reimplemented Magic Context, liaison not mandatory)
+- [ ] F1. Plan compliance audit — verify every todo matches the approved scope, no scope creep into single-binary (installer IS in scope, multi-project IS in scope), all Must-NOT-Have constraints honored (zero OpenCode dependencies, zero OmO dependencies, no code migration, no reimplemented Magic Context, liaison not mandatory)
 - [ ] F2. Code quality review — review the AutoDev pi extension code, guardrail implementation, background agent manager, model fallback, debate protocol, auto-merge logic for quality, error handling, and type safety
 - [ ] F3. Real manual QA — run `autodev doctor`, run `autodev onboard` (Harbor Master session), create a test GitHub issue with autodev-request label, run heartbeat, confirm triage → plan → implement → review → merge pipeline executes end-to-end (with mock CI), verify Discord bridge connects, verify debate protocol, verify ctx_search/ctx_memory work
 - [ ] F4. Scope fidelity — all 13 agents loaded with Nautilus identities, guardrails enforce all 6 hard stops, Magic Context provides semantic memory, Loreguard stores/retrieves ADRs, docs corpus searchable, heartbeat polls GitHub, auto-merge gates work, multi-project support works (independent crews per project), debug mode works (off by default), Harbor Master is sole user contact, Watch Officer does proactive monitoring, liaison is conditional, 0 OpenCode package imports, 0 OmO dependencies
 
 ## Commit strategy
 
-- One commit per code-changing todo (T1, T2, T3, T4, T5, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18). T6 is verification-only (no commit).
-- Commit types: `chore(fresh-start)` (T1), `chore(identity)` (T2), `feat(foundation)` (T3), `feat(agents)` (T4), `feat(extension)` (T5), `feat(guardrails)` (T7), `feat(orchestration)` (T8), `feat(delegation)` (T9), `feat(loreguard)` (T10), `feat(docs)` (T11), `feat(tools)` (T12), `feat(orchestrator)` (T13), `feat(discord)` (T14), `feat(debate)` (T15), `feat(autonomy)` (T16), `feat(multi-project)` (T17), `feat(debug)` (T18).
+- One commit per code-changing todo (T1, T2, T3, T4, T5, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18, T19). T6 is verification-only (no commit).
+- Commit types: `chore(workspace)` (T1), `chore(identity)` (T2), `feat(project)` (T3), `feat(agents)` (T4), `feat(extension)` (T5), `feat(guardrails)` (T7), `feat(orchestration)` (T8), `feat(delegation)` (T9), `feat(loreguard)` (T10), `feat(docs)` (T11), `feat(tools)` (T12), `feat(orchestrator)` (T13), `feat(discord)` (T14), `feat(debate)` (T15), `feat(autonomy)` (T16), `feat(multi-project)` (T17), `feat(debug)` (T18), `feat(installer)` (T19).
 - Evidence committed alongside code in `.omo/evidence/`.
 - Atomic commits — each todo is independently revertable.
 - All commits land on the `pi-foundation` branch.
@@ -387,7 +398,7 @@ Critical Path: T1 → T2 → T4 → T5 → T8 → T9 → T10/T11/T12 → T13 →
 20. Context injection: AGENTS.md, CONTEXT.md, .autodev/memory/ loaded into every session.
 21. `grep -r "@opencode-ai" extensions/ .pi/ src/` returns zero (zero OpenCode package imports).
 22. `grep -r "oh-my-openagent\|oh-my-opencode" package.json` returns zero (zero OmO dependencies).
-23. Multi-project support works (independent crews per project, no context leaks). No installer or single binary work performed (future waves). Debug mode implemented (off by default).
+23. Multi-project support works (independent crews per project, no context leaks). Installer module works (autodev install handles deployment-time setup). Debug mode implemented (off by default). No single binary work performed (future wave).
 24. Harbor Master is the sole user-facing contact point. All other agents are invisible to the user.
 25. Watch Officer performs proactive monitoring during implementation (plan deviations, API mismatches, incorrect assumptions).
 26. Liaison role is conditional on project type (agent-consumed vs human-consumed).
