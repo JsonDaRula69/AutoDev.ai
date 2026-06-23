@@ -946,3 +946,33 @@ Date: 2026-06-23
 - `bun test` (full suite): 579 pass, 0 fail.
 - Evidence: `.omo/evidence/project-init-centralization/t14-doctor-paths-happy.md`,
   `t14-doctor-paths-failure.md`.
+
+# T11 Implementation Learnings
+
+Date: 2026-06-23
+
+## What changed
+
+- `scripts/cli.ts`: added `cmdInit(parts, opts?)` (parses `--skip-onboard` / `--help` / unknown flags, calls `runInit`, prints per-step results, returns 0/1). Added `case "init": return cmdInit(rest)` to the main switch. Exported `HELP_SUBCOMMANDS` constant. Guarded the bottom `main()` auto-run with `import.meta.main` so the module is importable in tests without `process.exit`. Made `cmdOnboard` and `cmdDoctor` accept optional `runOnboardOverride` / `runDoctorOverride` injection params.
+- `extensions/autodev/orchestrator/cli.ts`: added `case "init": await handleInit(parts.slice(1), ctx)`. Rewrote `handleOnboard` to dispatch to `runOnboard` (was a stub printing manual instructions). Added `handleInit` mirroring `cmdInit` but using `ctx.ui.notify` and `ctx.cwd`. Updated description + default help text to include `init`.
+- New test `scripts/__tests__/cli.test.ts` (8 tests: 6 T11 + 2 T14). New test `extensions/autodev/orchestrator/__tests__/cli.test.ts` (5 tests).
+
+## Key decisions
+
+- **Dependency injection over `mock.module`.** Initial approach used `mock.module(resolve(...))` to globally replace `init-module.js`'s `runInit`. This poisoned `init-module.test.ts` when both files ran in the same `bun test` process (13 failures: init-module tests got the mock instead of the real `runInit`). Switched to optional `runInitOverride` / `runOnboardOverride` / `runDoctorOverride` params on the cmd functions — scoped per-call, no global state, no cross-test pollution.
+- **`import.meta.main` guard.** `scripts/cli.ts` previously called `main().then(process.exit)` unconditionally at module load. Importing the module in tests triggered `process.exit`. Guarded with `if (import.meta.main)` so the CLI only auto-runs when executed as the entry script, not when imported.
+- **Exported `HELP_SUBCOMMANDS`.** Centralized the help string as a module export so tests can assert on it without capturing stdout. Both the empty-subcommand case and the unknown-subcommand default use the same constant.
+
+## Gotchas
+
+- **`mock.module` is process-global.** Bun's `mock.module` applies for the entire test process and cannot be scoped to a single test file. If two test files in the same `bun test` run both import the same module — one with a mock, one without — the mock wins for both. This is why init-module tests broke. The injection pattern is the only safe way to mock per-call in a shared process.
+- **macOS `/var` vs `/private/var`.** `mkdtempSync(join(tmpdir(), ...))` returns a path under `/var/folders/...` (symlink to `/private/var/folders/...`). `process.cwd()` resolves the symlink. Tests comparing the two must `realpathSync` the temp dir or the assertion fails with path mismatch.
+- **T14 doctor tests were already in `cli.test.ts`.** A parallel T14 task had appended doctor success-message tests to the file I was creating. The sed-based restore combined them. Both T11 and T14 tests coexist using the injection pattern.
+
+## Verification
+
+- `bun test scripts/__tests__/cli.test.ts`: 8 pass, 0 fail.
+- `bun test extensions/autodev/orchestrator/__tests__/cli.test.ts`: 5 pass, 0 fail.
+- `bun run typecheck`: tsc --noEmit EXIT 0.
+- `bun test` (full suite): 579 pass, 0 fail.
+- Evidence: `.omo/evidence/project-init-centralization/t11-cli-happy.md`, `t11-cli-failure.md`.
