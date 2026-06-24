@@ -214,7 +214,7 @@ Your next move: approve, or run a high-accuracy review. Full execution detail fo
   QA scenarios: happy = extension loads, tools registered, search_docs returns results from both tiers. failure = central DB missing, search_docs returns project-only results with no crash. Evidence .omo/evidence/task-10-docs-2tier-system.md
   Commit: Y | feat(docs): register dual-tier tools with pi extension
 
-- [ ] 11. Full test suite run + regression check
+- [x] 11. Full test suite run + regression check
   What to do / Must NOT do: Run complete test suite (`bun test`) and verify 0 failures across ALL test files. Specifically verify: `test/docs.test.ts` (T4), `test/loreguard.test.ts` (T15 regression — FTS5 extraction), `extensions/autodev/docs/__tests__/seeding.test.ts` (T8), `test/doctor.test.ts` (T9 integration), `extensions/autodev/installer/__tests__/doctor-orchestrator.test.ts`, `extensions/autodev/installer/__tests__/init-module.test.ts`, `extensions/autodev/installer/__tests__/install-module.test.ts`, `extensions/autodev/installer/__tests__/config-defaults.test.ts`. Run `npx tsc --noEmit` for type check. Verify `install-module.ts` now imports from `docs/index.js` (T2 dependency), `docs/index.ts` imports from `embeddings.js` (T14) and `fts-utils.js` (T15), `loreguard/operations.ts` imports from `fts-utils.js` (T15) — all type checks must pass. Fix any regressions.
   Parallelization: Wave 6 | Blocked by: T10 | Blocks: none
   References: All test files listed above, `tsconfig.json`
