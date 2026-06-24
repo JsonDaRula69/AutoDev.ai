@@ -406,7 +406,13 @@ test("chunkMarkdown stores doc_path relative to corpus root", () => {
 // ---------------------------------------------------------------------------
 
 test("buildDocsTools returns three tools with the correct names", () => {
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
   expect(tools.search_docs.name).toBe("search_docs");
   expect(tools.docs_status.name).toBe("docs_status");
   expect(tools.docs_rebuild.name).toBe("docs_rebuild");
@@ -417,11 +423,20 @@ test("docs_status tool execute returns the status payload", async () => {
     "pi/sdk.md",
     "## SDK\nReal content with enough characters to be indexed properly here.",
   );
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
   const res = await tools.docs_status.execute("tc1", {} as never, undefined, undefined, undefined as never);
-  const details = res.details as { chunk_count: number; doc_count: number; components: string[] };
-  expect(details.chunk_count).toBe(0); // not rebuilt yet
-  expect(details.components).toEqual(["pi"]);
+  const details = res.details as {
+    central: { chunk_count: number; doc_count: number; components: string[] } | null;
+    project: { chunk_count: number; doc_count: number; components: string[] };
+  };
+  expect(details.project.chunk_count).toBe(0); // not rebuilt yet
+  expect(details.project.components).toEqual(["pi"]);
 });
 
 test("docs_rebuild tool execute ingests and returns chunk count", async () => {
@@ -429,8 +444,14 @@ test("docs_rebuild tool execute ingests and returns chunk count", async () => {
     "pi/sdk.md",
     "## SDK\nReal content with enough characters to be indexed properly here.",
   );
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
-  const res = await tools.docs_rebuild.execute("tc1", {} as never, undefined, undefined, undefined as never);
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
+  const res = await tools.docs_rebuild.execute("tc1", { tier: "project" } as never, undefined, undefined, undefined as never);
   const details = res.details as { chunks: number; errors: string[] };
   expect(details.chunks).toBeGreaterThan(0);
   expect(details.errors).toEqual([]);
@@ -441,8 +462,14 @@ test("search_docs tool execute returns ranked results after rebuild", async () =
     "pi/sdk.md",
     "## SDK\ncreateAgentSession SessionManager embedding pi runtime.",
   );
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
-  await tools.docs_rebuild.execute("tc1", {} as never, undefined, undefined, undefined as never);
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
+  await tools.docs_rebuild.execute("tc1", { tier: "project" } as never, undefined, undefined, undefined as never);
   const res = await tools.search_docs.execute(
     "tc1",
     { query: "createAgentSession", limit: 5 } as never,
@@ -454,17 +481,29 @@ test("search_docs tool execute returns ranked results after rebuild", async () =
   expect(details.count).toBeGreaterThan(0);
 });
 
-test("search_docs tool execute on empty DB returns the hint", async () => {
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
-  const res = await tools.search_docs.execute(
-    "tc1",
-    { query: "anything" } as never,
-    undefined,
-    undefined,
-    undefined as never,
-  );
-  const details = res.details as { count: number; results: Array<{ doc_path: string }> };
-  expect(details.results[0]!.doc_path).toBe("__hint__");
+test("search_docs tool execute on empty project DB returns no results", async () => {
+  stubCwd(root);
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
+  try {
+    const res = await tools.search_docs.execute(
+      "tc1",
+      { query: "anything" } as never,
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const details = res.details as { count: number; results: Array<{ doc_path: string }> };
+    expect(details.count).toBe(0);
+    expect(details.results).toEqual([]);
+  } finally {
+    restoreCwd();
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { execSync, type ExecSyncOptions } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { load } from "js-yaml";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { readAuth } from "./auth.js";
 import { readEnv } from "./env.js";
@@ -11,6 +12,8 @@ import { runConfig, type ConfigModuleDeps } from "./config-module.js";
 import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
 import { createPrompter, type Prompter } from "./prompts.js";
 import { reopenTty, type ReopenTtyDeps } from "./tty.js";
+import { seedCentralDocs } from "../docs/seeding.js";
+import { embed } from "../embeddings.js";
 
 const MC_DOCTOR_CMD = "bunx @cortexkit/magic-context@latest doctor";
 const MC_DOCTOR_TIMEOUT_MS = 30_000;
@@ -258,7 +261,8 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
  *   3. Interactive config prompts: llm → voyage → discord → github.
  *      Discord is always presented; user can skip without failing doctor.
  *   4. Magic Context pi extension registration — non-interactive.
- *   5. Full health-check pass to report final state.
+ *   5. Central docs seeding from docs-sources.yaml — non-interactive, warning on failure.
+ *   6. Full health-check pass to report final state.
  */
 async function runFirstRunFlow(
   deps: DoctorDeps,
@@ -286,7 +290,37 @@ async function runFirstRunFlow(
     notify(`Magic Context setup: ${mcResult.detail}`, "warning");
   }
 
-  // (5) Full health-check pass to report final state.
+  // (5) Central docs seeding — load sources from central config and rebuild.
+  const sourcesPath = join(getAgentDir(), "..", "config", "docs-sources.yaml");
+  if (existsSync(sourcesPath)) {
+    try {
+      const rawYaml = readFileSync(sourcesPath, "utf-8");
+      const parsed = load(rawYaml) as { sources?: { name: string; type: "git-sparse" | "llms-txt" | "llms-full"; url: string; targetSubdir: string }[] } | undefined;
+      const sources = parsed?.sources ?? [];
+      if (sources.length === 0) {
+        notify(
+          "No docs sources configured. Edit ~/.AutoDev/config/docs-sources.yaml to add sources, then run `autodev docs rebuild central`.",
+          "warning",
+        );
+      } else {
+        notify("Seeding central docs corpus...", "info");
+        const seedResult = await seedCentralDocs(sources, embed);
+        const errorSuffix = seedResult.errors.length > 0
+          ? `; errors: ${seedResult.errors.join("; ")}`
+          : "";
+        notify(`Central docs seeded: ${seedResult.chunks} chunks${errorSuffix}`, seedResult.errors.length > 0 ? "warning" : "info");
+      }
+    } catch (e) {
+      notify(`Central docs seeding skipped: ${(e as Error).message}`, "warning");
+    }
+  } else {
+    notify(
+      "No docs sources configured. Edit ~/.AutoDev/config/docs-sources.yaml to add sources, then run `autodev docs rebuild central`.",
+      "warning",
+    );
+  }
+
+  // (6) Full health-check pass to report final state.
   const finalResult = await runHealthChecks(deps);
   return {
     checks: finalResult.checks,

@@ -25,6 +25,7 @@ import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-age
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { embed, type EmbedFn, VOYAGE_BATCH_SIZE } from "../embeddings.js";
 import { ftsMatchQuery } from "../fts-utils.js";
+import { refreshStaleSources, type SeedSource } from "./seeding.js";
 
 export type { EmbedFn };
 export { embed, VOYAGE_BATCH_SIZE };
@@ -534,6 +535,7 @@ export async function searchDocsBoth(
   query: string,
   limit = 5,
   embedFn: EmbedFn = embed,
+  sources: SeedSource[] = [],
 ): Promise<DocResult[]> {
   const centralDb = existsSync(centralDbPath()) ? openVectorStore(centralDbPath()) : null;
   const projectDb = openVectorStore(defaultDbPath());
@@ -574,6 +576,10 @@ export async function searchDocsBoth(
     }
   }
 
+  refreshStaleSources(centralDbPath(), sources, embedFn).catch((err) => {
+    console.error("[docs] background refresh failed:", err);
+  });
+
   return Array.from(fusion.values())
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
@@ -594,7 +600,11 @@ type SearchDocsParams = Static<typeof SearchDocsParams>;
 
 const DocsStatusParams = Type.Object({});
 
-const DocsRebuildParams = Type.Object({});
+const DocsRebuildParams = Type.Object({
+  tier: Type.Union([Type.Literal("central"), Type.Literal("project")], {
+    description: "Which tier to rebuild",
+  }),
+});
 
 /**
  * Build the three docs tools. `deps` carries the DB path, corpus root, and
@@ -603,8 +613,10 @@ const DocsRebuildParams = Type.Object({});
  * tests.
  */
 export function buildDocsTools(deps: {
-  dbPath: string;
-  corpusRoot: string;
+  centralDbPath: string;
+  centralCorpusRoot: string;
+  projectDbPath: string;
+  projectCorpusRoot: string;
   embedFn?: EmbedFn;
 }): {
   search_docs: ToolDefinition<typeof SearchDocsParams, unknown>;
@@ -619,17 +631,12 @@ export function buildDocsTools(deps: {
     description: "Search the docs corpus via semantic embeddings",
     parameters: SearchDocsParams,
     execute: async (_toolCallId, params) => {
-      const db = openVectorStore(deps.dbPath);
-      try {
-        const limit = params.limit ?? 5;
-        const results = await searchDocs(db, params.query, limit, embedFn);
-        return {
-          content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
-          details: { count: results.length, results },
-        };
-      } finally {
-        db.close();
-      }
+      const limit = params.limit ?? 5;
+      const results = await searchDocsBoth(params.query, limit, embedFn);
+      return {
+        content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+        details: { count: results.length, results },
+      };
     },
   };
 
@@ -639,16 +646,11 @@ export function buildDocsTools(deps: {
     description: "Show docs corpus indexing status",
     parameters: DocsStatusParams,
     execute: async () => {
-      const db = openVectorStore(deps.dbPath);
-      try {
-        const status = docsStatus(db, deps.corpusRoot);
-        return {
-          content: [{ type: "text", text: JSON.stringify(status, null, 2) }],
-          details: status,
-        };
-      } finally {
-        db.close();
-      }
+      const status = docsStatusBoth(deps.centralDbPath, deps.projectDbPath, deps.projectCorpusRoot);
+      return {
+        content: [{ type: "text", text: JSON.stringify(status, null, 2) }],
+        details: status,
+      };
     },
   };
 
@@ -657,17 +659,19 @@ export function buildDocsTools(deps: {
     label: "Rebuild Docs Index",
     description: "Rebuild the docs corpus index from docs-corpus/",
     parameters: DocsRebuildParams,
-    execute: async () => {
-      const db = openVectorStore(deps.dbPath);
-      try {
-        const result = await docsRebuild(db, deps.corpusRoot, embedFn);
+    execute: async (_toolCallId, params) => {
+      const tier = params.tier;
+      if (tier !== "central" && tier !== "project") {
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-          details: result,
+          content: [{ type: "text", text: JSON.stringify({ error: `Invalid tier: ${tier}` }) }],
+          details: { error: `Invalid tier: ${tier}` },
         };
-      } finally {
-        db.close();
       }
+      const result = await docsRebuildTier(tier, embedFn);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        details: result,
+      };
     },
   };
 
@@ -685,9 +689,16 @@ export function buildDocsTools(deps: {
  * load.
  */
 export function register(pi: ExtensionAPI): void {
-  const dbPath = defaultDbPath();
-  const corpusRoot = defaultCorpusRoot();
-  const { search_docs, docs_status, docs_rebuild } = buildDocsTools({ dbPath, corpusRoot });
+  const cdb = centralDbPath();
+  const ccr = centralCorpusRoot();
+  const projectDbPath = defaultDbPath();
+  const projectCorpusRoot = defaultCorpusRoot();
+  const { search_docs, docs_status, docs_rebuild } = buildDocsTools({
+    centralDbPath: cdb,
+    centralCorpusRoot: ccr,
+    projectDbPath,
+    projectCorpusRoot,
+  });
   pi.registerTool(search_docs);
   pi.registerTool(docs_status);
   pi.registerTool(docs_rebuild);

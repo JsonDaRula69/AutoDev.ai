@@ -25,6 +25,7 @@ import { validateAndCreateConfig } from "./config-defaults.js";
 import { markStepCompleted, isStepCompleted } from "./state.js";
 import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
 import { openVectorStore } from "../docs/index.js";
+import { createCentralDbSchema } from "../docs/seeding.js";
 
 // ---- Types ----
 
@@ -296,6 +297,7 @@ export function createCentralDocsStructure(agentDir: string): { ok: boolean; det
     mkdirSync(centralHome, { recursive: true });
     const db = openVectorStore(join(centralHome, "vectors.db"));
     try {
+      createCentralDbSchema(db);
       return { ok: true, detail: `initialized at ${centralHome}` };
     } finally {
       db.close();
