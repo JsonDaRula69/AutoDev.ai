@@ -73,6 +73,8 @@ const STUB_EXEC = (cmd: string): string => {
   throw new Error(`unexpected command: ${cmd}`);
 };
 
+const mockProviderInstall = async () => ({ ok: true, detail: "mocked", alreadyInstalled: false });
+
 test("doctor orchestrator opens /dev/tty and runs config when stdin is non-interactive", async () => {
   const dir = createTempDir();
   const authPath = join(dir, "auth.json");
@@ -105,9 +107,9 @@ test("doctor orchestrator opens /dev/tty and runs config when stdin is non-inter
       notify,
       packageRoot,
       reopenTtyOverride,
+      providerInstallOverride: mockProviderInstall,
     });
     expect(result.configFlowLaunched).toBe(true);
-    // The "opened /dev/tty" info notice should have fired.
     const ttyNotice = notifications.find((n) => n.msg.includes("/dev/tty"));
     expect(ttyNotice).toBeDefined();
   } finally {
@@ -152,9 +154,9 @@ test("doctor orchestrator warns and skips config when /dev/tty reopen fails", as
       notify,
       packageRoot,
       reopenTtyOverride,
+      providerInstallOverride: mockProviderInstall,
     });
     expect(result.configFlowLaunched).toBe(true);
-    // The non-interactive warning should have fired.
     const warning = notifications.find((n) =>
       n.msg.includes("Non-interactive environment") &&
       n.msg.includes("no controlling terminal")

@@ -132,6 +132,7 @@ export interface DoctorDeps {
    * a fake here to simulate the happy/failure paths without a real TTY.
    */
   readonly reopenTtyOverride?: ReopenTtyDeps;
+  readonly providerInstallOverride?: (source: string) => Promise<{ ok: boolean; detail: string; alreadyInstalled: boolean }>;
 }
 
 /**
@@ -235,6 +236,7 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
     notify,
     execSyncOverride: deps.execSyncOverride as never,
     ...(deps.packageRoot !== undefined ? { packageRoot: deps.packageRoot } : {}),
+    ...(deps.providerInstallOverride !== undefined ? { providerInstallOverride: deps.providerInstallOverride } : {}),
   };
   await runInstallFixes(installDeps);
 
@@ -273,6 +275,7 @@ async function runFirstRunFlow(
     notify,
     execSyncOverride: deps.execSyncOverride as never,
     ...(deps.packageRoot !== undefined ? { packageRoot: deps.packageRoot } : {}),
+    ...(deps.providerInstallOverride !== undefined ? { providerInstallOverride: deps.providerInstallOverride } : {}),
   };
 
   // (1+2) Tools + symlinks (no MC install yet).
