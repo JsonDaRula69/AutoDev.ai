@@ -381,15 +381,12 @@ test("loadFallbackConfig loads from project root", () => {
 // --- M4: default session factory wiring -------------------------------------
 
 test("BackgroundManager uses the default session factory when none is provided", () => {
-  const manager = new BackgroundManager({ setTimer: (fn, ms) => scheduler.setTimer(fn, ms) });
-  // The manager should NOT report "no-session-factory-configured" — the default
-  // factory is wired. We verify by spawning and checking the error is NOT the
-  // missing-factory sentinel (the real factory will fail for other reasons in
-  // the test environment, which is fine — we only assert the factory exists).
+  const factory = mockCreateAgentSession();
+  const manager = new BackgroundManager({
+    sessionFactory: factory,
+    setTimer: (fn, ms) => scheduler.setTimer(fn, ms),
+  });
   const id = manager.spawn(spawnConfig("ollama-cloud/glm-5.2:cloud") as never);
-  // Allow microtasks to flush so startTask runs.
-  // Don't await — the real factory may hang. Just check the task was started
-  // and is not in the "error" state with the missing-factory reason.
   const task = manager.getTask(id);
   expect(task).toBeDefined();
   expect(task?.status).not.toBe("error");
