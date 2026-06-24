@@ -62,16 +62,57 @@
   - `npx tsc --noEmit`: PASS (no output)
   - `git diff extensions/autodev/docs/index.ts | grep -E "register|buildDocsTools"`: no output (unchanged)
 
-## T3 fix: `hybridSearch` RRF formula aligned to plan spec
+## T4: docs dual-tier tests (`test/docs.test.ts`)
 
-- Removed the `reciprocalRank(rank) = 1 / (rank + 60)` helper and the `normalizeScores()` based score normalization.
-- Replaced with pure Reciprocal Rank Fusion as specified:
-  - Dense contribution per result: `0.7 / (dense_rank + 1)`.
-  - BM25 contribution per result: `0.3 / (bm25_rank + 1)`.
-  - Ranks are 0-indexed positions in their respective top-`limit*3` lists.
-  - Scores for the same chunk (`doc_path::chunk_index`) are summed; results sorted by fused score descending; top-N returned.
-- Also updated `searchDocsBoth` central/project fusion to use the same `0.7 / (rank + 1)` and `0.3 / (rank + 1)` weights instead of the removed helper.
+- Updated imports to include dual-tier functions: `hybridSearch`, `searchDocsBoth`, `docsStatusBoth`, `docsRebuildTier`, `centralDbPath`, `centralCorpusRoot`.
+- Added 14 new dual-tier tests (sections 12–16) while preserving all 31 existing single-tier tests.
+- Isolated central tier by setting `PI_CODING_AGENT_DIR` to a temp dir and creating an `agent/` subdir so `getAgentDir()/..` resolves to the temp central root.
+- Isolated project tier for `docsRebuildTier("project")` by stubbing `process.cwd()` to the temp root so `defaultDbPath()`/`defaultCorpusRoot()` do not touch the real project tree.
+- Used `mockEmbedFn` from `test/mocks/embeddings.ts` for all dual-tier tests.
+- New test coverage:
+  - `hybridSearch` semantic match inclusion
+  - `hybridSearch` exact match boosting via BM25
+  - `hybridSearch` RRF fusion ranking
+  - `hybridSearch` dense-only fallback when BM25 returns nothing
+  - `hybridSearch` BM25-only fallback when dense returns nothing
+  - `searchDocsBoth` merging + ranking across central/project tiers
+  - `searchDocsBoth` `central:` / `project:` prefix correctness
+  - `searchDocsBoth` single-tier fallback when central DB is missing
+  - `docsStatusBoth` reporting both tiers
+  - `docsStatusBoth` handling missing central DB
+  - `docsRebuildTier("central")` populating FTS5
+  - `docsRebuildTier("project")` populating FTS5
+  - `centralDbPath` resolution under mocked agent dir
+  - `centralCorpusRoot` resolution under mocked agent dir
+- **Verification results:**
+  - `bun test test/docs.test.ts`: 45 pass, 0 fail (31 single-tier + 14 dual-tier)
+  - `npx tsc --noEmit`: PASS (no output)
+
+## T7: Seeding framework — pluggable source list, download, chunk, embed
+
+- Created `extensions/autodev/docs/seeding.ts` with `SeedSource` type and `seedCentralDocs(sources, embedFn)`.
+- Supported source types: `git-sparse`, `llms-txt`, `llms-full` (including `file://`).
+- `git-sparse` uses `mkdtempSync(join(tmpdir(), "autodev-seed-"))`, shallow sparse-checkout, copies `.md` files filtered by `minimatch(path, pattern, { matchBase: true })`, and cleans up the temp dir in a `finally` block.
+- `llms-txt` fetches the index, parses `[text](url)` links ending in `.md`, resolves relative URLs with `new URL(link, baseUrl)`, fetches each, writes to `targetSubdir`, and applies `excludePatterns`.
+- `llms-full` supports `file://` via `readFileSync(url.slice(7))` and `http(s)://` via `fetch()`, writing to `targetSubdir/full-docs.md`.
+- After all sources finish, calls `docsRebuildTier("central", embedFn)` and merges any rebuild errors into the returned `errors[]`.
+- Partial-failure resilience: per-source errors are logged and seeding continues; successful sources still contribute to the rebuild.
+- Added `js-yaml` and `minimatch` to `package.json` dependencies (`@types/js-yaml` NOT added — not required by plan).
+- Created config template at `~/.AutoDev/config/docs-sources.yaml` with 18 active + 6 deferred sources, all commented out. Default source list is EMPTY. pi, magic-context, omo are marked `active: true` in comments; the rest are `active: false`. Deferred sources use `type: http` and include a note: "deferred until format converter is built". URLs and sparsePaths match the plan exactly.
+- Seeding is NOT run automatically on install; no format converters were created for deferred sources; no `http` type was added to the `SeedSource` union.
+- **Verification results:**
+  - `bun test test/docs.test.ts`: 45 pass, 0 fail
+  - `npx tsc --noEmit`: PASS (no output)
+  - Direct smoke test with a temp git-sparse source: central DB populated with 2 chunks, 0 errors
+
+## T7 fix: docs-sources template and package.json dependencies aligned to plan
+
+- Overwrote `config/docs-sources.yaml` with the exact plan-specified template. 18 active sources + 6 deferred sources are all commented out; default `sources: []` is empty.
+- Verified pi, magic-context, omo have `active: true`; all other active sources have `active: false`.
+- Verified 6 deferred sources use `type: http` and carry the comment "DEFERRED: ... needs ...->MD converter" or the note "`http` type not in SeedSource union — commented out only".
+- Removed `@types/js-yaml` from the dependency list description (was not actually added to `package.json`, but the learning note was corrected).
+- `package.json` now lists only `js-yaml` and `minimatch` as new dependencies (alphabetical order preserved).
 - **Verification results after fix:**
-  - `bun test test/docs.test.ts`: 31 pass, 0 fail
+  - `bun test test/docs.test.ts`: 45 pass, 0 fail
   - `npx tsc --noEmit`: PASS (no output)
 

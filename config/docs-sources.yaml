@@ -1,0 +1,223 @@
+# Central documentation seeding sources.
+#
+# This file lives in ~/.AutoDev/config/docs-sources.yaml (central config, not project-local).
+# AutoDev does NOT run seeding automatically on install. Uncomment sources you want to fetch,
+# then run `autodev docs rebuild central` (or let `autodev doctor` first-run trigger it).
+#
+# Supported types:
+#   git-sparse : shallow sparse checkout of a git repository path.
+#   llms-txt   : parse an llms.txt index and fetch linked .md pages.
+#   llms-full  : single aggregated docs file; file:// reads a local path, http(s):// fetches.
+#
+# `active: true` means the source is included when seeding is triggered and is checked for
+# staleness more frequently (7 days). `active: false` is still seeded, but treated as
+# lower-priority refresh (30 days).
+#
+# Deferred sources (non-Markdown formats) are listed at the bottom and must remain commented
+# out until a format converter is built.
+
+sources: []
+
+# Active sources — currently maintained by AutoDev. Uncomment to enable.
+# - name: pi
+#   type: git-sparse
+#   url: https://github.com/earendil-works/pi
+#   sparsePath: packages/coding-agent/docs
+#   targetSubdir: pi
+#   active: true
+#
+# - name: magic-context
+#   type: git-sparse
+#   url: https://github.com/cortexkit/magic-context
+#   sparsePath: packages/docs/src/content/docs
+#   targetSubdir: magic-context
+#   active: true
+#
+# - name: omo
+#   type: git-sparse
+#   url: https://github.com/code-yeongyu/oh-my-openagent
+#   sparsePath: docs
+#   targetSubdir: omo
+#   excludePatterns:
+#     - legal/**
+#     - manifesto.md
+#     - model-capabilities-maintenance.md
+#   active: true
+#
+# - name: loreguard
+#   type: git-sparse
+#   url: https://github.com/tmj-90/loreguard-mcp
+#   sparsePath: docs
+#   targetSubdir: loreguard
+#   active: false
+#
+# - name: bun
+#   type: git-sparse
+#   url: https://github.com/oven-sh/bun
+#   sparsePath: docs
+#   targetSubdir: bun
+#   active: false
+#
+# - name: npm
+#   type: git-sparse
+#   url: https://github.com/npm/documentation
+#   sparsePath: content
+#   targetSubdir: npm
+#   active: false
+#
+# - name: homebrew
+#   type: git-sparse
+#   url: https://github.com/Homebrew/brew
+#   sparsePath: docs
+#   targetSubdir: homebrew
+#   active: false
+#
+# - name: gh-cli
+#   type: git-sparse
+#   url: https://github.com/cli/cli
+#   sparsePath: docs
+#   targetSubdir: gh-cli
+#   active: false
+#
+# - name: ollama
+#   type: git-sparse
+#   url: https://github.com/ollama/ollama
+#   sparsePath: docs
+#   targetSubdir: ollama
+#   active: false
+#
+# - name: discord-api
+#   type: git-sparse
+#   url: https://github.com/discord/discord-api-docs
+#   sparsePath: developers
+#   targetSubdir: discord-api
+#   active: false
+#
+# - name: context7
+#   type: git-sparse
+#   url: https://github.com/upstash/context7
+#   sparsePath: docs
+#   targetSubdir: context7
+#   active: false
+#
+# - name: lsp
+#   type: git-sparse
+#   url: https://github.com/microsoft/language-server-protocol
+#   sparsePath: _specifications
+#   targetSubdir: lsp
+#   active: false
+#
+# - name: voyageai
+#   type: llms-txt
+#   url: https://docs.voyageai.com/llms.txt
+#   targetSubdir: voyageai
+#   excludePatterns:
+#     - '**/pricing**'
+#   active: false
+#
+# - name: aikido
+#   type: llms-txt
+#   url: https://help.aikido.dev/llms.txt
+#   targetSubdir: aikido
+#   excludePatterns:
+#     - '**/legal/**'
+#     - '**/compliance/**'
+#     - '**/privacy/**'
+#   active: false
+#
+# - name: transformers-js
+#   type: llms-txt
+#   url: https://huggingface.co/docs/transformers.js/llms.txt
+#   targetSubdir: transformers-js
+#   active: false
+#
+# - name: openclaw
+#   type: llms-txt
+#   url: https://docs.openclaw.ai/llm.txt
+#   targetSubdir: openclaw
+#   active: false
+#
+# - name: hermes
+#   type: llms-full
+#   url: https://hermes-agent.nousresearch.com/docs/assets/files/llms-full-cdb9d5f9d739fe1ba5a7ff06968c4fbf.txt
+#   targetSubdir: hermes
+#   active: false
+#
+# - name: autodev-architecture
+#   type: llms-full
+#   url: file://./ARCHITECTURE.md
+#   targetSubdir: autodev
+#   active: false
+#
+# - name: autodev-structure
+#   type: llms-full
+#   url: file://./STRUCTURE.md
+#   targetSubdir: autodev
+#   active: false
+#
+# - name: autodev-context
+#   type: llms-full
+#   url: file://./CONTEXT.md
+#   targetSubdir: autodev
+#   active: false
+#
+# - name: autodev-readme
+#   type: llms-full
+#   url: file://./README.md
+#   targetSubdir: autodev
+#   active: false
+#
+# - name: autodev-roadmap
+#   type: llms-full
+#   url: file://./ROADMAP.md
+#   targetSubdir: autodev
+#   active: false
+
+# Deferred sources — non-Markdown formats. Deferred until format converter is built.
+# - name: pip
+#   type: git-sparse
+#   url: https://github.com/pypa/pip
+#   sparsePath: docs
+#   targetSubdir: pip
+#   active: false
+#   # DEFERRED: RST format, needs RST->MD converter
+#
+# - name: git
+#   type: git-sparse
+#   url: https://github.com/git/git
+#   sparsePath: Documentation
+#   targetSubdir: git
+#   excludePatterns:
+#     - RelNotes/**
+#     - howto/**
+#   active: false
+#   # DEFERRED: AsciiDoc format, needs AsciiDoc->MD converter
+#
+# - name: sqlite-fts5
+#   type: http
+#   url: https://sqlite.org/fts5.html
+#   targetSubdir: sqlite-fts5
+#   active: false
+#   # DEFERRED: HTML format, needs HTML->MD converter. `http` type not in SeedSource union — commented out only.
+#
+# - name: sqlite
+#   type: http
+#   url: https://sqlite.org/docs.html
+#   targetSubdir: sqlite
+#   active: false
+#   # DEFERRED: HTML format, needs HTML->MD converter. `http` type not in SeedSource union — commented out only.
+#
+# - name: telegram-bot-api
+#   type: http
+#   url: https://core.telegram.org/bots/api
+#   targetSubdir: telegram-bot-api
+#   active: false
+#   # DEFERRED: HTML format, needs HTML->MD converter. `http` type not in SeedSource union — commented out only.
+#
+# - name: tmux
+#   type: git-sparse
+#   url: https://github.com/tmux/tmux
+#   sparsePath: .
+#   targetSubdir: tmux
+#   active: false
+#   # DEFERRED: mdoc format, needs mdoc->MD converter. Only tmux.1 is the docs.
