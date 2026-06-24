@@ -17,7 +17,7 @@ import { isStepCompleted, markStepCompleted } from "./state.js";
 import { setEnvVars, readEnv } from "./env.js";
 import { setProviderKey, tryImportAuth, providerToEnvVar } from "./auth.js";
 import type { Prompter } from "./prompts.js";
-import { validateLlmKey, validateVoyageKey, validateGithubToken } from "./key-validator.js";
+import { validateLlmKey, validateVoyageKey, validateGithubToken, validateDiscordToken } from "./key-validator.js";
 
 export type { Prompter } from "./prompts.js";
 
@@ -297,6 +297,22 @@ Full setup guide: ~/.AutoDev/reference/discord-setup.md`;
       message: "interactive config required, no TTY detected",
     };
   }
+
+  deps.notify("Validating Discord bot token...", "info");
+  const discordValidation = await validateDiscordToken(token, {
+    ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
+  });
+  if (!discordValidation.valid) {
+    deps.notify(`Discord token validation failed: ${discordValidation.error}`, "warning");
+    return {
+      subcommand: "discord",
+      step: STEP_DISCORD,
+      status: "error",
+      message: `Discord token invalid: ${discordValidation.error}`,
+    };
+  }
+  deps.notify("Discord bot token validated.", "info");
+
   const channelId = await deps.prompter.prompt("Enter your Discord channel ID:");
   const liaisonChannelId = await deps.prompter.prompt(
     "Enter your Discord liaison channel ID (optional, press Enter to skip):",

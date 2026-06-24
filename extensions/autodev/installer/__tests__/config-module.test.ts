@@ -61,6 +61,7 @@ async function makeHarness(prompter: Prompter): Promise<Harness> {
     notify: (message: string, level: "info" | "warning" | "error") => {
       notifyCalls.push({ message, level });
     },
+    fetchOverride: async () => ({ status: 200 } as Response),
   };
   return { projectRoot, authPath, envPath, notifyCalls, deps };
 }

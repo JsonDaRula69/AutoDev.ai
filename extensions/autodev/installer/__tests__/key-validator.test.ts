@@ -1,6 +1,6 @@
 // @ts-nocheck — bun:test mock types are complex for strict mode
 import { test, expect } from "bun:test";
-import { validateLlmKey, validateVoyageKey, validateGithubToken } from "../key-validator.js";
+import { validateLlmKey, validateVoyageKey, validateGithubToken, validateDiscordToken } from "../key-validator.js";
 
 function mockFetch(status: number): (url: string, init?: RequestInit) => Promise<Response> {
   return async () => ({ status } as Response);
@@ -107,4 +107,27 @@ test("validateGithubToken: network error returns invalid with message", () => {
   });
   expect(result.valid).toBe(false);
   expect(result.error).toContain("connection refused");
+});
+
+test("validateDiscordToken: returns valid on 200", async () => {
+  const result = await validateDiscordToken("MTUx_test_token", { fetchOverride: mockFetch(200) });
+  expect(result.valid).toBe(true);
+});
+
+test("validateDiscordToken: returns invalid on 401", async () => {
+  const result = await validateDiscordToken("bad_token", { fetchOverride: mockFetch(401) });
+  expect(result.valid).toBe(false);
+  expect(result.error).toContain("401");
+});
+
+test("validateDiscordToken: returns invalid on 403", async () => {
+  const result = await validateDiscordToken("forbidden_token", { fetchOverride: mockFetch(403) });
+  expect(result.valid).toBe(false);
+  expect(result.error).toContain("403");
+});
+
+test("validateDiscordToken: network error returns invalid", async () => {
+  const result = await validateDiscordToken("test_token", { fetchOverride: mockFetchThrowing("ECONNREFUSED") });
+  expect(result.valid).toBe(false);
+  expect(result.error).toContain("ECONNREFUSED");
 });

@@ -59,6 +59,14 @@ const VOYAGE_CONFIG: ProviderConfig = {
   invalidCodes: [401, 403],
 };
 
+const DISCORD_CONFIG: ProviderConfig = {
+  method: "GET",
+  url: () => "https://discord.com/api/v10/users/@me",
+  headers: (key) => ({ Authorization: `Bot ${key}` }),
+  successCodes: [200],
+  invalidCodes: [401, 403],
+};
+
 export async function validateLlmKey(
   provider: string,
   apiKey: string,
@@ -76,6 +84,13 @@ export async function validateVoyageKey(
   deps: KeyValidatorDeps = {},
 ): Promise<ValidationResult> {
   return validateKey(VOYAGE_CONFIG, apiKey, deps);
+}
+
+export async function validateDiscordToken(
+  token: string,
+  deps: KeyValidatorDeps = {},
+): Promise<ValidationResult> {
+  return validateKey(DISCORD_CONFIG, token, deps);
 }
 
 export function validateGithubToken(
