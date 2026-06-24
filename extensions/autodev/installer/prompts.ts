@@ -9,7 +9,7 @@ import { createInterface, type Interface as ReadlineInterface } from "node:readl
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { openSync } from "node:fs";
 import { createReadStream, createWriteStream } from "node:fs";
-import { select as clackSelect } from "@clack/prompts";
+import { select as clackSelect, text as clackText, confirm as clackConfirm, isCancel } from "@clack/prompts";
 
 export interface SelectOption {
   value: string;
@@ -27,31 +27,20 @@ export interface Prompter {
 /** Create a real prompter backed by stdin/stdout readline. */
 export function createPrompter(): Prompter {
   if (processStdin.isTTY === true) {
-    const rl = createInterface({
-      input: processStdin,
-      output: processStdout,
-    });
-    return createPrompterFromRl(rl);
+    return createClackPrompter(processStdin, processStdout);
   }
   return createTtyPrompter();
 }
 
 function createTtyPrompter(): Prompter {
-  let ttyFd: number | undefined;
   try {
-    ttyFd = openSync("/dev/tty", "r+");
+    const ttyFd = openSync("/dev/tty", "r+");
+    const input = createReadStream("/dev/tty", { fd: ttyFd });
+    const output = createWriteStream("/dev/tty", { fd: ttyFd });
+    return createClackPrompter(input, output);
   } catch {
-    ttyFd = undefined;
-  }
-
-  if (ttyFd === undefined) {
     return createNoTtyPrompter();
   }
-
-  const input = createReadStream("/dev/tty", { fd: ttyFd });
-  const output = createWriteStream("/dev/tty", { fd: ttyFd });
-  const rl = createInterface({ input, output });
-  return createPrompterFromRl(rl);
 }
 
 function createNoTtyPrompter(): Prompter {
@@ -64,45 +53,32 @@ function createNoTtyPrompter(): Prompter {
 }
 
 export function createPrompterFromRl(rl: ReadlineInterface): Prompter {
+  return createClackPrompter(rl.input as ReadableStream<Uint8Array>, rl.output as WritableStream<Uint8Array>);
+}
+
+function createClackPrompter(input: ReadableStream<Uint8Array>, output: WritableStream<Uint8Array>): Prompter {
   return {
-    prompt: (question: string): Promise<string> => {
-      return new Promise((resolve) => {
-        rl.question(question + " ", (answer: string) => {
-          resolve(answer.trim());
-        });
-      });
+    prompt: async (question: string): Promise<string> => {
+      const result = await clackText({ message: question, input, output });
+      if (isCancel(result)) return "";
+      return String(result).trim();
     },
-    confirm: (question: string, defaultYes = true): Promise<boolean> => {
-      const hint = defaultYes ? "Y/n" : "y/N";
-      return new Promise((resolve) => {
-        rl.question(`${question} [${hint}] `, (answer: string) => {
-          const trimmed = answer.trim().toLowerCase();
-          if (trimmed === "") {
-            resolve(defaultYes);
-          } else if (trimmed === "y" || trimmed === "yes") {
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        });
-      });
+    confirm: async (question: string, defaultYes = true): Promise<boolean> => {
+      const result = await clackConfirm({ message: question, initialValue: defaultYes, input, output });
+      if (isCancel(result)) return false;
+      return Boolean(result);
     },
     select: async (message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol> => {
-      rl.pause();
-      try {
-        const result = await clackSelect({
-          message,
-          options: options.map((o) => ({ value: o.value, label: o.label, hint: o.hint })),
-          initialValue: initialValue ?? options[0]?.value,
-        });
-        return result;
-      } finally {
-        rl.resume();
-      }
+      const result = await clackSelect({
+        message,
+        options: options.map((o) => ({ value: o.value, label: o.label, hint: o.hint })),
+        initialValue: initialValue ?? options[0]?.value,
+        input,
+        output,
+      });
+      return result;
     },
-    close: () => {
-      rl.close();
-    },
+    close: () => {},
   };
 }
 
