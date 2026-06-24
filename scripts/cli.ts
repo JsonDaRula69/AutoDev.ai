@@ -166,7 +166,11 @@ export async function cmdDoctor(opts?: {
 }
 
 async function cmdConfig(parts: string[]): Promise<number> {
-  if (parts.length === 0) {
+  const projectRoot = process.cwd();
+  const authPath = await resolveAuthPath();
+  const subcommands = parts.length > 0 ? [parts[0]] : ["llm", "voyage", "discord", "github"];
+
+  if (parts.length > 0 && !["llm", "voyage", "discord", "github"].includes(parts[0])) {
     notify("Usage: autodev config <sub-command>", "info");
     notify("", "info");
     notify("Sub-commands:", "info");
@@ -176,12 +180,8 @@ async function cmdConfig(parts: string[]): Promise<number> {
     notify("  github   — configure GitHub auth (PAT or gh auth login)", "info");
     notify("", "info");
     notify("Run `autodev config` with no sub-command to configure all in sequence.", "info");
-    return 0;
+    return 1;
   }
-
-  const projectRoot = process.cwd();
-  const authPath = await resolveAuthPath();
-  const subSubcommand = parts[0] ?? "";
 
   try {
     const { runConfig } = await import(
@@ -192,15 +192,17 @@ async function cmdConfig(parts: string[]): Promise<number> {
     );
     const prompter = createPrompter();
     try {
-      await runConfig(
-        {
-          projectRoot,
-          authPath,
-          prompter,
-          notify,
-        },
-        subSubcommand,
-      );
+      for (const sub of subcommands) {
+        await runConfig(
+          {
+            projectRoot,
+            authPath,
+            prompter,
+            notify,
+          },
+          sub,
+        );
+      }
     } finally {
       prompter.close();
     }
