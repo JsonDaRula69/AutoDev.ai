@@ -10,12 +10,13 @@
   },
   "packageManager": "bun@1.3.14",
   "bin": {
-    "autodev": "./scripts/cli.ts"
+    "autodev": "./bin/autodev.js"
   },
   "files": [
     "extensions/autodev/",
     "scripts/cli.ts",
     "scripts/onboard.ts",
+    "bin/autodev.js",
     "install.sh",
     "config/",
     ".pi/settings.json",
