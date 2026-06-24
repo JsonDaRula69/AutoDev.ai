@@ -133,6 +133,7 @@ export interface DoctorDeps {
    */
   readonly reopenTtyOverride?: ReopenTtyDeps;
   readonly providerInstallOverride?: (source: string) => Promise<{ ok: boolean; detail: string; alreadyInstalled: boolean }>;
+  readonly fetchOverride?: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
 /**
@@ -355,6 +356,7 @@ async function runConfigSubcommands(
       ...(deps.execSyncOverride !== undefined
         ? { execSyncOverride: deps.execSyncOverride as never }
         : {}),
+      ...(deps.fetchOverride !== undefined ? { fetchOverride: deps.fetchOverride } : {}),
     };
     for (const sub of subcommands) {
       await runConfig(configDeps, sub);
@@ -374,6 +376,7 @@ async function runConfigSubcommands(
         ...(deps.execSyncOverride !== undefined
           ? { execSyncOverride: deps.execSyncOverride as never }
           : {}),
+        ...(deps.fetchOverride !== undefined ? { fetchOverride: deps.fetchOverride } : {}),
       };
       for (const sub of subcommands) {
         await runConfig(configDeps, sub);

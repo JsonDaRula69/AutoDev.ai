@@ -17,6 +17,7 @@ import { isStepCompleted, markStepCompleted } from "./state.js";
 import { setEnvVars, readEnv } from "./env.js";
 import { setProviderKey, tryImportAuth, providerToEnvVar } from "./auth.js";
 import type { Prompter } from "./prompts.js";
+import { validateLlmKey, validateVoyageKey, validateGithubToken } from "./key-validator.js";
 
 export type { Prompter } from "./prompts.js";
 
@@ -26,6 +27,7 @@ export interface ConfigModuleDeps {
   readonly prompter: Prompter;
   notify: (message: string, level: "info" | "warning" | "error") => void;
   readonly execSyncOverride?: (command: string, options?: ExecSyncOptions) => Buffer;
+  readonly fetchOverride?: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
 export interface ConfigResult {
@@ -136,18 +138,52 @@ async function handleLlm(deps: ConfigModuleDeps): Promise<ConfigResult> {
   }
 
   let apiKey = "";
+  let lastError = "";
   if (!imported) {
-    apiKey = await deps.prompter.prompt(`Enter your ${provider} API key (or env var name):`);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      apiKey = await deps.prompter.prompt(
+        attempt === 0
+          ? `Enter your ${provider} API key:`
+          : `Key rejected: ${lastError}\nRe-enter your ${provider} API key (or press Enter to cancel):`,
+      );
+      if (apiKey === "") {
+        if (attempt === 0) {
+          deps.notify("No API key provided — credentials will be missing.", "warning");
+        } else {
+          deps.notify("Key entry cancelled.", "warning");
+        }
+        await markStepCompleted(deps.projectRoot, STEP_LLM, CONFIG_SCOPE);
+        return {
+          subcommand: "llm",
+          step: STEP_LLM,
+          status: "warning",
+          message: "No valid API key provided. Set it later via .env or auth.json.",
+        };
+      }
+
+      deps.notify(`Validating ${provider} API key...`, "info");
+      const validation = await validateLlmKey(provider, apiKey, {
+        ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
+      });
+      if (validation.valid) {
+        deps.notify(`${provider} API key validated.`, "info");
+        break;
+      }
+      lastError = validation.error ?? "Unknown error";
+      deps.notify(`Validation failed: ${lastError}`, "warning");
+      apiKey = "";
+    }
+
     if (apiKey === "") {
-      deps.notify("No API key provided — credentials will be missing.", "warning");
       await markStepCompleted(deps.projectRoot, STEP_LLM, CONFIG_SCOPE);
       return {
         subcommand: "llm",
         step: STEP_LLM,
         status: "warning",
-        message: "No API key provided. Set it later via .env or auth.json.",
+        message: "API key validation failed after 3 attempts.",
       };
     }
+
     await setEnvVars(deps.projectRoot, [[envVarName, apiKey]], envPath);
     await setProviderKey(deps.authPath, provider, `$${envVarName}`);
   }
@@ -184,13 +220,44 @@ async function handleVoyage(deps: ConfigModuleDeps): Promise<ConfigResult> {
     };
   }
 
+  deps.notify("Validating VoyageAI API key...", "info");
+  const validation = await validateVoyageKey(apiKey, {
+    ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
+  });
+
+  if (!validation.valid) {
+    deps.notify(`VoyageAI key validation failed: ${validation.error}`, "warning");
+    const shouldSkip = await deps.prompter.confirm(
+      "VoyageAI key is invalid. Skip and use local ONNX embeddings instead?",
+      true,
+    );
+    if (shouldSkip) {
+      deps.notify("Using local ONNX embeddings (slower, ~90MB download on first use).", "info");
+      await setEnvVars(deps.projectRoot, [["VOYAGE_API_KEY", ""]], envPath);
+      await markStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE);
+      return {
+        subcommand: "voyage",
+        step: STEP_VOYAGE,
+        status: "warning",
+        message: "VoyageAI key invalid. Using ONNX fallback embeddings.",
+      };
+    }
+    return {
+      subcommand: "voyage",
+      step: STEP_VOYAGE,
+      status: "error",
+      message: `VoyageAI key invalid: ${validation.error}`,
+    };
+  }
+
+  deps.notify("VoyageAI API key validated.", "info");
   await setEnvVars(deps.projectRoot, [["VOYAGE_API_KEY", apiKey]], envPath);
   await markStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE);
   return {
     subcommand: "voyage",
     step: STEP_VOYAGE,
     status: "ok",
-    message: "VoyageAI API key configured.",
+    message: "VoyageAI key configured.",
   };
 }
 
@@ -308,22 +375,25 @@ Paste your token here (or press Enter to use interactive \`gh auth login --web\`
     return { subcommand: "github", step: STEP_GITHUB, status: "ok", message: "GitHub CLI authenticated." };
   }
 
-  await setEnvVars(deps.projectRoot, [["GH_TOKEN", tokenInput]], envPath);
-  process.env.GH_TOKEN = tokenInput;
+  deps.notify("Validating GitHub token...", "info");
+  const ghValidation = validateGithubToken(tokenInput, {
+    ...(deps.execSyncOverride ? { execSyncOverride: deps.execSyncOverride as never } : {}),
+  });
 
-  try {
-    execSyncFn(deps, "gh auth status", { stdio: "pipe", timeout: 10_000 });
-    deps.notify("GitHub token verified via gh auth status.", "info");
-    await markStepCompleted(deps.projectRoot, STEP_GITHUB, CONFIG_SCOPE);
-    return { subcommand: "github", step: STEP_GITHUB, status: "ok", message: "GitHub token configured and verified." };
-  } catch (e) {
-    deps.notify(`GitHub token written but gh auth status failed: ${(e as Error).message}`, "warning");
-    await markStepCompleted(deps.projectRoot, STEP_GITHUB, CONFIG_SCOPE);
+  if (!ghValidation.valid) {
+    deps.notify(`GitHub token rejected: ${ghValidation.error}`, "warning");
     return {
       subcommand: "github",
       step: STEP_GITHUB,
-      status: "warning",
-      message: `Token written but verification failed: ${(e as Error).message}`,
+      status: "error",
+      message: `GitHub token invalid: ${ghValidation.error}`,
     };
   }
+
+  deps.notify("GitHub token validated.", "info");
+  await setEnvVars(deps.projectRoot, [["GH_TOKEN", tokenInput]], envPath);
+  process.env.GH_TOKEN = tokenInput;
+
+  await markStepCompleted(deps.projectRoot, STEP_GITHUB, CONFIG_SCOPE);
+  return { subcommand: "github", step: STEP_GITHUB, status: "ok", message: "GitHub token configured and verified." };
 }

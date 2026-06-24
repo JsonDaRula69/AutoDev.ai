@@ -77,6 +77,7 @@ const STUB_EXEC = (cmd: string): string => {
 };
 
 const mockProviderInstall = async () => ({ ok: true, detail: "mocked", alreadyInstalled: false });
+const mockFetch = async () => ({ status: 200 } as Response);
 
 test("doctor orchestrator opens /dev/tty and runs config when stdin is non-interactive", async () => {
   const dir = createTempDir();
@@ -112,6 +113,7 @@ test("doctor orchestrator opens /dev/tty and runs config when stdin is non-inter
       packageRoot,
       reopenTtyOverride,
       providerInstallOverride: mockProviderInstall,
+      fetchOverride: mockFetch,
     });
     expect(result.configFlowLaunched).toBe(true);
     const ttyNotice = notifications.find((n) => n.msg.includes("/dev/tty"));
@@ -159,6 +161,7 @@ test("doctor orchestrator warns and skips config when /dev/tty reopen fails", as
       packageRoot,
       reopenTtyOverride,
       providerInstallOverride: mockProviderInstall,
+      fetchOverride: mockFetch,
     });
     expect(result.configFlowLaunched).toBe(true);
     const warning = notifications.find((n) =>
