@@ -3,10 +3,11 @@
 **Date:** 2026-06-23
 **Branch under review:** `docs-2tier-system`
 **Base:** `2f39bea` (merge-base with `main`)
+**Review revision:** 2 (after docs-corpus untrack fix)
 
-## Overall Verdict: **REJECT**
+## Overall Verdict: **APPROVE**
 
-The extraction modules (T14 embeddings, T15 FTS5 utils) are pure extractions with no behavioral changes, `register()`/`buildDocsTools` attribution is correct, and `.autodev/` remains untracked. However, the requirement that `docs-corpus/` be gitignored and excluded from the npm pack is **not satisfied**: the git index/HEAD still tracks 119 `docs-corpus/` files, and `git status` reports no staged deletion to untrack them. Because this is an explicit MUST-DO in F4, the overall review fails.
+All F4 criteria now pass. The docs-corpus directory has been removed from the git index (while remaining on disk), the T14/T15 extractions are pure behavioral extractions with backward-compatible re-exports, `register()`/`buildDocsTools` were modified only by T10, `.autodev/` remains untracked, and the working tree has no unintended source modifications.
 
 ---
 
@@ -66,19 +67,18 @@ The extraction modules (T14 embeddings, T15 FTS5 utils) are pure extractions wit
 
 ## 4. `.gitignore` and npm pack exclusion for `docs-corpus/`
 
-**Status:** **FAIL** — `docs-corpus/` is listed in `.gitignore` but remains tracked in the git index and HEAD.
+**Status:** PASS — `docs-corpus/` is untracked in git and excluded from the npm pack while remaining available on disk.
 
 **Evidence:**
 
 - `.gitignore:27` contains `docs-corpus/`.
-- `git ls-files docs-corpus/ | wc -l` returns **119** tracked files.
-- `git ls-tree -r HEAD | grep docs-corpus | wc -l` also returns **119**, confirming the files are in the current HEAD tree.
-- `git status --short docs-corpus/` returns **nothing**, so there is no staged deletion to untrack them. The notepad entry from Wave 1 claims `git rm -r --cached docs-corpus/` was run, but the current branch state does not reflect that.
-- `npm pack --dry-run | grep -c docs-corpus` returned **0** in this run, but because the files are still tracked in git, pack behavior is fragile and depends on whether npm is honoring `.gitignore` over git tracked files in this environment. The safer and required state is that `docs-corpus/` is untracked in git.
+- `git ls-files docs-corpus/ | wc -l` returns **0** after the fix.
+- `git ls-tree -r HEAD | grep docs-corpus | wc -l` returns **0**, confirming the files are no longer in the HEAD tree.
+- `npm pack --dry-run 2>/dev/null | grep -c docs-corpus` returns **0**.
+- `docs-corpus/pi/sdk.md` still exists on disk (`test -f docs-corpus/pi/sdk.md` → `EXISTS`).
+- The fix was applied via `git rm -r --cached docs-corpus/` and committed; files remain in the working tree for runtime use.
 
-**Root cause hypothesis:** The `docs-corpus/` files were restored by commits on another branch (`4ef78a7`, `2783f23`, `33cf733`) and are present in the tree because they were never removed from HEAD on `docs-2tier-system`. The Wave 1 notepad entry may have recorded an intended or attempted `git rm --cached` that did not persist into HEAD.
-
-**Conclusion:** Requirement not satisfied. This is a blocking issue for F4.
+**Conclusion:** Requirement satisfied.
 
 ---
 
@@ -119,18 +119,18 @@ The extraction modules (T14 embeddings, T15 FTS5 utils) are pure extractions wit
 | T15 pure extraction (FTS5 utils) | PASS | `fts-utils.ts` matches original `loreguard/schema.ts` logic; re-exports in place; `operations.ts` uses `ftsMatchQuery` |
 | `loreguard/schema.ts` backward compat | PASS | Re-exports `SQLITE_MIN_VERSION`, `compareVersions`, `checkSqliteVersion` |
 | `register()` only touched by T10 | PASS | T3 diff has no `register`/`buildDocsTools` changes; T10 diff contains them |
-| `docs-corpus/` gitignored and excluded from pack | **FAIL** | `.gitignore` lists it, but 119 files remain tracked in index/HEAD |
+| `docs-corpus/` gitignored and excluded from pack | PASS | `git ls-files docs-corpus/` = 0; `git ls-tree` = 0; `npm pack` count = 0; files remain on disk |
 | `.autodev/` remains untracked | PASS | `git ls-files .autodev/` = 0; status shows `?? .autodev/` |
 | No modified uncommitted source files | PASS | `git status` has no `^ M` entries |
 
 ---
 
-## Blocking Issue
+## Previous Blocking Issue (resolved)
 
-1. **`docs-corpus/` must be untracked in git.** The `.gitignore` entry is present, but `git ls-files docs-corpus/` and `git ls-tree -r HEAD` both report 119 tracked files. Run `git rm -r --cached docs-corpus/` and commit the deletion so that `git ls-files docs-corpus/` returns 0 and `npm pack --dry-run | grep -c docs-corpus` reliably returns 0.
+1. **`docs-corpus/` was tracked in git.** The initial F4 pass found 119 `docs-corpus/` files still tracked in the index/HEAD despite the `.gitignore` entry. This was fixed by removing the directory from the git index (`git rm -r --cached docs-corpus/`) and committing, leaving the files on disk as untracked working-tree content. Re-verification confirms `git ls-files docs-corpus/` = 0, `git ls-tree` = 0, and `npm pack --dry-run | grep -c docs-corpus` = 0.
 
 ---
 
 ## Action
 
-Because the above blocking issue violates an explicit F4 MUST-DO, the overall verdict is **REJECT**. Re-run F4 after fixing the `docs-corpus/` tracking state.
+All F4 criteria now pass. Verdict updated to **APPROVE**.
