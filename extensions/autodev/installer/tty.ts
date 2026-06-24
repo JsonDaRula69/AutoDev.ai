@@ -12,7 +12,8 @@
  * so that is acceptable.
  */
 import { openSync } from "node:fs";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
+import { ReadStream as TtyReadStream } from "node:tty";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import type { Prompter } from "./prompts.js";
 import { createPrompterFromRl } from "./prompts.js";
@@ -56,7 +57,7 @@ export function reopenTty(deps: ReopenTtyDeps = {}): Prompter | null {
     return deps.prompterOverride;
   }
 
-  const createRs = deps.createReadStreamOverride ?? createReadStream;
+  const createRs = deps.createReadStreamOverride ?? ((path: string, opts: { fd: number }) => new TtyReadStream(opts.fd, { encoding: "utf-8" }));
   const createWs = deps.createWriteStreamOverride ?? createWriteStream;
 
   let input: NodeJS.ReadableStream;

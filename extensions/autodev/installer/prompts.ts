@@ -8,7 +8,8 @@
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { openSync } from "node:fs";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
+import { ReadStream as TtyReadStream } from "node:tty";
 import { select as clackSelect, text as clackText, confirm as clackConfirm, isCancel } from "@clack/prompts";
 
 export interface SelectOption {
@@ -34,10 +35,11 @@ export function createPrompter(): Prompter {
 
 function createTtyPrompter(): Prompter {
   try {
-    const ttyFd = openSync("/dev/tty", "r+");
-    const input = createReadStream("/dev/tty", { fd: ttyFd });
-    const output = createWriteStream("/dev/tty", { fd: ttyFd });
-    return createClackPrompter(input, output);
+    const fd = openSync("/dev/tty", "r+");
+    const input = new TtyReadStream(fd, { encoding: "utf-8" });
+    input.isRaw = false;
+    const output = createWriteStream("/dev/tty", { fd });
+    return createClackPrompter(input as unknown as ReadableStream<Uint8Array>, output as unknown as WritableStream<Uint8Array>);
   } catch {
     return createNoTtyPrompter();
   }
