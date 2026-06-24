@@ -92,25 +92,9 @@ async function removePiProviders(deps: UninstallModuleDeps): Promise<UninstallRe
     }
 
     try {
-      const { SettingsManager, DefaultPackageManager } = await import(
-        "@earendil-works/pi-coding-agent"
-      );
-      let agentDir: string;
-      try {
-        agentDir = getAgentDir();
-      } catch {
-        agentDir = join(process.env.HOME ?? "~", ".pi", "agent");
-      }
-      const settingsManager = SettingsManager.create(process.cwd(), agentDir);
-      const pm = new DefaultPackageManager({
-        cwd: process.cwd(),
-        agentDir,
-        settingsManager,
-      });
-      const uninstall = (pm as unknown as {
-        uninstall(source: string): Promise<void>;
-      }).uninstall.bind(pm);
-      await uninstall(source);
+      const { execSync } = await import("node:child_process");
+      const cmd = `npx @earendil-works/pi-coding-agent uninstall ${source}`;
+      execSync(cmd, { stdio: "pipe", timeout: 60_000, cwd: process.cwd() });
       notify(`Uninstalled ${source}`, "info");
     } catch (e) {
       const msg = (e as Error).message;
