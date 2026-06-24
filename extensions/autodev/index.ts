@@ -1,9 +1,11 @@
 /**
  * AutoDev pi extension — entry point.
  *
- * Wires context injection, the `/autodev` status command, and all 15 crew
- * modules into the pi runtime. The extension factory is synchronous; module
- * `register()` calls are synchronous and idempotent.
+ * Wires context injection, the `/autodev` status command, and all 20 crew
+ * modules into the pi runtime. LSP is provided by the @dreki-gg/pi-lsp
+ * package (loaded as a separate pi extension, not a crew module). The
+ * extension factory is synchronous; module `register()` calls are
+ * synchronous and idempotent.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
@@ -21,7 +23,6 @@ import { register as registerCommentChecker } from "./comment-checker/index.js";
 import { register as registerNotepad } from "./notepad/index.js";
 import { register as registerIntentGate } from "./intent-gate/index.js";
 import { register as registerMcpIntegrations } from "./mcp-integrations/index.js";
-import { register as registerLsp } from "./lsp/index.js";
 import { register as registerTmux } from "./tmux/index.js";
 import { register as registerRulesInjection } from "./rules-injection/index.js";
 import { register as registerWatchOfficerMonitor } from "./watch-officer-monitor/index.js";
@@ -47,7 +48,6 @@ const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: Ex
   { name: "onboarding", register: registerOnboarding },
   { name: "discord", register: registerDiscord },
   { name: "mcp-integrations", register: registerMcpIntegrations },
-  { name: "lsp", register: registerLsp },
   { name: "tmux", register: registerTmux },
   { name: "rules-injection", register: registerRulesInjection },
   { name: "watch-officer-monitor", register: registerWatchOfficerMonitor },

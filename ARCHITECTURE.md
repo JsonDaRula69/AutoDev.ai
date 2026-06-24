@@ -457,18 +457,37 @@ Not Exa. AutoDev does not integrate Exa web search. Agents use pi's built-in web
 
 ## 25. LSP Integration
 
-Six LSP tools give agents IDE precision. They are registered via `defineTool()` and require an LSP server running (configured via `.pi/lsp.json` or auto-detected from the project's languages).
+LSP is provided by the [`@dreki-gg/pi-lsp`](https://www.npmjs.com/package/@dreki-gg/pi-lsp) package, loaded as a pi extension alongside the AutoDev extension. It registers a single unified `lsp` tool with 11 operations, giving agents IDE-precision code intelligence. Servers are configured via `.pi/lsp.json`.
 
-| Tool | What it does |
-|------|--------------|
-| `lsp_diagnostics` | Returns errors, warnings, and hints for a file or directory |
-| `lsp_goto_definition` | Finds where a symbol is defined |
-| `lsp_find_references` | Finds all references to a symbol across the workspace |
-| `lsp_prepare_rename` | Checks whether a symbol can be renamed at a position |
-| `lsp_rename` | Renames a symbol across the workspace and applies the edit |
-| `lsp_symbols` | Lists document symbols or searches workspace symbols |
+| Operation | What it does | Required params |
+|-----------|-------------|-----------------|
+| `diagnostics` | Type errors + lint warnings | `filePath` |
+| `hover` | Type info and documentation | `filePath`, `line`, `character` |
+| `goToDefinition` | Find where a symbol is defined | `filePath`, `line`, `character` |
+| `findReferences` | Find all references to a symbol | `filePath`, `line`, `character` |
+| `goToImplementation` | Find implementations of interface/abstract | `filePath`, `line`, `character` |
+| `documentSymbol` | List all symbols in a file | `filePath` |
+| `workspaceSymbol` | Search symbols across the workspace | `query` |
+| `prepareCallHierarchy` | Get call hierarchy item at position | `filePath`, `line`, `character` |
+| `incomingCalls` | Find callers of a function | `filePath`, `line`, `character` |
+| `outgoingCalls` | Find callees of a function | `filePath`, `line`, `character` |
+| `codeActions` | Quick fixes and refactoring suggestions | `filePath`, `line`, `character` |
 
-These tools let agents navigate code the way an IDE does. Instead of grepping for a function name and hoping the result is the right one, the agent jumps to the definition, finds all references, and renames safely. Implemented by T5 in the pi-foundation plan.
+All `line`/`character` params are 1-indexed (matching the `read` tool output). The package handles the full LSP lifecycle: JSON-RPC framing over stdio, server spawn/shutdown per tool call, `initialize` handshake, capability negotiation, `textDocument/didOpen`/`didClose`, `publishDiagnostics` subscription, server→client request handling, and graceful error propagation.
+
+Config schema (`.pi/lsp.json`):
+```json
+{
+  "lsp": {
+    "typescript": {
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"]
+    }
+  }
+}
+```
+
+The package depends on `effect` for typed error channels and service injection. This is a justified dependency: it makes 11 operations maintainable in declarative code instead of ~300 lines of manual JSON-RPC plumbing. The AutoDev extension's stub LSP module (`extensions/autodev/lsp/`) is superseded and removed from the MODULES array; the package provides the real implementation.
 
 ---
 

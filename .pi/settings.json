@@ -19,6 +19,7 @@
     "ollama-cloud/kimi-k2.7-code"
   ],
   "extensions": [
-    "./extensions/autodev"
+    "./extensions/autodev",
+    "node_modules/@dreki-gg/pi-lsp"
   ]
 }

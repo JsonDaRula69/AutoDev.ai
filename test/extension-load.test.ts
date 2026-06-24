@@ -2,8 +2,9 @@
  * T5 extension load verification.
  *
  * Verifies the AutoDev extension entry point exports a default function,
- * all 15 module directories export a `register()` function, and the
- * team-mode module declares exactly 12 team_* tool names.
+ * all 20 module directories export a `register()` function, and the
+ * team-mode module declares exactly 12 team_* tool names. LSP is provided
+ * by the @dreki-gg/pi-lsp package, not a crew module.
  */
 import { test, expect } from "bun:test";
 import { join } from "node:path";
@@ -24,7 +25,6 @@ const MODULES = [
   "notepad",
   "intent-gate",
   "mcp-integrations",
-  "lsp",
   "tmux",
   "rules-injection",
   "watch-officer-monitor",
@@ -39,11 +39,11 @@ test("extension entry point exports a default function", async () => {
   expect(typeof mod.default).toBe("function");
 });
 
-test("entry point exports MODULE_NAMES with 21 entries", async () => {
+test("entry point exports MODULE_NAMES with 20 entries", async () => {
   const mod = await import(join(ROOT, "extensions", "autodev", "index.ts"));
   expect(mod.MODULE_NAMES).toBeDefined();
   expect(Array.isArray(mod.MODULE_NAMES)).toBe(true);
-  expect(mod.MODULE_NAMES.length).toBe(21);
+  expect(mod.MODULE_NAMES.length).toBe(20);
 });
 
 for (const name of MODULES) {

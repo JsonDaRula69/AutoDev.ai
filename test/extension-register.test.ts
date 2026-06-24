@@ -1,11 +1,12 @@
 /**
- * m1 — register() called with fake ExtensionAPI for all 15 modules.
+ * m1 — register() called with fake ExtensionAPI for all 14 modules.
  *
  * Verifies that every module's register() function:
  *  - Does not throw when called with a minimal fake ExtensionAPI
  *  - Modules that should register tools actually call registerTool()
  *  - Modules that should register event handlers actually call on()
  *  - All modules are now implemented (no stubs remain)
+ *  - LSP is provided by @dreki-gg/pi-lsp package, not a crew module
  */
 import { test, expect } from "bun:test";
 import { join } from "node:path";
@@ -35,7 +36,6 @@ const TOOL_REGISTERING_MODULES = new Set([
   "docs",
   "tools",
   "delegation",
-  "lsp",
   "tmux",
   "mcp-integrations",
 ]);
@@ -62,7 +62,6 @@ const ALL_MODULES = [
   "notepad",
   "intent-gate",
   "mcp-integrations",
-  "lsp",
   "tmux",
   "rules-injection",
   "watch-officer-monitor",
