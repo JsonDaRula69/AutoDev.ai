@@ -9,6 +9,20 @@
 
 set -euo pipefail
 
+# ── Guard against running as root (sudo) ───────────────────────────────────
+# Bun installs to $HOME/.bun/ — running as root would install to /root/.bun/,
+# which is not the user's home. The user should run this script without sudo.
+if [ "$(id -u)" -eq 0 ]; then
+  echo "ERROR: Do not run install.sh as root (sudo)." >&2
+  echo "Bun installs per-user to ~/.bun/. Running as root would install to /root/.bun/," >&2
+  echo "which is not accessible to your normal user account." >&2
+  echo "" >&2
+  echo "If you see permission errors without sudo, clear the Bun cache:" >&2
+  echo "  sudo rm -rf ~/.bun/install/cache" >&2
+  echo "then re-run: bash install.sh" >&2
+  exit 1
+fi
+
 # ── Header banner ────────────────────────────────────────────────────────
 echo "========================================"
 echo "          AutoDev Installer"
@@ -35,12 +49,25 @@ fi
 export PATH="$HOME/.bun/bin:$PATH"
 
 # ── Step 2: Install autodev globally ──────────────────────────────────────
+# If a stale/root-owned cache causes EACCES, clear it and retry once.
 echo "Installing autodev globally..."
-bun install -g autodev
+if ! bun install -g autodev 2>&1; then
+  if [ -d "$HOME/.bun/install/cache" ]; then
+    echo "Bun cache may be stale or have wrong permissions. Clearing cache and retrying..."
+    rm -rf "$HOME/.bun/install/cache"
+  fi
+  bun install -g autodev
+fi
 
 # ── Step 2.5: Install ollama-cloud provider ───────────────────────────────
+# The provider is installed programmatically by `autodev doctor` as part of
+# the install flow (runInstallToolsAndConfig → runProviderPhase). No separate
+# `pi install` shell-out needed — the SDK's DefaultPackageManager handles it.
+# This line is kept as a fallback for cases where doctor is skipped.
 echo "Installing ollama-cloud provider..."
-pi install npm:pi-ollama-cloud
+if ! autodev install-provider pi-ollama-cloud 2>/dev/null; then
+  echo "  (will be installed during doctor check instead)"
+fi
 
 # ── Step 3: Set PI_CODING_AGENT_DIR for centralized ~/.AutoDev/ config ──────
 # Export for current session so the install flow works without a terminal restart.

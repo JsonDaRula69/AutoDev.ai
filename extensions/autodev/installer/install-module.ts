@@ -26,6 +26,7 @@ import { markStepCompleted, isStepCompleted } from "./state.js";
 import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
 import { openVectorStore } from "../docs/index.js";
 import { createCentralDbSchema } from "../docs/seeding.js";
+import { installProvider, type ProviderInstallDeps } from "./provider-install.js";
 
 // ---- Types ----
 
@@ -51,14 +52,18 @@ export interface InstallModuleDeps {
 
 // ---- Constants (mirror steps.ts so this module is standalone) ----
 
-/** Non-interactive Magic Context registration command.
+/** Non-interactive Magic Context registration source.
  * Registers `@cortexkit/pi-magic-context` as a pi extension in the central
- * `settings.json`. Never opens an interactive wizard. */
-const MC_INSTALL_CMD = "pi install npm:@cortexkit/pi-magic-context";
+ * `settings.json`. Installed programmatically via the SDK — no `pi` CLI needed. */
+const MC_INSTALL_SOURCE = "npm:@cortexkit/pi-magic-context";
+/** Ollama Cloud provider source for pi model routing. */
+const OLLAMA_CLOUD_SOURCE = "npm:pi-ollama-cloud";
 const MC_INSTALL_TIMEOUT_MS = 120_000;
 
 /** Step 0 — external tools (gh + git, bun check is harmless and included). */
 const STEP_TOOLS = 0;
+/** Step 2 — ollama-cloud provider (pi model routing). */
+const STEP_PROVIDER = 2;
 /** Step 3 — `.pi/` config files + Magic Context registration. Marked only after both succeed. */
 const STEP_CONFIG_AND_MC = 3;
 
@@ -83,6 +88,9 @@ export async function runInstallToolsAndConfig(deps: InstallModuleDeps): Promise
 
   const toolsResult = await runToolsPhase(deps, skipCompleted);
   results.push(toolsResult);
+
+  const providerResult = await runProviderPhase(deps, skipCompleted);
+  results.push(providerResult);
 
   const configResult = await runConfigFilesPhase(deps);
   results.push(configResult);
@@ -136,6 +144,10 @@ export async function runInstallFixes(deps: InstallModuleDeps): Promise<InstallF
   const toolsResult = await runToolsPhase(deps, skipCompleted);
   results.push(toolsResult);
 
+  // ---- Phase 2.5: Ollama Cloud provider (pi model routing) ----
+  const providerResult = await runProviderPhase(deps, skipCompleted);
+  results.push(providerResult);
+
   // ---- Phase 3: centralized config files (symlinks + magic-context.jsonc) ----
   const configResult = await runConfigFilesPhase(deps);
   results.push(configResult);
@@ -155,6 +167,43 @@ export async function runInstallFixes(deps: InstallModuleDeps): Promise<InstallF
 }
 
 // ---- Phase implementations ----
+
+/**
+ * Install the ollama-cloud pi provider programmatically via the SDK.
+ * This registers the `ollama-cloud` model provider so that
+ * `ollama-cloud/glm-5.2:cloud` and other models in settings.json resolve
+ * at runtime. Without this, agent sessions fail with "provider not found".
+ */
+async function runProviderPhase(
+  deps: InstallModuleDeps,
+  skipCompleted: boolean,
+): Promise<InstallFixResult> {
+  const { projectRoot, notify } = deps;
+
+  if (skipCompleted && await isStepCompleted(projectRoot, STEP_PROVIDER, "install")) {
+    return { name: "ollama-cloud-provider", ok: true, detail: "Already completed (step 2)." };
+  }
+
+  const agentDir = getAgentDir();
+  const result = await installProvider({
+    source: OLLAMA_CLOUD_SOURCE,
+    cwd: agentDir,
+    agentDir,
+    notify,
+  });
+
+  await markStepCompleted(projectRoot, STEP_PROVIDER, "install");
+
+  return {
+    name: "ollama-cloud-provider",
+    ok: result.ok,
+    detail: result.alreadyInstalled
+      ? "pi-ollama-cloud already installed."
+      : result.ok
+        ? "pi-ollama-cloud installed."
+        : result.detail,
+  };
+}
 
 async function runToolsPhase(
   deps: InstallModuleDeps,
@@ -259,17 +308,22 @@ async function runMagicContextSetupPhase(
     }
   }
 
-  // Register the Magic Context pi extension non-interactively. cwd is the
-  // central agent dir so `settings.json` is updated in place. No TTY, no
-  // @clack/prompts wizard.
-  notify(`Running ${MC_INSTALL_CMD} (cwd: ${agentDir})...`, "info");
-  try {
-    execFn(MC_INSTALL_CMD, { cwd: agentDir, stdio: "pipe", timeout: MC_INSTALL_TIMEOUT_MS }, execSyncOverride);
-  } catch (e) {
+  // Register the Magic Context pi extension programmatically via the SDK.
+  // This replaces the old `pi install npm:@cortexkit/pi-magic-context`
+  // shell-out which required the `pi` binary on PATH (it isn't — Bun only
+  // links the top-level package's bins, not transitive dependency bins).
+  notify(`Installing ${MC_INSTALL_SOURCE} via SDK...`, "info");
+  const mcInstallResult = await installProvider({
+    source: MC_INSTALL_SOURCE,
+    cwd: agentDir,
+    agentDir,
+    notify,
+  });
+  if (!mcInstallResult.ok) {
     return {
       name: "magic-context-setup",
       ok: false,
-      detail: `Magic Context registration failed: ${(e as Error).message}`,
+      detail: `Magic Context registration failed: ${mcInstallResult.detail}`,
     };
   }
 

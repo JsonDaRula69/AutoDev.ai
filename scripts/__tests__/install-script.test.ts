@@ -20,7 +20,23 @@ const PROJECT_ROOT = resolve(import.meta.dirname, "../..");
 
 test("install.sh contains pi install npm:pi-ollama-cloud", () => {
   const installSh = readFileSync(join(PROJECT_ROOT, "install.sh"), "utf-8");
-  expect(installSh).toContain("pi install npm:pi-ollama-cloud");
+  expect(installSh).toContain("pi-ollama-cloud");
+});
+
+test("install.sh uses autodev install-provider (not bunx pi)", () => {
+  const installSh = readFileSync(join(PROJECT_ROOT, "install.sh"), "utf-8");
+  expect(installSh).toContain("autodev install-provider pi-ollama-cloud");
+});
+
+test("install.sh guards against running as root/sudo", () => {
+  const installSh = readFileSync(join(PROJECT_ROOT, "install.sh"), "utf-8");
+  expect(installSh).toContain('id -u');
+  expect(installSh).toContain("-eq 0");
+});
+
+test("install.sh clears stale bun cache on install failure", () => {
+  const installSh = readFileSync(join(PROJECT_ROOT, "install.sh"), "utf-8");
+  expect(installSh).toContain(".bun/install/cache");
 });
 
 test("install.sh contains autodev docs rebuild central", () => {
@@ -39,7 +55,7 @@ test("install.sh creates ~/.AutoDev/config/ and copies docs-sources.yaml", () =>
 test("pi install command appears after bun install -g autodev", () => {
   const installSh = readFileSync(join(PROJECT_ROOT, "install.sh"), "utf-8");
   const bunInstallIdx = installSh.indexOf("bun install -g autodev");
-  const piInstallIdx = installSh.indexOf("pi install npm:pi-ollama-cloud");
+  const piInstallIdx = installSh.indexOf("pi-ollama-cloud");
   expect(bunInstallIdx).toBeGreaterThan(-1);
   expect(piInstallIdx).toBeGreaterThan(bunInstallIdx);
 });

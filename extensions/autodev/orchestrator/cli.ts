@@ -26,7 +26,7 @@ import { stopAllLoops } from "../autonomy/continuation.js";
 
 export function registerCommands(pi: ExtensionAPI): void {
   pi.registerCommand("autodev", {
-    description: "AutoDev — autonomous engineering team commands. Subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation",
+    description: "AutoDev — autonomous engineering team commands. Subcommands: init, onboard, doctor, config, status, stop, install-provider, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const parts = trimmed.split(/\s+/);
@@ -48,6 +48,9 @@ export function registerCommands(pi: ExtensionAPI): void {
         case "stop":
           await handleStop(ctx);
           break;
+        case "install-provider":
+          await handleInstallProvider(parts.slice(1), ctx);
+          break;
         case "docs":
           await handleDocs(parts.slice(1), ctx);
           break;
@@ -63,7 +66,7 @@ export function registerCommands(pi: ExtensionAPI): void {
           break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: init, onboard, doctor, config, status, stop, install-provider, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation",
             "info",
           );
       }
@@ -284,6 +287,39 @@ async function handleStatus(ctx: ExtensionCommandContext): Promise<void> {
 async function handleStop(_ctx: ExtensionCommandContext): Promise<void> {
   stopHeartbeat();
   _ctx.ui.notify("Heartbeat stopped.", "info");
+}
+
+async function handleInstallProvider(parts: string[], ctx: ExtensionCommandContext): Promise<void> {
+  const source = parts[0];
+  if (!source) {
+    ctx.ui.notify("Usage: autodev install-provider <package-name>", "info");
+    ctx.ui.notify("Example: autodev install-provider pi-ollama-cloud", "info");
+    return;
+  }
+
+  const fullSource = source.startsWith("npm:") ? source : `npm:${source}`;
+  const agentDir = (() => {
+    try {
+      const { getAgentDir } = require("@earendil-works/pi-coding-agent");
+      return getAgentDir();
+    } catch {
+      return join(process.env.HOME ?? "~", ".pi", "agent");
+    }
+  })();
+
+  const { installProvider } = await import("../installer/provider-install.js");
+  const result = await installProvider({
+    source: fullSource,
+    cwd: agentDir,
+    agentDir,
+    notify: (message, level) => ctx.ui.notify(message, level),
+  });
+
+  if (result.ok) {
+    ctx.ui.notify(`  ✓ ${result.source}: ${result.detail}`, "info");
+  } else {
+    ctx.ui.notify(`  ✗ ${result.source}: ${result.detail}`, "error");
+  }
 }
 
 async function handleDocs(parts: string[], ctx: ExtensionCommandContext): Promise<void> {
