@@ -1,6 +1,6 @@
 {
   "name": "autodev-ai",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "AutoDev — Autonomous Engineering Team. DevTeam in a Box. Runs on pi.",
   "license": "MIT",
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "packageManager": "bun@1.3.14",
   "bin": {
-    "autodev": "./bin/autodev.js"
+    "autodev": "./scripts/cli.ts"
   },
   "files": [
     "extensions/autodev/",
