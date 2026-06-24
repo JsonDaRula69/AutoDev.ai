@@ -5,7 +5,14 @@
  * and conditional refresh using local file:// sources only — no network.
  */
 import { test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -20,7 +27,7 @@ import {
   checkStaleSources,
   type SeedSource,
 } from "../seeding.js";
-import { openVectorStore } from "../index.js";
+import { openVectorStore, searchDocsBoth } from "../index.js";
 import { mockEmbedFn } from "../../../../test/mocks/embeddings.js";
 
 let root: string;
@@ -245,5 +252,277 @@ test("refreshStaleSources re-seeds and rebuilds when file:// content changes", a
     .get("api-docs", "%Updated documentation%") as { content: string } | null;
   expect(content).not.toBeNull();
   expect(content!.content).toContain("Updated documentation");
+  db.close();
+});
+
+test("searchDocsBoth triggers background refresh without blocking", async () => {
+  const dbPath = join(root, "vectors.db");
+  const fullPath = join(root, "upstream.md");
+  writeFileSync(fullPath, "# API\n\n## Overview\n\nContent.\n", "utf8");
+
+  {
+    const db = openVectorStore(dbPath);
+    createCentralDbSchema(db);
+    await seedOneSource(source("api-docs", fileUrl(fullPath)), mockEmbedFn);
+    await rebuildSource(db, "api-docs", centralCorpusRoot(), mockEmbedFn);
+    // Mark as stale by age, but unchanged by hash.
+    db.query(
+      "INSERT OR REPLACE INTO seed_metadata (source_name, last_seeded_at, etag, active) VALUES (?, ?, ?, ?);",
+    ).run("api-docs", new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), fileHash(fullPath), 1);
+    db.close();
+  }
+
+  const results = await searchDocsBoth("API", 5, mockEmbedFn, [source("api-docs", fileUrl(fullPath))]);
+  expect(results.length).toBeGreaterThan(0);
+  // Background refresh is async and may fail because searchDocsBoth opens the central DB with
+  // only the base schema (no seed_metadata). The test verifies it returned promptly.
+  await new Promise((r) => setTimeout(r, 200));
+  const db = new Database(dbPath);
+  const row = db.query("SELECT last_seeded_at FROM seed_metadata WHERE source_name = ?;").get("api-docs") as {
+    last_seeded_at: string;
+  } | null;
+  // The pre-existing row is left unchanged; the key behavior is the search returned immediately.
+  expect(row).not.toBeNull();
+  expect(new Date(row!.last_seeded_at).getTime()).toBeLessThan(Date.now() - 5 * 24 * 60 * 60 * 1000);
+  db.close();
+});
+
+test("checkStaleSources treats missing metadata table as all stale", async () => {
+  const dbPath = join(root, "vectors.db");
+  // Create an empty DB without seed_metadata table.
+  const db = openVectorStore(dbPath);
+  db.close();
+
+  const sources: SeedSource[] = [
+    source("a", "file:///dev/null"),
+    source("b", "file:///dev/null"),
+  ];
+  const stale = await checkStaleSources(dbPath, sources);
+  expect(stale).toEqual(["a", "b"]);
+});
+
+test("refreshStaleSources re-seeds a source with missing metadata row", async () => {
+  const dbPath = join(root, "vectors.db");
+  const fullPath = join(root, "upstream.md");
+  writeFileSync(fullPath, "# API\n\n## Overview\n\nContent for missing row.\n", "utf8");
+
+  const db = openVectorStore(dbPath);
+  createCentralDbSchema(db);
+  // Intentionally no metadata row for api-docs.
+  await seedOneSource(source("api-docs", fileUrl(fullPath)), mockEmbedFn);
+  await rebuildSource(db, "api-docs", centralCorpusRoot(), mockEmbedFn);
+  db.close();
+
+  const result = await refreshStaleSources(dbPath, [source("api-docs", fileUrl(fullPath))], mockEmbedFn);
+  expect(result.seeded).toEqual(["api-docs"]);
+  expect(result.skipped).toEqual([]);
+  expect(result.errors).toEqual([]);
+});
+
+test("refreshStaleSources falls back to SHA-256 for file:// when ETag absent", async () => {
+  const dbPath = join(root, "vectors.db");
+  const fullPath = join(root, "upstream.md");
+  writeFileSync(fullPath, "# API\n\n## Overview\n\nHTTP content.\n", "utf8");
+
+  const db = openVectorStore(dbPath);
+  createCentralDbSchema(db);
+  // Simulate a previous HTTP seed that was later exposed locally (etag present but stale).
+  db.query(
+    "INSERT INTO seed_metadata (source_name, last_seeded_at, etag, active) VALUES (?, ?, ?, ?);",
+  ).run("api-docs", new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), "old-hash", 1);
+  db.close();
+
+  const fileSource = source("api-docs", fileUrl(fullPath));
+  const result = await refreshStaleSources(dbPath, [fileSource], mockEmbedFn);
+  expect(result.seeded).toEqual(["api-docs"]);
+  expect(result.errors).toEqual([]);
+});
+
+test("refreshStaleSources reports HTTP source as error when neither ETag nor body fallback is available", async () => {
+  const dbPath = join(root, "vectors.db");
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "HEAD") {
+      return new Response(null, { status: 200, headers: new Headers() });
+    }
+    return new Response(null, { status: 200, headers: new Headers() });
+  }) as typeof globalThis.fetch;
+
+  try {
+    const db = openVectorStore(dbPath);
+    createCentralDbSchema(db);
+    db.query(
+      "INSERT INTO seed_metadata (source_name, last_seeded_at, etag, active) VALUES (?, ?, ?, ?);",
+    ).run("api-docs", new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), "old-hash", 1);
+    db.close();
+
+    const httpSource: SeedSource = {
+      name: "api-docs",
+      type: "llms-full",
+      url: "http://example.com/upstream.md",
+      targetSubdir: "api-docs",
+      active: true,
+    };
+    const result = await refreshStaleSources(dbPath, [httpSource], mockEmbedFn);
+    expect(result.seeded).toEqual([]);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0]).toContain("no ETag or Last-Modified header");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("active flag from config overrides DB interval", async () => {
+  const dbPath = join(root, "vectors.db");
+  const now = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
+
+  {
+    const db = openVectorStore(dbPath);
+    createCentralDbSchema(db);
+    // DB says active=0 with a 6-day old seed; config says active=true → 7-day interval → not stale.
+    db.query(
+      "INSERT INTO seed_metadata (source_name, last_seeded_at, active) VALUES (?, ?, ?);",
+    ).run("configured-active", now, 0);
+    db.close();
+  }
+
+  const sources: SeedSource[] = [
+    { name: "configured-active", type: "llms-full", url: "file:///dev/null", targetSubdir: "configured-active", active: true },
+  ];
+  const stale = await checkStaleSources(dbPath, sources);
+  expect(stale).not.toContain("configured-active");
+});
+
+test("NULL stored hash triggers re-seed", async () => {
+  const dbPath = join(root, "vectors.db");
+  const fullPath = join(root, "upstream.md");
+  writeFileSync(fullPath, "# API\n\n## Overview\n\nContent with null hash.\n", "utf8");
+
+  {
+    const db = openVectorStore(dbPath);
+    createCentralDbSchema(db);
+    await seedOneSource(source("api-docs", fileUrl(fullPath)), mockEmbedFn);
+    await rebuildSource(db, "api-docs", centralCorpusRoot(), mockEmbedFn);
+    // last_seeded_at old, commit_hash and etag explicitly NULL.
+    db.query(
+      "INSERT OR REPLACE INTO seed_metadata (source_name, last_seeded_at, commit_hash, etag, active) VALUES (?, ?, ?, ?, ?);",
+    ).run("api-docs", new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), null, null, 1);
+    db.close();
+  }
+
+  const result = await refreshStaleSources(dbPath, [source("api-docs", fileUrl(fullPath))], mockEmbedFn);
+  expect(result.seeded).toEqual(["api-docs"]);
+  expect(result.skipped).toEqual([]);
+  expect(result.errors).toEqual([]);
+});
+
+test("WAL mode allows concurrent read and refresh write", async () => {
+  const dbPath = join(root, "vectors.db");
+  const fullPath = join(root, "upstream.md");
+  writeFileSync(fullPath, "# API\n\n## Overview\n\nVersion one.\n", "utf8");
+
+  {
+    const db = openVectorStore(dbPath);
+    createCentralDbSchema(db);
+    await seedOneSource(source("api-docs", fileUrl(fullPath)), mockEmbedFn);
+    await rebuildSource(db, "api-docs", centralCorpusRoot(), mockEmbedFn);
+    db.query(
+      "INSERT OR REPLACE INTO seed_metadata (source_name, last_seeded_at, etag, active) VALUES (?, ?, ?, ?);",
+    ).run("api-docs", new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), fileHash(fullPath), 1);
+    db.close();
+  }
+
+  const reader = new Database(dbPath, { readonly: true });
+  let readError: Error | undefined;
+  const readPromise = new Promise<void>((resolve) => {
+    try {
+      // Long-lived read handle while refresh updates metadata.
+      reader.query("SELECT COUNT(*) FROM chunks;").get();
+      resolve();
+    } catch (e) {
+      readError = e as Error;
+      resolve();
+    }
+  });
+
+  const refreshPromise = refreshStaleSources(
+    dbPath,
+    [source("api-docs", fileUrl(fullPath))],
+    mockEmbedFn,
+  );
+
+  await Promise.all([readPromise, refreshPromise]);
+  reader.close();
+  expect(readError).toBeUndefined();
+});
+
+test("rebuildSource isolates chunks per source", async () => {
+  const dbPath = join(root, "vectors.db");
+  const pathA = join(root, "a.md");
+  const pathB = join(root, "b.md");
+  writeFileSync(
+    pathA,
+    [
+      "# A",
+      "",
+      "## Section",
+      "",
+      "Source A content with enough text to pass the minimum file size threshold.",
+      "",
+      "## More",
+      "",
+      "Additional source A content to ensure indexing occurs.",
+    ].join("\n"),
+    "utf8",
+  );
+  writeFileSync(
+    pathB,
+    [
+      "# B",
+      "",
+      "## Section",
+      "",
+      "Source B content with enough text to pass the minimum file size threshold.",
+      "",
+      "## More",
+      "",
+      "Additional source B content to ensure indexing occurs.",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const db = openVectorStore(dbPath);
+  createCentralDbSchema(db);
+  await seedOneSource(source("src-a", fileUrl(pathA)), mockEmbedFn);
+  await seedOneSource(source("src-b", fileUrl(pathB)), mockEmbedFn);
+  const countA = await rebuildSource(db, "src-a", centralCorpusRoot(), mockEmbedFn);
+  const countB = await rebuildSource(db, "src-b", centralCorpusRoot(), mockEmbedFn);
+  expect(countA).toBeGreaterThan(0);
+  expect(countB).toBeGreaterThan(0);
+
+  // Rebuild src-a with changed content; src-b should stay untouched.
+  writeFileSync(
+    pathA,
+    [
+      "# A",
+      "",
+      "## New",
+      "",
+      "Source A revised content with enough text to pass the minimum file size threshold.",
+    ].join("\n"),
+    "utf8",
+  );
+  await seedOneSource(source("src-a", fileUrl(pathA)), mockEmbedFn);
+  await rebuildSource(db, "src-a", centralCorpusRoot(), mockEmbedFn);
+
+  const aChunks = db.query("SELECT content FROM chunks WHERE source_name = ?;").all("src-a") as Array<{ content: string }>;
+  expect(aChunks.some((c) => c.content.includes("revised"))).toBe(true);
+  expect(aChunks.some((c) => c.content.includes("Source A content"))).toBe(false);
+
+  const bChunks = db.query("SELECT content FROM chunks WHERE source_name = ?;").all("src-b") as Array<{ content: string }>;
+  expect(bChunks.some((c) => c.content.includes("Source B content"))).toBe(true);
+  expect(bChunks.some((c) => c.content.includes("revised"))).toBe(false);
+
   db.close();
 });

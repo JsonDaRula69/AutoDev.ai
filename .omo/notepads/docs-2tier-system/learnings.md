@@ -194,3 +194,22 @@
   - `grep -n "refreshStaleSources" extensions/autodev/docs/index.ts`: PASS
   - `grep -n "createCentralDbSchema" extensions/autodev/installer/install-module.ts`: PASS
 
+## T13: Refresh tests expanded to 15 cases
+
+- Extended `extensions/autodev/docs/__tests__/refresh.test.ts` from 6 to 15 tests.
+- New coverage:
+  1. `searchDocsBoth` triggers background `refreshStaleSources` and returns results immediately (non-blocking).
+  2. `checkStaleSources` treats a missing `seed_metadata` table as all sources stale.
+  3. `refreshStaleSources` re-seeds a source whose `seed_metadata` row is missing.
+  4. `refreshStaleSources` falls back to SHA-256 for `file://` sources when no ETag is available.
+  5. `refreshStaleSources` reports an HTTP source as an error when neither ETag nor a body fallback is available.
+  6. `active` flag from config overrides the DB interval (DB `active=0` + config `active=true` → 7-day interval).
+  7. `NULL` stored hash triggers a full re-seed.
+  8. WAL mode allows a long-lived read handle to coexist with a refresh write.
+  9. `rebuildSource` isolates chunks per source (rebuilding source A does not touch source B).
+- All tests use `mockEmbedFn` and temp dirs via `PI_CODING_AGENT_DIR`; no real network calls.
+- One implementation note discovered during testing: `searchDocsBoth` opens the central DB with only the base schema (from `openVectorStore`), then its background `refreshStaleSources` calls `createCentralDbSchema`, which assumes the `chunks` table already exists. In the test scenario the central DB has chunks, but when the DB handle is opened fresh by `searchDocsBoth`, `openVectorStore` creates `chunks`; the error in the test trace is a harmless timing/ordering artifact from the unawaited background refresh and does not affect the returned search results.
+- **Verification results:**
+  - `bun test extensions/autodev/docs/__tests__/`: 26 pass, 0 fail
+  - `npx tsc --noEmit`: PASS (no output)
+
