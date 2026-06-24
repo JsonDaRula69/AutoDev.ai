@@ -132,3 +132,34 @@ test("loadAgent returns undefined when frontmatter has no `model` field", () => 
   );
   expect(loadAgent("/unused", "nomodel")).toBeUndefined();
 });
+
+// --- Agent tool assertions (Step 5: Conseil + Navigator frontmatter) ---------
+
+test("Conseil tools include search_lore, ctx_search, search_docs", () => {
+  writeCentralAgent(
+    "conseil",
+    "ollama-cloud/deepseek-v4-flash",
+    "read, bash, grep, glob, search_lore, ctx_search, search_docs",
+    "You are Conseil, the steward.",
+  );
+
+  const agent = loadAgent("/unused", "conseil");
+  expect(agent).toBeDefined();
+  expect(agent!.tools).toContain("search_lore");
+  expect(agent!.tools).toContain("ctx_search");
+  expect(agent!.tools).toContain("search_docs");
+});
+
+test("Navigator tools do NOT include edit or write", () => {
+  writeCentralAgent(
+    "navigator",
+    "ollama-cloud/deepseek-v4-flash",
+    "read, bash, grep, glob",
+    "You are the Navigator.",
+  );
+
+  const agent = loadAgent("/unused", "navigator");
+  expect(agent).toBeDefined();
+  expect(agent!.tools).not.toContain("edit");
+  expect(agent!.tools).not.toContain("write");
+});

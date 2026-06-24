@@ -38,6 +38,10 @@ export PATH="$HOME/.bun/bin:$PATH"
 echo "Installing autodev globally..."
 bun install -g autodev
 
+# ── Step 2.5: Install ollama-cloud provider ───────────────────────────────
+echo "Installing ollama-cloud provider..."
+pi install npm:pi-ollama-cloud
+
 # ── Step 3: Set PI_CODING_AGENT_DIR for centralized ~/.AutoDev/ config ──────
 # Export for current session so the install flow works without a terminal restart.
 export PI_CODING_AGENT_DIR="$HOME/.AutoDev/agent"
@@ -72,13 +76,22 @@ if command -v fish >/dev/null 2>&1; then
   fi
 fi
 
-# ── Step 4: Verify autodev is on PATH ──────────────────────────────────────
+# ── Step 4: Copy docs-sources.yaml to central config path ──────────────────
+echo "Setting up central documentation config..."
+mkdir -p "$HOME/.AutoDev/config"
+cp config/docs-sources.yaml "$HOME/.AutoDev/config/docs-sources.yaml"
+
+# ── Step 5: Trigger initial doc seeding ────────────────────────────────────
+echo "Seeding central documentation..."
+autodev docs rebuild central
+
+# ── Step 7: Verify autodev is on PATH ──────────────────────────────────────
 if ! command -v autodev >/dev/null 2>&1; then
   echo "global autodev install failed — check errors above" >&2
   exit 1
 fi
 
-# ── Step 5: Hand off to doctor ─────────────────────────────────────────────
+# ── Step 8: Hand off to doctor ─────────────────────────────────────────────
 echo
 echo "Running doctor check..."
 if ! autodev doctor; then

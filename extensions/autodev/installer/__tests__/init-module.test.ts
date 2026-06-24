@@ -119,12 +119,13 @@ test("runInit happy path: all dirs/files created, state steps 6+7 recorded", asy
       skipOnboard: true,
     });
 
-    // THEN: 11 step results (5 from T8 + 3 registry/docs + 2 repo/labels + 1 onboard).
-    expect(results.length).toBe(11);
+    // THEN: 12 step results (6 from T8 + 3 registry/docs + 2 repo/labels + 1 onboard).
+    expect(results.length).toBe(12);
     expect(results.map((r: any) => r.name)).toEqual([
       "autodev-dirs",
       "templates",
       "github-template",
+      "models-config",
       "project-marker",
       "omo-dirs",
       "registry",
@@ -140,7 +141,7 @@ test("runInit happy path: all dirs/files created, state steps 6+7 recorded", asy
     for (const dir of AUTODEV_SUBDIRS) {
       expect(existsSync(join(projectRoot, ".autodev", dir))).toBe(true);
     }
-    expect(existsSync(join(projectRoot, ".autodev", "config"))).toBe(false);
+    expect(existsSync(join(projectRoot, ".autodev", "config"))).toBe(true);
     expect(existsSync(join(projectRoot, ".autodev", "skills"))).toBe(false);
     expect(existsSync(join(projectRoot, ".autodev", "reference"))).toBe(false);
 
@@ -191,8 +192,8 @@ test("runInit failure: package templates dir missing -> step 2 fails, others con
       skipOnboard: true,
     });
 
-    // THEN: 11 results (5 T8 + 5 T9 + 1 onboard).
-    expect(results.length).toBe(11);
+    // THEN: 12 results (6 T8 + 5 T9 + 1 onboard).
+    expect(results.length).toBe(12);
 
     expect(results[0].name).toBe("autodev-dirs");
     expect(results[0].ok).toBe(true);
@@ -204,11 +205,14 @@ test("runInit failure: package templates dir missing -> step 2 fails, others con
     expect(results[2].name).toBe("github-template");
     expect(results[2].ok).toBe(false);
 
-    expect(results[3].name).toBe("project-marker");
+    expect(results[3].name).toBe("models-config");
     expect(results[3].ok).toBe(true);
 
-    expect(results[4].name).toBe("omo-dirs");
+    expect(results[4].name).toBe("project-marker");
     expect(results[4].ok).toBe(true);
+
+    expect(results[5].name).toBe("omo-dirs");
+    expect(results[5].ok).toBe(true);
 
     const state = await readState(projectRoot, "init");
     expect(state.completedSteps).not.toContain(6);
@@ -251,20 +255,22 @@ test("runInit resume: step 6 done, step 7 fails then re-run skips 6 and retries 
       skipOnboard: true,
     });
 
-    // THEN: 11 results; first three are "Already completed (step 6)".
-    expect(results.length).toBe(11);
+    // THEN: 12 results; first four are "Already completed (step 6)".
+    expect(results.length).toBe(12);
     expect(results[0].ok).toBe(true);
     expect(results[0].detail).toContain("Already completed (step 6)");
     expect(results[1].ok).toBe(true);
     expect(results[1].detail).toContain("Already completed (step 6)");
     expect(results[2].ok).toBe(true);
     expect(results[2].detail).toContain("Already completed (step 6)");
-
-    expect(results[3].name).toBe("project-marker");
     expect(results[3].ok).toBe(true);
+    expect(results[3].detail).toContain("Already completed (step 6)");
 
-    expect(results[4].name).toBe("omo-dirs");
+    expect(results[4].name).toBe("project-marker");
     expect(results[4].ok).toBe(true);
+
+    expect(results[5].name).toBe("omo-dirs");
+    expect(results[5].ok).toBe(true);
 
     const state = await readState(projectRoot, "init");
     expect(state.completedSteps).toContain(7);
@@ -297,7 +303,7 @@ test("runInit idempotent: full happy run then re-run returns 'already initialize
       packageRoot,
       skipOnboard: true,
     });
-    expect(first.length).toBe(11);
+    expect(first.length).toBe(12);
     expect(first.every((r: any) => r.ok)).toBe(true);
 
     const second = await runInit({

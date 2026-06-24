@@ -44,12 +44,12 @@ export function defaultCorpusRoot(cwd = process.cwd()): string {
   return resolve(cwd, "docs-corpus");
 }
 
-export function centralDbPath(): string {
-  return join(getAgentDir(), "..", "docs-corpus", "vectors.db");
+export function centralDbPath(agentDir = getAgentDir()): string {
+  return join(agentDir, "..", "docs-corpus", "vectors.db");
 }
 
-export function centralCorpusRoot(): string {
-  return join(getAgentDir(), "..", "docs-corpus");
+export function centralCorpusRoot(agentDir = getAgentDir()): string {
+  return join(agentDir, "..", "docs-corpus");
 }
 
 /** Maximum characters per chunk (trimmed on heading boundaries when possible). */
@@ -513,13 +513,23 @@ export async function docsRebuild(
   return { chunks: totalChunks, errors };
 }
 
+export interface DocsTierPaths {
+  dbPath: string;
+  corpusRoot: string;
+}
+
 export async function docsRebuildTier(
   tier: "central" | "project",
   embedFn: EmbedFn = embed,
+  overrides?: Partial<DocsTierPaths>,
 ): Promise<RebuildResult> {
-  const dbPath = tier === "central" ? centralDbPath() : defaultDbPath();
-  const corpusRoot = tier === "central" ? centralCorpusRoot() : defaultCorpusRoot();
+  const dbPath = overrides?.dbPath ?? (tier === "central" ? centralDbPath() : defaultDbPath());
+  const corpusRoot = overrides?.corpusRoot ?? (tier === "central" ? centralCorpusRoot() : defaultCorpusRoot());
   const db = openVectorStore(dbPath);
+  if (tier === "central") {
+    const { createCentralDbSchema } = await import("./seeding.js");
+    createCentralDbSchema(db);
+  }
   let result: RebuildResult;
   try {
     clearChunks(db);
@@ -536,9 +546,13 @@ export async function searchDocsBoth(
   limit = 5,
   embedFn: EmbedFn = embed,
   sources: SeedSource[] = [],
+  overrides?: Partial<DocsTierPaths>,
 ): Promise<DocResult[]> {
-  const centralDb = existsSync(centralDbPath()) ? openVectorStore(centralDbPath()) : null;
-  const projectDb = openVectorStore(defaultDbPath());
+  const centralDbPathVal = overrides?.dbPath ?? centralDbPath();
+  const projectDbPathVal = overrides?.dbPath ?? defaultDbPath();
+  const projectCorpusRootVal = overrides?.corpusRoot ?? defaultCorpusRoot();
+  const centralDb = existsSync(centralDbPathVal) ? openVectorStore(centralDbPathVal) : null;
+  const projectDb = openVectorStore(projectDbPathVal);
   let centralResults: DocResult[] = [];
   let projectResults: DocResult[] = [];
 
@@ -632,7 +646,10 @@ export function buildDocsTools(deps: {
     parameters: SearchDocsParams,
     execute: async (_toolCallId, params) => {
       const limit = params.limit ?? 5;
-      const results = await searchDocsBoth(params.query, limit, embedFn);
+      const results = await searchDocsBoth(params.query, limit, embedFn, [], {
+        dbPath: deps.projectDbPath,
+        corpusRoot: deps.projectCorpusRoot,
+      });
       return {
         content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
         details: { count: results.length, results },
@@ -667,7 +684,10 @@ export function buildDocsTools(deps: {
           details: { error: `Invalid tier: ${tier}` },
         };
       }
-      const result = await docsRebuildTier(tier, embedFn);
+      const result = await docsRebuildTier(tier, embedFn, {
+        dbPath: tier === "project" ? deps.projectDbPath : deps.centralDbPath,
+        corpusRoot: tier === "project" ? deps.projectCorpusRoot : deps.centralCorpusRoot,
+      });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         details: result,

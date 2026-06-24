@@ -258,7 +258,11 @@ test("refreshStaleSources re-seeds and rebuilds when file:// content changes", a
 test("searchDocsBoth triggers background refresh without blocking", async () => {
   const dbPath = join(root, "vectors.db");
   const fullPath = join(root, "upstream.md");
-  writeFileSync(fullPath, "# API\n\n## Overview\n\nContent.\n", "utf8");
+  writeFileSync(
+    fullPath,
+    "# API\n\n## Overview\n\nThis is the API overview section with enough documentation text to pass the minimum file size threshold and be indexed.\n",
+    "utf8",
+  );
 
   {
     const db = openVectorStore(dbPath);
@@ -272,8 +276,14 @@ test("searchDocsBoth triggers background refresh without blocking", async () => 
     db.close();
   }
 
-  const results = await searchDocsBoth("API", 5, mockEmbedFn, [source("api-docs", fileUrl(fullPath))]);
+  const results = await searchDocsBoth("API", 5, mockEmbedFn, [source("api-docs", fileUrl(fullPath))], {
+    dbPath,
+    corpusRoot: centralCorpusRoot(agentDir),
+  });
   expect(results.length).toBeGreaterThan(0);
+  const firstPath = results[0]!.doc_path;
+  const hasPrefix = firstPath.startsWith("central:") || firstPath.startsWith("project:");
+  expect(hasPrefix).toBe(true);
   // Background refresh is async and may fail because searchDocsBoth opens the central DB with
   // only the base schema (no seed_metadata). The test verifies it returned promptly.
   await new Promise((r) => setTimeout(r, 200));

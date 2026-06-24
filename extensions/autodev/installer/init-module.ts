@@ -58,6 +58,14 @@ const AUTODEV_SUBDIRS = [
   "embeddings", "research", "memory", "plans", "scripts",
 ] as const;
 
+/** Default model allowlist written to `.autodev/config/models.json`. */
+const DEFAULT_MODEL_ALLOWLIST: readonly string[] = [
+  "ollama-cloud/glm-5.2:cloud",
+  "ollama-cloud/deepseek-v4-pro",
+  "ollama-cloud/deepseek-v4-flash",
+  "ollama-cloud/glm-5.1:cloud",
+];
+
 /** Templates copied from the central package into `.autodev/templates/`. */
 const TEMPLATE_FILES = [
   "ADR-template.md", "autodev-delivery.md",
@@ -133,11 +141,13 @@ export async function runInit(deps: InitModuleDeps): Promise<InstallFixResult[]>
     results.push({ name: "autodev-dirs", ok: true, detail: "Already completed (step 6)." });
     results.push({ name: "templates", ok: true, detail: "Already completed (step 6)." });
     results.push({ name: "github-template", ok: true, detail: "Already completed (step 6)." });
+    results.push({ name: "models-config", ok: true, detail: "Already completed (step 6)." });
   } else {
     results.push(runStep1Dirs(projectRoot, notify));
     results.push(runStep2Templates(projectRoot, notify, deps.packageRoot));
     results.push(runStep3Github(projectRoot, notify));
-    const structOk = results.slice(-3).every((r) => r.ok);
+    results.push(runStepModelsConfig(projectRoot, notify));
+    const structOk = results.slice(-4).every((r) => r.ok);
     if (structOk) {
       await markStepCompleted(projectRoot, STEP_STRUCTURE, "init");
     }
@@ -278,6 +288,22 @@ function runStep3Github(
     return { name: "github-template", ok: true, detail: "Copied autodev-request.md to .github/ISSUE_TEMPLATE/." };
   } catch (e) {
     return { name: "github-template", ok: false, detail: `Failed: ${(e as Error).message}` };
+  }
+}
+
+/** Step 3b: Write `.autodev/config/models.json` with the default model allowlist. */
+function runStepModelsConfig(
+  projectRoot: string,
+  notify: (m: string, l: "info" | "warning" | "error") => void,
+): InstallFixResult {
+  notify("Writing .autodev/config/models.json...", "info");
+  const dest = join(projectRoot, ".autodev", "config", "models.json");
+  try {
+    mkdirSync(join(projectRoot, ".autodev", "config"), { recursive: true });
+    writeFileSync(dest, JSON.stringify(DEFAULT_MODEL_ALLOWLIST, null, 2) + "\n", "utf-8");
+    return { name: "models-config", ok: true, detail: "Default model allowlist written." };
+  } catch (e) {
+    return { name: "models-config", ok: false, detail: `Failed: ${(e as Error).message}` };
   }
 }
 

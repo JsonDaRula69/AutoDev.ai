@@ -15,7 +15,7 @@ const EXPECTED_SKILLS = [
   "autodev-implement",
   "autodev-review",
   "autodev-deploy",
-  "autodev-onboard",
+  "autodev-onboarding-harbor-master",
 ] as const;
 
 /** Parse YAML frontmatter (name + description) from a SKILL.md body. */
@@ -102,4 +102,74 @@ test("skill descriptions are within the 1024-char limit", () => {
     const fm = parseFrontmatter(body);
     expect((fm.description ?? "").length).toBeLessThanOrEqual(1024);
   }
+});
+
+// --- Step 4: Harbor Master skill-specific audit tests ---
+
+test("autodev-onboarding-harbor-master uses subagent_type: not agent:", () => {
+  const body = readFileSync(
+    join(SKILLS_DIR, "autodev-onboarding-harbor-master", "SKILL.md"),
+    "utf8",
+  );
+  // The skill should use `subagent_type:` for dispatches, never `agent:`.
+  // `agent:` may appear in prose (e.g. "dispatch Conseil agents") but never
+  // as a code-style dispatch key.
+  const agentDispatchMatches = body.match(/\bagent:\s*"/g);
+  // Allow agent: in prose context like "dispatch Conseil agents" but not
+  // as a dispatch key. We check that there's no `agent: "conseil"` pattern.
+  expect(body).not.toContain('agent: "conseil"');
+  expect(body).not.toContain('agent: "explore"');
+  expect(body).not.toContain('agent: "navigator"');
+});
+
+test("autodev-onboarding-harbor-master uses prompt: not description: for dispatches", () => {
+  const body = readFileSync(
+    join(SKILLS_DIR, "autodev-onboarding-harbor-master", "SKILL.md"),
+    "utf8",
+  );
+  // The skill should use `prompt:` for dispatch task descriptions, not `description:`.
+  // `description:` in YAML frontmatter is fine — this checks the body text.
+  // Look for the dispatch pattern: `subagent_type:` followed by a task description.
+  // If `description:` appears in a code block or dispatch context, flag it.
+  const bodyAfterFrontmatter = body.replace(/^---\n[\s\S]*?\n---\n/, "");
+  // Check that any `description:` in the body is NOT in a dispatch context
+  // (i.e., not immediately after a subagent_type line or inside a task() call)
+  const dispatchDescriptionMatches = bodyAfterFrontmatter.match(
+    /subagent_type:.*\n.*description:/g,
+  );
+  expect(dispatchDescriptionMatches).toBeNull();
+});
+
+test("autodev-onboarding-harbor-master references onboarding_dispatch_hint()", () => {
+  const body = readFileSync(
+    join(SKILLS_DIR, "autodev-onboarding-harbor-master", "SKILL.md"),
+    "utf8",
+  );
+  expect(body).toContain("onboarding_dispatch_hint");
+});
+
+test("autodev-onboarding-harbor-master marks ideation team as future capability", () => {
+  const body = readFileSync(
+    join(SKILLS_DIR, "autodev-onboarding-harbor-master", "SKILL.md"),
+    "utf8",
+  );
+  expect(body).toContain("future capability");
+});
+
+test("autodev-onboarding-harbor-master dispatches external research to Explore, not Navigator", () => {
+  const body = readFileSync(
+    join(SKILLS_DIR, "autodev-onboarding-harbor-master", "SKILL.md"),
+    "utf8",
+  );
+  // External research should reference Explore, not Navigator
+  expect(body).toContain("Explore");
+  // Navigator should not appear as a dispatch target for research
+  // (Navigator may appear in prose about the crew, but not as a dispatch instruction)
+  const navigatorDispatchMatch = body.match(/dispatch.*Navigator/i);
+  expect(navigatorDispatchMatch).toBeNull();
+});
+
+test("old autodev-onboard skill directory no longer exists", () => {
+  const oldDir = join(SKILLS_DIR, "autodev-onboard");
+  expect(existsSync(oldDir)).toBe(false);
 });

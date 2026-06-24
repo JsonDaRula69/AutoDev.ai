@@ -16,15 +16,15 @@
 # Deferred sources (non-Markdown formats) are listed at the bottom and must remain commented
 # out until a format converter is built.
 
-sources: []
+sources:
+  - name: pi
+    type: git-sparse
+    url: https://github.com/earendil-works/pi
+    sparsePath: packages/coding-agent/docs
+    targetSubdir: pi
+    active: true
 
 # Active sources — currently maintained by AutoDev. Uncomment to enable.
-# - name: pi
-#   type: git-sparse
-#   url: https://github.com/earendil-works/pi
-#   sparsePath: packages/coding-agent/docs
-#   targetSubdir: pi
-#   active: true
 #
 # - name: magic-context
 #   type: git-sparse

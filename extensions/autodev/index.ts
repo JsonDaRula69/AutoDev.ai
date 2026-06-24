@@ -30,6 +30,7 @@ import { register as registerDiscord } from "./discord/index.js";
 import { register as registerDebate } from "./debate/index.js";
 import { register as registerAutonomy } from "./autonomy/index.js";
 import { register as registerDebug } from "./debug/index.js";
+import { register as registerOnboarding } from "./onboarding/index.js";
 
 /** Canonical module registration order. */
 const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: ExtensionAPI) => void }> = [
@@ -43,6 +44,7 @@ const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: Ex
   { name: "comment-checker", register: registerCommentChecker },
   { name: "notepad", register: registerNotepad },
   { name: "intent-gate", register: registerIntentGate },
+  { name: "onboarding", register: registerOnboarding },
   { name: "discord", register: registerDiscord },
   { name: "mcp-integrations", register: registerMcpIntegrations },
   { name: "lsp", register: registerLsp },

@@ -60,8 +60,8 @@ export interface SeedSource {
 // ---------------------------------------------------------------------------
 
 /** Central corpus root: `<agentDir>/../docs-corpus`. */
-export function centralCorpusRoot(): string {
-  return join(getAgentDir(), "..", "docs-corpus");
+export function centralCorpusRoot(agentDir = getAgentDir()): string {
+  return join(agentDir, "..", "docs-corpus");
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +317,9 @@ export function createCentralDbSchema(db: Database): void {
     );
   `);
 
+  const tables = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks';").all() as Array<{ name: string }>;
+  if (tables.length === 0) return;
+
   const info = db.query("PRAGMA table_info(chunks);").all() as Array<{ name: string; notnull: number }>;
   if (!info.some((col) => col.name === "source_name")) {
     db.exec("ALTER TABLE chunks ADD COLUMN source_name TEXT NOT NULL DEFAULT '';");
@@ -479,7 +482,18 @@ export async function refreshStaleSources(
 
   const db = new Database(centralDbPath, { create: true });
   try {
-    createCentralDbSchema(db);
+    const baseTables = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks';").all() as Array<{ name: string }>;
+    if (baseTables.length === 0) {
+      const { openVectorStore } = await import("./index.js");
+      const vs = openVectorStore(centralDbPath);
+      try {
+        createCentralDbSchema(vs);
+      } finally {
+        vs.close();
+      }
+    } else {
+      createCentralDbSchema(db);
+    }
     const upsert = db.query(
       "INSERT OR REPLACE INTO seed_metadata (source_name, last_seeded_at, commit_hash, etag, active) VALUES (?, ?, ?, ?, ?);",
     );
