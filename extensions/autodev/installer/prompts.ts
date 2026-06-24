@@ -9,13 +9,18 @@ import { createInterface, type Interface as ReadlineInterface } from "node:readl
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { openSync } from "node:fs";
 import { createReadStream, createWriteStream } from "node:fs";
+import { select as clackSelect } from "@clack/prompts";
+
+export interface SelectOption {
+  value: string;
+  label: string;
+  hint?: string;
+}
 
 export interface Prompter {
-  /** Ask an open-ended question and return the answer. */
   prompt(question: string): Promise<string>;
-  /** Ask a yes/no question and return true/false. */
   confirm(question: string, defaultYes?: boolean): Promise<boolean>;
-  /** Close the readline interface. */
+  select(message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol>;
   close(): void;
 }
 
@@ -53,11 +58,11 @@ function createNoTtyPrompter(): Prompter {
   return {
     prompt: async (_question: string): Promise<string> => "",
     confirm: async (_question: string, defaultYes = true): Promise<boolean> => defaultYes,
+    select: async (_message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol> => initialValue ?? options[0]?.value ?? "",
     close: () => {},
   };
 }
 
-/** Create a prompter from an existing readline interface (injectable for tests). */
 export function createPrompterFromRl(rl: ReadlineInterface): Prompter {
   return {
     prompt: (question: string): Promise<string> => {
@@ -82,6 +87,19 @@ export function createPrompterFromRl(rl: ReadlineInterface): Prompter {
         });
       });
     },
+    select: async (message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol> => {
+      rl.pause();
+      try {
+        const result = await clackSelect({
+          message,
+          options: options.map((o) => ({ value: o.value, label: o.label, hint: o.hint })),
+          initialValue: initialValue ?? options[0]?.value,
+        });
+        return result;
+      } finally {
+        rl.resume();
+      }
+    },
     close: () => {
       rl.close();
     },
@@ -101,7 +119,9 @@ export function createPrompterFromRl(rl: ReadlineInterface): Prompter {
  */
 export class MockPrompter implements Prompter {
   answers: string[] = [];
+  selectAnswers: string[] = [];
   private answerIndex = 0;
+  private selectIndex = 0;
 
   async prompt(_question: string): Promise<string> {
     const answer = this.answers[this.answerIndex];
@@ -118,13 +138,19 @@ export class MockPrompter implements Prompter {
     return trimmed === "y" || trimmed === "yes";
   }
 
-  close(): void {
-    // no-op for tests
+  async select(_message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol> {
+    const answer = this.selectAnswers[this.selectIndex];
+    this.selectIndex++;
+    if (answer === undefined) return initialValue ?? options[0]?.value ?? "";
+    return answer;
   }
 
-  /** Reset the answer queue. */
+  close(): void {}
+
   reset(): void {
     this.answers = [];
     this.answerIndex = 0;
+    this.selectAnswers = [];
+    this.selectIndex = 0;
   }
 }

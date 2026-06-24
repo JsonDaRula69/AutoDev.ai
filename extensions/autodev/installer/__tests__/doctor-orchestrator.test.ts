@@ -94,7 +94,8 @@ test("doctor orchestrator opens /dev/tty and runs config when stdin is non-inter
 
   // reopenTtyOverride that returns a MockPrompter (simulates successful reopen).
   const mockPrompter = new MockPrompter();
-  mockPrompter.answers = ["ollama-cloud", "sk-via-tty", "y", "", "", ""];
+  mockPrompter.selectAnswers = ["ollama-cloud"];
+  mockPrompter.answers = ["sk-via-tty", "y", "", "", ""];
   const reopenTtyOverride: ReopenTtyDeps = {
     openSyncOverride: () => 42,
     prompterOverride: mockPrompter,

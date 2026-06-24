@@ -92,19 +92,21 @@ async function handleLlm(deps: ConfigModuleDeps): Promise<ConfigResult> {
     return { subcommand: "llm", step: STEP_LLM, status: "skipped", message: "Already configured." };
   }
 
-  const providerInput = await deps.prompter.prompt(
-    "Which LLM provider are you using? (default: ollama-cloud)",
-  );
-  if (providerInput === "") {
-    deps.notify("interactive config required, no TTY detected", "warning");
-    return {
-      subcommand: "llm",
-      step: STEP_LLM,
-      status: "warning",
-      message: "interactive config required, no TTY detected",
-    };
+  const PROVIDERS = [
+    { value: "ollama-cloud", label: "Ollama Cloud", hint: "glm-5.2, deepseek, kimi — default" },
+    { value: "openai", label: "OpenAI", hint: "gpt-4, o1, etc." },
+    { value: "anthropic", label: "Anthropic", hint: "Claude models" },
+    { value: "google", label: "Google AI", hint: "Gemini models" },
+  ];
+
+  const providerChoice = await deps.prompter.select("Select your LLM provider:", PROVIDERS, "ollama-cloud");
+
+  if (typeof providerChoice !== "string") {
+    deps.notify("Provider selection cancelled.", "warning");
+    return { subcommand: "llm", step: STEP_LLM, status: "warning", message: "Cancelled." };
   }
-  const provider = providerInput === "" ? "ollama-cloud" : providerInput;
+
+  const provider = providerChoice;
   const envVarName = providerToEnvVar(provider);
   const envPath = agentEnvPath(deps);
 
