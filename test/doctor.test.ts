@@ -85,6 +85,9 @@ function createMockPackage(packageRoot: string): void {
   ] as const) {
     writeFileSync(join(packageRoot, ".autodev", "config", name), content);
   }
+
+  mkdirSync(join(packageRoot, "config"), { recursive: true });
+  writeFileSync(join(packageRoot, "config", "docs-sources.yaml"), "sources: []\n");
 }
 
 async function setupFullConfig(dir: string, authPath: string): Promise<void> {
@@ -117,7 +120,7 @@ test("doctor passes all checks on a fully configured machine", async () => {
       "Bun", "GitHub CLI", "GitHub auth",
       "LLM credentials", "Environment vars", "Install state",
       "settings.json", "agents/*.md", "reference/", "skills/",
-      "extensions/autodev", "config/", "magic-context.jsonc",
+      "extensions/autodev", "config/", "docs-sources.yaml", "magic-context.jsonc",
       "Magic Context",
     ]);
     const mcCheck = result.checks.find((c) => c.name === "Magic Context");

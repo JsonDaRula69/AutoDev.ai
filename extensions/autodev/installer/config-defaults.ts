@@ -50,9 +50,6 @@ export type ValidateAndCreateConfigOverrides = SymlinkOverrides;
 function defaultPackageRoot(): string {
   return join(
     process.env.HOME ?? "",
-    ".bun",
-    "install",
-    "global",
     "node_modules",
     "autodev-ai",
   );
@@ -84,6 +81,7 @@ export async function validateAndCreateConfig(
   linkSingle(results, "extensions/autodev", join(pkg, "extensions", "autodev"), join(agentDir, "extensions", "autodev"), "symlinked to package extensions/autodev", overrides);
 
   linkConfigDir(results, pkg, centralHome, overrides);
+  linkDocsSources(results, pkg, centralHome, overrides);
   writeMagicContext(results, agentDir);
 
   return results;
@@ -194,4 +192,20 @@ function writeMagicContext(results: ConfigCheckResult[], agentDir: string): void
   } catch (e) {
     results.push({ name: "magic-context.jsonc", ok: false, detail: `write failed: ${(e as Error).message}`, created: false });
   }
+}
+
+function linkDocsSources(
+  results: ConfigCheckResult[],
+  pkg: string,
+  centralHome: string,
+  overrides?: ValidateAndCreateConfigOverrides,
+): void {
+  const source = join(pkg, "config", "docs-sources.yaml");
+  const target = join(centralHome, "config", "docs-sources.yaml");
+  if (!existsSync(source)) {
+    results.push({ name: "docs-sources.yaml", ok: false, detail: "source file missing", created: false });
+    return;
+  }
+  const r = linkOrCopy(source, target, false, overrides);
+  results.push({ name: "docs-sources.yaml", ok: r.ok, detail: detailFor(r, "symlinked to package config/docs-sources.yaml"), created: r.created });
 }

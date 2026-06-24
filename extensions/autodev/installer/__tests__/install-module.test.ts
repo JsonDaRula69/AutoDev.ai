@@ -75,6 +75,9 @@ function createMockPackage(packageRoot: string): void {
   ] as const) {
     writeFileSync(join(packageRoot, ".autodev", "config", name), content, "utf-8");
   }
+
+  mkdirSync(join(packageRoot, "config"), { recursive: true });
+  writeFileSync(join(packageRoot, "config", "docs-sources.yaml"), "sources: []\n", "utf-8");
 }
 
 interface ExecCall {

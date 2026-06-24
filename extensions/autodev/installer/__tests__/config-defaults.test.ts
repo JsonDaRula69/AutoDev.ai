@@ -123,6 +123,9 @@ function createMockPackage(packageRoot: string): void {
   for (const [name, content] of configFiles) {
     writeFileSync(join(packageRoot, ".autodev", "config", name), content, "utf-8");
   }
+
+  mkdirSync(join(packageRoot, "config"), { recursive: true });
+  writeFileSync(join(packageRoot, "config", "docs-sources.yaml"), "sources: []\n", "utf-8");
 }
 
 // ---------------------------------------------------------------------------
@@ -209,11 +212,12 @@ test("validateAndCreateConfig creates all symlinks and magic-context.jsonc on ha
     expect(existsSync(extLink)).toBe(true);
     expect(lstatSync(extLink).isSymbolicLink()).toBe(true);
 
-    // config/*.yaml|json|md (9 files) -> package/.autodev/config/*
+    // config/*.yaml|json|md (9 files) + docs-sources.yaml -> 10 files in ~/.AutoDev/config/
     const configDir = join(centralDir, "config");
     expect(existsSync(configDir)).toBe(true);
     const configFiles = readdirSync(configDir);
-    expect(configFiles.length).toBe(9);
+    expect(configFiles.length).toBe(10);
+    expect(configFiles).toContain("docs-sources.yaml");
 
     // magic-context.jsonc is a real file (not symlink)
     const mcPath = join(agentDir, "magic-context.jsonc");
