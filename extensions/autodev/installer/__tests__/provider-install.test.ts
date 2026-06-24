@@ -37,7 +37,7 @@ class MockPackageManager {
     this.persistCalls.push(source);
     this.installed = true;
     // Simulate creating the package directory
-    const pkgName = source.replace(/^npm:/, "").split("@")[0];
+    const pkgName = source.replace(/^npm:/, "").split("@")[0] ?? source;
     mkdirSync(join(this.npmRoot, "node_modules", pkgName), { recursive: true });
   }
 
