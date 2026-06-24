@@ -33,8 +33,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "import-check": "bun run test/import-check.ts",
-    "prepublishOnly": "tsc --noEmit"
+    "import-check": "bun run test/import-check.ts"
   },
   "dependencies": {
     "@cortexkit/pi-magic-context": "^0.26.0",
