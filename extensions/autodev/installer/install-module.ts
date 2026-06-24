@@ -60,6 +60,55 @@ const STEP_TOOLS = 0;
 /** Step 3 — `.pi/` config files + Magic Context registration. Marked only after both succeed. */
 const STEP_CONFIG_AND_MC = 3;
 
+/**
+ * Run install tools + config symlinks phases (1-2), WITHOUT the Magic Context
+ * registration phase (3). Used by doctor's FirstRun flow so MC install can be
+ * deferred until after interactive config prompts complete.
+ *
+ * Phases:
+ *   1. Install `gh` and `git` if missing (via `installMissingTools`).
+ *   2. Symlink centralized config into `~/.AutoDev/` via `validateAndCreateConfig`
+ *      (also writes `magic-context.jsonc` with AutoDev defaults).
+ *
+ * State step 0 is marked after tools. State step 3 is NOT marked here (it
+ * requires MC registration to succeed first — use `runMagicContextInstall`
+ * for that).
+ */
+export async function runInstallToolsAndConfig(deps: InstallModuleDeps): Promise<InstallFixResult[]> {
+  const results: InstallFixResult[] = [];
+  const { projectRoot, notify } = deps;
+  const skipCompleted = deps.skipCompleted ?? true;
+
+  const toolsResult = await runToolsPhase(deps, skipCompleted);
+  results.push(toolsResult);
+
+  const configResult = await runConfigFilesPhase(deps);
+  results.push(configResult);
+
+  return results;
+}
+
+/**
+ * Run Magic Context registration only (phase 3). Requires that the config
+ * files phase (symlinks + magic-context.jsonc) has already succeeded — pass
+ * `configOk=true` from the prior `runInstallToolsAndConfig` result.
+ *
+ * State step 3 is marked complete only when this succeeds AND configOk is true.
+ */
+export async function runMagicContextInstall(
+  deps: InstallModuleDeps,
+  configOk: boolean,
+): Promise<InstallFixResult> {
+  const { projectRoot, notify } = deps;
+  const skipCompleted = deps.skipCompleted ?? true;
+
+  const mcSetupResult = await runMagicContextSetupPhase(deps, configOk, skipCompleted);
+  if (configOk && mcSetupResult.ok) {
+    await markStepCompleted(projectRoot, STEP_CONFIG_AND_MC, "install");
+  }
+  return mcSetupResult;
+}
+
 // ---- Public API ----
 
 /**

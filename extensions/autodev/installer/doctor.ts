@@ -6,7 +6,7 @@ import { readAuth } from "./auth.js";
 import { readEnv } from "./env.js";
 import { readState } from "./state.js";
 import { validateAndCreateConfig } from "./config-defaults.js";
-import { runInstallFixes, type InstallModuleDeps } from "./install-module.js";
+import { runInstallFixes, runInstallToolsAndConfig, runMagicContextInstall, type InstallModuleDeps } from "./install-module.js";
 import { runConfig, type ConfigModuleDeps } from "./config-module.js";
 import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
 import { createPrompter, type Prompter } from "./prompts.js";
@@ -139,8 +139,9 @@ export interface DoctorDeps {
  *   3. `~/.pi/agent/.env` (resolved via `dirname(authPath)`) has a non-empty
  *      `OLLAMA_CLOUD_API_KEY`.
  *
- * Used ONLY for messaging (welcome vs "something needs fixing"). Never used
- * for behavioral branching.
+ * Used to fork the config flow: a fresh install runs all four config
+ * sub-commands (llm, voyage, discord, github); a broken existing install
+ * runs only the targeted sub-commands for checks that failed.
  */
 export async function isFirstRun(deps: Pick<DoctorDeps, "projectRoot" | "authPath">): Promise<boolean> {
   // Signal 1: auth.json has usable credentials.
@@ -191,27 +192,37 @@ export async function isFirstRun(deps: Pick<DoctorDeps, "projectRoot" | "authPat
  * retry: on first failure it writes AutoDev defaults to `magic-context.jsonc`
  * in the central agent dir, then re-runs the doctor.
  *
- * When `launchConfigFlow` is true, doctor is the orchestrator: on failures it
- * runs the install module unconditionally, then runs the config module with
- * targeted sub-commands only in an interactive TTY, then re-runs all checks.
+ * When `launchConfigFlow` is true, doctor is the orchestrator:
+ *   - Fresh install (isFirstRun=true): skip health checks, run the full
+ *     FirstRun flow (tools → symlinks → config prompts → MC install), then
+ *     run all health checks to report final state.
+ *   - Broken install (isFirstRun=false): run health checks first, then run
+ *     install fixes + targeted config sub-commands for failed checks, then
+ *     re-run all health checks.
  */
 export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   const launchConfigFlow = deps.launchConfigFlow ?? false;
   const notify = deps.notify ?? (() => {});
 
-  const firstResult = await runHealthChecks(deps);
-  const failed = firstResult.checks.length - firstResult.passed;
-
-  if (!launchConfigFlow || failed === 0) {
-    return firstResult;
+  if (!launchConfigFlow) {
+    return runHealthChecks(deps);
   }
 
-  // ---- Orchestrator mode: failures present ----
+  // ---- Phase 0: isFirstRun gate ----
   const firstRun = await isFirstRun(deps);
   if (firstRun) {
     notify("Welcome to AutoDev! Starting first-run setup...", "info");
-  } else {
-    notify("Some health checks failed. Something needs fixing...", "warning");
+    const firstRunResult = await runFirstRunFlow(deps, notify);
+    return firstRunResult;
+  }
+
+  // ---- Broken-install path ----
+  notify("Some health checks failed. Something needs fixing...", "warning");
+  const firstResult = await runHealthChecks(deps);
+  const failed = firstResult.checks.length - firstResult.passed;
+
+  if (failed === 0) {
+    return firstResult;
   }
 
   // (1) Install module — always, no prompts, safe in CI.
@@ -224,35 +235,100 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   };
   await runInstallFixes(installDeps);
 
-  // (2) Config module — only in an interactive TTY, with targeted sub-commands.
+  // (2) Config module — interactive TTY only, targeted sub-commands.
+  const subcommands = await brokenInstallSubcommands(firstResult.checks, deps);
+  await runConfigSubcommands(deps, subcommands, notify);
+
+  // (3) Re-run all health checks to report what's still broken.
+  const rechecked = await runHealthChecks(deps);
+  return {
+    checks: rechecked.checks,
+    passed: rechecked.passed,
+    failed: rechecked.failed,
+    configFlowLaunched: true,
+  };
+}
+
+/**
+ * FirstRun flow — the full install + config sequence for a fresh machine.
+ *
+ * Order (MC install deferred until after config prompts):
+ *   1. External tools (gh, git) — non-interactive.
+ *   2. Centralized config symlinks + magic-context.jsonc defaults — non-interactive.
+ *   3. Interactive config prompts: llm → voyage → discord → github.
+ *      Discord is always presented; user can skip without failing doctor.
+ *   4. Magic Context pi extension registration — non-interactive.
+ *   5. Full health-check pass to report final state.
+ */
+async function runFirstRunFlow(
+  deps: DoctorDeps,
+  notify: (message: string, level: "info" | "warning" | "error") => void,
+): Promise<DoctorResult> {
+  const installDeps: InstallModuleDeps = {
+    projectRoot: deps.projectRoot,
+    notify,
+    execSyncOverride: deps.execSyncOverride as never,
+    ...(deps.packageRoot !== undefined ? { packageRoot: deps.packageRoot } : {}),
+  };
+
+  // (1+2) Tools + symlinks (no MC install yet).
+  notify("Installing external tools and central config...", "info");
+  const installResults = await runInstallToolsAndConfig(installDeps);
+  const configOk = installResults.every((r) => r.ok);
+
+  // (3) Interactive config prompts — all four sub-commands.
+  await runConfigSubcommands(deps, ["llm", "voyage", "discord", "github"], notify);
+
+  // (4) MC install — deferred until after config prompts.
+  notify("Registering Magic Context extension...", "info");
+  const mcResult = await runMagicContextInstall(installDeps, configOk);
+  if (!mcResult.ok) {
+    notify(`Magic Context setup: ${mcResult.detail}`, "warning");
+  }
+
+  // (5) Full health-check pass to report final state.
+  const finalResult = await runHealthChecks(deps);
+  return {
+    checks: finalResult.checks,
+    passed: finalResult.passed,
+    failed: finalResult.failed,
+    configFlowLaunched: true,
+  };
+}
+
+/**
+ * Run config sub-commands interactively. Handles TTY routing: direct stdin,
+ * /dev/tty reopen for piped stdin, or skip with warning in full CI.
+ */
+async function runConfigSubcommands(
+  deps: DoctorDeps,
+  subcommands: string[],
+  notify: (message: string, level: "info" | "warning" | "error") => void,
+): Promise<void> {
+  if (subcommands.length === 0) return;
+
   const isTty = process.stdin.isTTY === true;
   if (isTty) {
-    const subcommands = targetedSubcommands(firstResult.checks);
-    if (subcommands.length > 0) {
-      const prompter = deps.prompter ?? createPrompter();
-      const configDeps: ConfigModuleDeps = {
-        projectRoot: deps.projectRoot,
-        authPath: deps.authPath,
-        prompter,
-        notify,
-        ...(deps.execSyncOverride !== undefined
-          ? { execSyncOverride: deps.execSyncOverride as never }
-          : {}),
-      };
-      for (const sub of subcommands) {
-        await runConfig(configDeps, sub);
-      }
-      if (deps.prompter === undefined) {
-        prompter.close();
-      }
+    const prompter = deps.prompter ?? createPrompter();
+    const configDeps: ConfigModuleDeps = {
+      projectRoot: deps.projectRoot,
+      authPath: deps.authPath,
+      prompter,
+      notify,
+      ...(deps.execSyncOverride !== undefined
+        ? { execSyncOverride: deps.execSyncOverride as never }
+        : {}),
+    };
+    for (const sub of subcommands) {
+      await runConfig(configDeps, sub);
+    }
+    if (deps.prompter === undefined) {
+      prompter.close();
     }
   } else {
-    // Non-interactive stdin: try reopening /dev/tty so an interactive user
-    // sitting in front of a piped-stdin shell can still answer prompts.
     const reopened = reopenTty(deps.reopenTtyOverride);
     if (reopened !== null) {
       notify("stdin is non-interactive; opened /dev/tty for prompts.", "info");
-      const subcommands = targetedSubcommands(firstResult.checks);
       const configDeps: ConfigModuleDeps = {
         projectRoot: deps.projectRoot,
         authPath: deps.authPath,
@@ -273,15 +349,30 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
       );
     }
   }
+}
 
-  // (3) Re-run all health checks to report what's still broken.
-  const rechecked = await runHealthChecks(deps);
-  return {
-    checks: rechecked.checks,
-    passed: rechecked.passed,
-    failed: rechecked.failed,
-    configFlowLaunched: true,
-  };
+/**
+ * Map failing health checks to targeted config sub-commands for a broken
+ * install. Discord is included if its config step (5) is not yet completed.
+ */
+async function brokenInstallSubcommands(
+  checks: readonly DoctorCheck[],
+  deps: DoctorDeps,
+): Promise<string[]> {
+  const subs = new Set<string>(targetedSubcommands(checks));
+
+  // Always offer Discord if it hasn't been configured yet.
+  try {
+    const configState = await readState(deps.projectRoot, "config");
+    if (!configState.completedSteps.includes(5)) {
+      subs.add("discord");
+    }
+  } catch {
+    // install-state.json missing → treat as not configured.
+    subs.add("discord");
+  }
+
+  return Array.from(subs);
 }
 
 /**

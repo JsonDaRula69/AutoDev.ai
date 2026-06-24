@@ -26,11 +26,13 @@ if ! command -v bun >/dev/null 2>&1; then
   fi
 
   curl -fsSL https://bun.sh/install | bash
-
-  # Bun's installer modifies shell rc files but does NOT update the current
-  # shell's PATH. Export it explicitly so the rest of this script can find bun.
-  export PATH="$HOME/.bun/bin:$PATH"
 fi
+
+# Bun's installer (and a prior manual install) writes to shell rc files but
+# does NOT update the current session's PATH. Export unconditionally so both
+# `bun` and the globally-installed `autodev` bin are visible to this script
+# regardless of whether Bun was just installed or was already present.
+export PATH="$HOME/.bun/bin:$PATH"
 
 # ── Step 2: Install autodev globally ──────────────────────────────────────
 echo "Installing autodev globally..."
@@ -80,9 +82,6 @@ fi
 echo
 echo "Running doctor check..."
 if ! autodev doctor; then
-  echo "Run the doctor command again after fixing the issues above" >&2
+  echo "Doctor could not resolve all issues automatically. Follow the prompts above before re-running." >&2
   exit 1
 fi
-
-echo
-echo "AutoDev is installed and healthy. Run \`autodev onboard\` to begin."
