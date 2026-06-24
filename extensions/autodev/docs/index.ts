@@ -22,6 +22,13 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync } from "node:f
 import { join, relative, resolve, sep } from "node:path";
 import { Type, type Static } from "typebox";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { embed, type EmbedFn, VOYAGE_BATCH_SIZE } from "../embeddings.js";
+import { ftsMatchQuery } from "../fts-utils.js";
+import { refreshStaleSources, type SeedSource } from "./seeding.js";
+
+export type { EmbedFn };
+export { embed, VOYAGE_BATCH_SIZE };
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -37,6 +44,14 @@ export function defaultCorpusRoot(cwd = process.cwd()): string {
   return resolve(cwd, "docs-corpus");
 }
 
+export function centralDbPath(): string {
+  return join(getAgentDir(), "..", "docs-corpus", "vectors.db");
+}
+
+export function centralCorpusRoot(): string {
+  return join(getAgentDir(), "..", "docs-corpus");
+}
+
 /** Maximum characters per chunk (trimmed on heading boundaries when possible). */
 const MAX_CHUNK_CHARS = 1000;
 
@@ -45,9 +60,6 @@ const MIN_FILE_CHARS = 50;
 
 /** Files at the corpus root that are metadata, not content. */
 const SKIP_FILES = new Set<string>(["MANIFEST.md"]);
-
-/** VoyageAI batch size (requests are batched to reduce round trips). */
-const VOYAGE_BATCH_SIZE = 20;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,10 +91,8 @@ export interface RawChunk {
   readonly doc_path: string;
   readonly chunk_index: number;
   readonly content: string;
+  readonly source_name?: string;
 }
-
-/** Injectable embedding function. Tests pass a deterministic mock. */
-export type EmbedFn = (texts: string[], isQuery?: boolean) => Promise<Float32Array[]>;
 
 // ---------------------------------------------------------------------------
 // Vector store
@@ -105,10 +115,12 @@ CREATE TABLE IF NOT EXISTS chunks (
   doc_path TEXT NOT NULL,
   chunk_index INTEGER NOT NULL,
   content TEXT NOT NULL,
+  source_name TEXT,
   embedding BLOB NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_doc_path ON chunks(doc_path);
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(content, source_name);
 `;
 
 /** Serialize a Float32Array to a Buffer for BLOB storage. */
@@ -126,6 +138,11 @@ export function clearChunks(db: Database): void {
   db.exec("DELETE FROM chunks;");
 }
 
+/** Drop the FTS5 index (used by `docs_rebuild_tier` before re-ingesting). */
+export function clearFts(db: Database): void {
+  db.exec("DELETE FROM chunks_fts;");
+}
+
 /** Count the number of chunks currently stored. */
 export function countChunks(db: Database): number {
   const row = db.query("SELECT COUNT(*) AS n FROM chunks;").get() as { n: number } | null;
@@ -138,15 +155,28 @@ export function countDocs(db: Database): number {
   return row?.n ?? 0;
 }
 
+function deriveSourceName(docPath: string): string {
+  return docPath.split("/")[0] ?? "";
+}
+
 /** Insert a single embedded chunk into the store. */
 export function insertChunk(
   db: Database,
   chunk: RawChunk,
   embedding: Float32Array,
 ): void {
-  db.query(
-    "INSERT INTO chunks (doc_path, chunk_index, content, embedding) VALUES (?, ?, ?, ?);",
-  ).run(chunk.doc_path, chunk.chunk_index, chunk.content, encodeVector(embedding));
+  const sourceName = chunk.source_name ?? deriveSourceName(chunk.doc_path);
+  const insert = db.query(
+    "INSERT INTO chunks (doc_path, chunk_index, content, source_name, embedding) VALUES (?, ?, ?, ?, ?);",
+  );
+  insert.run(chunk.doc_path, chunk.chunk_index, chunk.content, sourceName, encodeVector(embedding));
+  const rowid = db.query("SELECT last_insert_rowid() AS id;").get() as { id: number } | null;
+  if (rowid === null) return;
+  db.query("INSERT INTO chunks_fts (rowid, content, source_name) VALUES (?, ?, ?);").run(
+    rowid.id,
+    chunk.content,
+    sourceName,
+  );
 }
 
 /** Load all stored chunks with their embeddings for brute-force search. */
@@ -266,81 +296,11 @@ export function listComponents(root: string): readonly string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Embedding providers
+// Embedding providers (re-exported from shared module)
 // ---------------------------------------------------------------------------
 
-/**
- * VoyageAI embedding provider. Requires `VOYAGE_API_KEY`. Uses `voyage-3`
- * (best for code/technical docs). Batches requests to stay under API limits.
- * Input type "document" is used for corpus ingestion; "query" for searches.
- */
-export async function voyageEmbed(
-  texts: string[],
-  isQuery = false,
-): Promise<Float32Array[]> {
-  const apiKey = process.env.VOYAGE_API_KEY;
-  if (!apiKey) throw new Error("VOYAGE_API_KEY not set");
-  const out: Float32Array[] = [];
-  for (let i = 0; i < texts.length; i += VOYAGE_BATCH_SIZE) {
-    const batch = texts.slice(i, i + VOYAGE_BATCH_SIZE);
-    const res = await fetch("https://api.voyageai.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "voyage-3",
-        input: batch,
-        input_type: isQuery ? "query" : "document",
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`VoyageAI embeddings failed: ${res.status} ${await res.text()}`);
-    }
-    const json = (await res.json()) as { data: Array<{ embedding: number[] }> };
-    for (const item of json.data) {
-      out.push(new Float32Array(item.embedding));
-    }
-  }
-  return out;
-}
-
-/**
- * Local ONNX embedding provider using `@xenova/transformers` with the
- * `Xenova/all-MiniLM-L6-v2` model (384-dimensional). The model downloads on
- * first use (~90MB). Used as a fallback when `VOYAGE_API_KEY` is unset.
- *
- * The transformers import is dynamic so the (heavy) dependency is only loaded
- * when actually needed — tests never hit this path.
- */
-export async function onnxEmbed(texts: string[]): Promise<Float32Array[]> {
-  // Lazy import — keeps the module load cheap and lets tests inject a mock
-  // without pulling the transformers runtime into the test process.
-  const mod = (await import("@xenova/transformers")) as {
-    pipeline: (task: string, model: string) => Promise<{
-      featureExtraction: (
-        texts: string[],
-        opts: { pooling: string; normalize: boolean },
-      ) => Promise<{ tolist: () => number[][] }>;
-    }>;
-  };
-  const extractor = await mod.pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-  const output = await extractor.featureExtraction(texts, { pooling: "mean", normalize: true });
-  return output.tolist().map((v) => new Float32Array(v));
-}
-
-/**
- * Unified embedding entrypoint: VoyageAI when the key is present, ONNX
- * otherwise. The `isQuery` flag is forwarded to VoyageAI (it is ignored by
- * the ONNX fallback, which uses a single encoder).
- */
-export async function embed(texts: string[], isQuery = false): Promise<Float32Array[]> {
-  if (process.env.VOYAGE_API_KEY) {
-    return voyageEmbed(texts, isQuery);
-  }
-  return onnxEmbed(texts);
-}
+// embed, EmbedFn, voyageEmbed, onnxEmbed, VOYAGE_BATCH_SIZE are imported
+// from ../embeddings.js at the top of this file.
 
 // ---------------------------------------------------------------------------
 // Tool implementations (callable directly, no pi session required)
@@ -382,6 +342,76 @@ export async function searchDocs(
   return scored.slice(0, limit);
 }
 
+function chunkKey(docPath: string, chunkIndex: number): string {
+  return `${docPath}::${chunkIndex}`;
+}
+
+export async function hybridSearch(
+  db: Database,
+  query: string,
+  limit: number,
+  embedFn: EmbedFn = embed,
+): Promise<DocResult[]> {
+  const chunks = loadAllChunks(db);
+  if (chunks.length === 0) return [];
+  const [queryVec] = await embedFn([query], true);
+  if (!queryVec) return [];
+
+  const denseResults = chunks
+    .map((c) => ({
+      doc_path: c.doc_path,
+      chunk_index: c.chunk_index,
+      content: c.content,
+      score: cosineSimilarity(queryVec, c.embedding),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit * 3);
+
+  const bm25Rows = ftsMatchQuery(db, "chunks_fts", query, limit * 3);
+  const bm25Results: DocResult[] = [];
+  if (bm25Rows.length > 0) {
+    const rowIds = bm25Rows.map((r) => r.rowid);
+    const placeholders = rowIds.map(() => "?").join(",");
+    const rows = db
+      .query(`SELECT id, doc_path, chunk_index, content FROM chunks WHERE id IN (${placeholders});`)
+      .all(...rowIds) as Array<{ id: number; doc_path: string; chunk_index: number; content: string }>;
+    const chunkMap = new Map<number, (typeof rows)[number]>();
+    for (const r of rows) chunkMap.set(r.id, r);
+    for (let i = 0; i < bm25Rows.length; i++) {
+      const chunk = chunkMap.get(bm25Rows[i]!.rowid);
+      if (!chunk) continue;
+      bm25Results.push({
+        doc_path: chunk.doc_path,
+        chunk_index: chunk.chunk_index,
+        content: chunk.content,
+        score: 0,
+      });
+    }
+  }
+
+  const fusionMap = new Map<string, { result: DocResult; score: number }>();
+  for (let i = 0; i < denseResults.length; i++) {
+    const r = denseResults[i]!;
+    const key = chunkKey(r.doc_path, r.chunk_index);
+    fusionMap.set(key, { result: r, score: 0.7 / (i + 1) });
+  }
+
+  for (let i = 0; i < bm25Results.length; i++) {
+    const r = bm25Results[i]!;
+    const key = chunkKey(r.doc_path, r.chunk_index);
+    const existing = fusionMap.get(key);
+    const rankScore = 0.3 / (i + 1);
+    if (existing) {
+      existing.score += rankScore;
+    } else {
+      fusionMap.set(key, { result: r, score: rankScore });
+    }
+  }
+
+  const fused = Array.from(fusionMap.values()).sort((a, b) => b.score - a.score);
+  return fused.slice(0, limit).map((f) => f.result);
+}
+
 /**
  * `docs_status` core: chunk count, distinct doc count, and the list of
  * subdirectories under the corpus root.
@@ -392,6 +422,43 @@ export function docsStatus(db: Database, corpusRoot: string): DocsStatus {
     doc_count: countDocs(db),
     components: listComponents(corpusRoot),
   };
+}
+
+export interface TieredDocsStatus extends DocsStatus {
+  readonly db_path: string;
+  readonly tier: "central" | "project";
+}
+
+export function docsStatusBoth(
+  centralDbPath: string,
+  projectDbPath: string,
+  corpusRoot: string,
+): { central: TieredDocsStatus | null; project: TieredDocsStatus } {
+  let central: TieredDocsStatus | null = null;
+  if (existsSync(centralDbPath)) {
+    const db = openVectorStore(centralDbPath);
+    try {
+      central = {
+        ...docsStatus(db, centralCorpusRoot()),
+        db_path: centralDbPath,
+        tier: "central",
+      };
+    } finally {
+      db.close();
+    }
+  }
+  const projectDb = openVectorStore(projectDbPath);
+  let project: TieredDocsStatus;
+  try {
+    project = {
+      ...docsStatus(projectDb, corpusRoot),
+      db_path: projectDbPath,
+      tier: "project",
+    };
+  } finally {
+    projectDb.close();
+  }
+  return { central, project };
 }
 
 /**
@@ -446,6 +513,79 @@ export async function docsRebuild(
   return { chunks: totalChunks, errors };
 }
 
+export async function docsRebuildTier(
+  tier: "central" | "project",
+  embedFn: EmbedFn = embed,
+): Promise<RebuildResult> {
+  const dbPath = tier === "central" ? centralDbPath() : defaultDbPath();
+  const corpusRoot = tier === "central" ? centralCorpusRoot() : defaultCorpusRoot();
+  const db = openVectorStore(dbPath);
+  let result: RebuildResult;
+  try {
+    clearChunks(db);
+    clearFts(db);
+    result = await docsRebuild(db, corpusRoot, embedFn);
+  } finally {
+    db.close();
+  }
+  return result;
+}
+
+export async function searchDocsBoth(
+  query: string,
+  limit = 5,
+  embedFn: EmbedFn = embed,
+  sources: SeedSource[] = [],
+): Promise<DocResult[]> {
+  const centralDb = existsSync(centralDbPath()) ? openVectorStore(centralDbPath()) : null;
+  const projectDb = openVectorStore(defaultDbPath());
+  let centralResults: DocResult[] = [];
+  let projectResults: DocResult[] = [];
+
+  try {
+    if (centralDb) {
+      centralResults = await hybridSearch(centralDb, query, limit, embedFn);
+    }
+    projectResults = await hybridSearch(projectDb, query, limit, embedFn);
+  } finally {
+    if (centralDb) centralDb.close();
+    projectDb.close();
+  }
+
+  const fusion = new Map<string, { result: DocResult; score: number }>();
+  for (let i = 0; i < centralResults.length; i++) {
+    const r = centralResults[i]!;
+    const key = `central:${r.doc_path}::${r.chunk_index}`;
+    fusion.set(key, {
+      result: { ...r, doc_path: `central:${r.doc_path}` },
+      score: 0.7 / (i + 1),
+    });
+  }
+  for (let i = 0; i < projectResults.length; i++) {
+    const r = projectResults[i]!;
+    const key = `project:${r.doc_path}::${r.chunk_index}`;
+    const existing = fusion.get(key);
+    const rankScore = 0.3 / (i + 1);
+    if (existing) {
+      existing.score += rankScore;
+    } else {
+      fusion.set(key, {
+        result: { ...r, doc_path: `project:${r.doc_path}` },
+        score: rankScore,
+      });
+    }
+  }
+
+  refreshStaleSources(centralDbPath(), sources, embedFn).catch((err) => {
+    console.error("[docs] background refresh failed:", err);
+  });
+
+  return Array.from(fusion.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((f) => f.result);
+}
+
 // ---------------------------------------------------------------------------
 // Tool definitions (TypeBox schemas + execute wrappers)
 // ---------------------------------------------------------------------------
@@ -460,7 +600,11 @@ type SearchDocsParams = Static<typeof SearchDocsParams>;
 
 const DocsStatusParams = Type.Object({});
 
-const DocsRebuildParams = Type.Object({});
+const DocsRebuildParams = Type.Object({
+  tier: Type.Union([Type.Literal("central"), Type.Literal("project")], {
+    description: "Which tier to rebuild",
+  }),
+});
 
 /**
  * Build the three docs tools. `deps` carries the DB path, corpus root, and
@@ -469,8 +613,10 @@ const DocsRebuildParams = Type.Object({});
  * tests.
  */
 export function buildDocsTools(deps: {
-  dbPath: string;
-  corpusRoot: string;
+  centralDbPath: string;
+  centralCorpusRoot: string;
+  projectDbPath: string;
+  projectCorpusRoot: string;
   embedFn?: EmbedFn;
 }): {
   search_docs: ToolDefinition<typeof SearchDocsParams, unknown>;
@@ -485,17 +631,12 @@ export function buildDocsTools(deps: {
     description: "Search the docs corpus via semantic embeddings",
     parameters: SearchDocsParams,
     execute: async (_toolCallId, params) => {
-      const db = openVectorStore(deps.dbPath);
-      try {
-        const limit = params.limit ?? 5;
-        const results = await searchDocs(db, params.query, limit, embedFn);
-        return {
-          content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
-          details: { count: results.length, results },
-        };
-      } finally {
-        db.close();
-      }
+      const limit = params.limit ?? 5;
+      const results = await searchDocsBoth(params.query, limit, embedFn);
+      return {
+        content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+        details: { count: results.length, results },
+      };
     },
   };
 
@@ -505,16 +646,11 @@ export function buildDocsTools(deps: {
     description: "Show docs corpus indexing status",
     parameters: DocsStatusParams,
     execute: async () => {
-      const db = openVectorStore(deps.dbPath);
-      try {
-        const status = docsStatus(db, deps.corpusRoot);
-        return {
-          content: [{ type: "text", text: JSON.stringify(status, null, 2) }],
-          details: status,
-        };
-      } finally {
-        db.close();
-      }
+      const status = docsStatusBoth(deps.centralDbPath, deps.projectDbPath, deps.projectCorpusRoot);
+      return {
+        content: [{ type: "text", text: JSON.stringify(status, null, 2) }],
+        details: status,
+      };
     },
   };
 
@@ -523,17 +659,19 @@ export function buildDocsTools(deps: {
     label: "Rebuild Docs Index",
     description: "Rebuild the docs corpus index from docs-corpus/",
     parameters: DocsRebuildParams,
-    execute: async () => {
-      const db = openVectorStore(deps.dbPath);
-      try {
-        const result = await docsRebuild(db, deps.corpusRoot, embedFn);
+    execute: async (_toolCallId, params) => {
+      const tier = params.tier;
+      if (tier !== "central" && tier !== "project") {
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-          details: result,
+          content: [{ type: "text", text: JSON.stringify({ error: `Invalid tier: ${tier}` }) }],
+          details: { error: `Invalid tier: ${tier}` },
         };
-      } finally {
-        db.close();
       }
+      const result = await docsRebuildTier(tier, embedFn);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        details: result,
+      };
     },
   };
 
@@ -551,9 +689,16 @@ export function buildDocsTools(deps: {
  * load.
  */
 export function register(pi: ExtensionAPI): void {
-  const dbPath = defaultDbPath();
-  const corpusRoot = defaultCorpusRoot();
-  const { search_docs, docs_status, docs_rebuild } = buildDocsTools({ dbPath, corpusRoot });
+  const cdb = centralDbPath();
+  const ccr = centralCorpusRoot();
+  const projectDbPath = defaultDbPath();
+  const projectCorpusRoot = defaultCorpusRoot();
+  const { search_docs, docs_status, docs_rebuild } = buildDocsTools({
+    centralDbPath: cdb,
+    centralCorpusRoot: ccr,
+    projectDbPath,
+    projectCorpusRoot,
+  });
   pi.registerTool(search_docs);
   pi.registerTool(docs_status);
   pi.registerTool(docs_rebuild);

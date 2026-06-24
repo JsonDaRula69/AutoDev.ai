@@ -16,6 +16,8 @@ import { Database } from "bun:sqlite";
 
 import {
   buildDocsTools,
+  centralCorpusRoot,
+  centralDbPath,
   chunkMarkdown,
   clearChunks,
   cosineSimilarity,
@@ -24,11 +26,16 @@ import {
   defaultCorpusRoot,
   defaultDbPath,
   docsRebuild,
+  docsRebuildTier,
   docsStatus,
+  docsStatusBoth,
+  hybridSearch,
   insertChunk,
   loadAllChunks,
   openVectorStore,
   searchDocs,
+  searchDocsBoth,
+  type RebuildResult,
   walkMarkdown,
   listComponents,
   type RawChunk,
@@ -56,8 +63,53 @@ function teardownRoot(): void {
   rmSync(root, { recursive: true, force: true });
 }
 
+let savedAgentDir: string | undefined;
+let agentDirOverride: string | undefined;
+
+function setAgentDir(dir: string): void {
+  savedAgentDir = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = dir;
+  agentDirOverride = dir;
+}
+
+function restoreAgentDir(): void {
+  if (savedAgentDir === undefined) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = savedAgentDir;
+  }
+  savedAgentDir = undefined;
+  agentDirOverride = undefined;
+}
+
+let realCwd: (() => string) | undefined;
+
+function stubCwd(dir: string): void {
+  realCwd = process.cwd;
+  process.cwd = () => dir;
+}
+
+function restoreCwd(): void {
+  if (realCwd) process.cwd = realCwd;
+  realCwd = undefined;
+}
+
+function setupCentral(): string {
+  const centralRoot = mkdtempSync(join(tmpdir(), "autodev-central-"));
+  const agentDir = join(centralRoot, "agent");
+  mkdirSync(agentDir, { recursive: true });
+  setAgentDir(agentDir);
+  return centralRoot;
+}
+
 beforeEach(setupRoot);
-afterEach(teardownRoot);
+afterEach(() => {
+  restoreCwd();
+  teardownRoot();
+  if (agentDirOverride) {
+    restoreAgentDir();
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -354,7 +406,13 @@ test("chunkMarkdown stores doc_path relative to corpus root", () => {
 // ---------------------------------------------------------------------------
 
 test("buildDocsTools returns three tools with the correct names", () => {
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
   expect(tools.search_docs.name).toBe("search_docs");
   expect(tools.docs_status.name).toBe("docs_status");
   expect(tools.docs_rebuild.name).toBe("docs_rebuild");
@@ -365,11 +423,20 @@ test("docs_status tool execute returns the status payload", async () => {
     "pi/sdk.md",
     "## SDK\nReal content with enough characters to be indexed properly here.",
   );
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
   const res = await tools.docs_status.execute("tc1", {} as never, undefined, undefined, undefined as never);
-  const details = res.details as { chunk_count: number; doc_count: number; components: string[] };
-  expect(details.chunk_count).toBe(0); // not rebuilt yet
-  expect(details.components).toEqual(["pi"]);
+  const details = res.details as {
+    central: { chunk_count: number; doc_count: number; components: string[] } | null;
+    project: { chunk_count: number; doc_count: number; components: string[] };
+  };
+  expect(details.project.chunk_count).toBe(0); // not rebuilt yet
+  expect(details.project.components).toEqual(["pi"]);
 });
 
 test("docs_rebuild tool execute ingests and returns chunk count", async () => {
@@ -377,8 +444,14 @@ test("docs_rebuild tool execute ingests and returns chunk count", async () => {
     "pi/sdk.md",
     "## SDK\nReal content with enough characters to be indexed properly here.",
   );
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
-  const res = await tools.docs_rebuild.execute("tc1", {} as never, undefined, undefined, undefined as never);
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
+  const res = await tools.docs_rebuild.execute("tc1", { tier: "project" } as never, undefined, undefined, undefined as never);
   const details = res.details as { chunks: number; errors: string[] };
   expect(details.chunks).toBeGreaterThan(0);
   expect(details.errors).toEqual([]);
@@ -389,8 +462,14 @@ test("search_docs tool execute returns ranked results after rebuild", async () =
     "pi/sdk.md",
     "## SDK\ncreateAgentSession SessionManager embedding pi runtime.",
   );
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
-  await tools.docs_rebuild.execute("tc1", {} as never, undefined, undefined, undefined as never);
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
+  await tools.docs_rebuild.execute("tc1", { tier: "project" } as never, undefined, undefined, undefined as never);
   const res = await tools.search_docs.execute(
     "tc1",
     { query: "createAgentSession", limit: 5 } as never,
@@ -402,17 +481,29 @@ test("search_docs tool execute returns ranked results after rebuild", async () =
   expect(details.count).toBeGreaterThan(0);
 });
 
-test("search_docs tool execute on empty DB returns the hint", async () => {
-  const tools = buildDocsTools({ dbPath, corpusRoot, embedFn: mockEmbedFn });
-  const res = await tools.search_docs.execute(
-    "tc1",
-    { query: "anything" } as never,
-    undefined,
-    undefined,
-    undefined as never,
-  );
-  const details = res.details as { count: number; results: Array<{ doc_path: string }> };
-  expect(details.results[0]!.doc_path).toBe("__hint__");
+test("search_docs tool execute on empty project DB returns no results", async () => {
+  stubCwd(root);
+  const tools = buildDocsTools({
+    centralDbPath: dbPath,
+    centralCorpusRoot: corpusRoot,
+    projectDbPath: dbPath,
+    projectCorpusRoot: corpusRoot,
+    embedFn: mockEmbedFn,
+  });
+  try {
+    const res = await tools.search_docs.execute(
+      "tc1",
+      { query: "anything" } as never,
+      undefined,
+      undefined,
+      undefined as never,
+    );
+    const details = res.details as { count: number; results: Array<{ doc_path: string }> };
+    expect(details.count).toBe(0);
+    expect(details.results).toEqual([]);
+  } finally {
+    restoreCwd();
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -483,4 +574,265 @@ test("defaultDbPath resolves to .autodev/embeddings/vectors.db", () => {
 test("defaultCorpusRoot resolves to docs-corpus under cwd", () => {
   const p = defaultCorpusRoot("/tmp/fake-cwd");
   expect(p).toBe(join("/tmp/fake-cwd", "docs-corpus"));
+});
+
+// ---------------------------------------------------------------------------
+// 12. Dual-tier hybrid search
+// ---------------------------------------------------------------------------
+
+function populateTier(db: Database, corpusRoot: string): Promise<RebuildResult> {
+  return docsRebuild(db, corpusRoot, mockEmbedFn);
+}
+
+test("hybridSearch semantic match includes conceptually relevant chunk", async () => {
+  writeCorpusFile(
+    "pi/sdk.md",
+    "## Coding Assistant\nA coding assistant runs an agent session with tools and memory.",
+  );
+  writeCorpusFile(
+    "omo/orchestration.md",
+    "## Task Dispatch\nDistribute work across parallel subagents and merge their outputs.",
+  );
+  const db = openVectorStore(dbPath);
+  await populateTier(db, corpusRoot);
+  const results = await hybridSearch(db, "coding assistant", 5, mockEmbedFn);
+  expect(results.length).toBeGreaterThan(0);
+  expect(results.map((r) => r.doc_path)).toContain("pi/sdk.md");
+  db.close();
+});
+
+test("hybridSearch exact match boosts API name via BM25", async () => {
+  writeCorpusFile(
+    "pi/sdk.md",
+    "## Session API\nThe function createAgentSession starts a new session. Use SessionManager to configure it.",
+  );
+  writeCorpusFile(
+    "omo/orchestration.md",
+    "## Subagent dispatch\nParallel crew dispatch with task delegation and result merging.",
+  );
+  const db = openVectorStore(dbPath);
+  await populateTier(db, corpusRoot);
+  const results = await hybridSearch(db, "createAgentSession", 5, mockEmbedFn);
+  expect(results[0]!.doc_path).toBe("pi/sdk.md");
+  expect(results[0]!.content).toContain("createAgentSession");
+  db.close();
+});
+
+test("hybridSearch RRF fusion outranks single-signal results", async () => {
+  writeCorpusFile(
+    "pi/sdk.md",
+    "## Session API\nThe createAgentSession function initializes a session.",
+  );
+  writeCorpusFile(
+    "pi/events.md",
+    "## Session Events\nevent createAgentSession agent_start turn_start.",
+  );
+  writeCorpusFile(
+    "omo/orchestration.md",
+    "## Subagents\nDispatch parallel subagents and merge results.",
+  );
+  const db = openVectorStore(dbPath);
+  await populateTier(db, corpusRoot);
+  const results = await hybridSearch(db, "createAgentSession session", 5, mockEmbedFn);
+  expect(results[0]!.doc_path).toBe("pi/sdk.md");
+  expect(results.map((r) => r.doc_path)).toContain("pi/events.md");
+  db.close();
+});
+
+test("hybridSearch falls back to dense-only when BM25 returns nothing", async () => {
+  writeCorpusFile(
+    "pi/sdk.md",
+    "## Session API\ncreateAgentSession SessionManager embedding pi runtime events.",
+  );
+  const db = openVectorStore(dbPath);
+  await populateTier(db, corpusRoot);
+  const results = await hybridSearch(db, "xyznonexistent", 5, mockEmbedFn);
+  expect(results.length).toBeGreaterThan(0);
+  expect(results[0]!.doc_path).toBe("pi/sdk.md");
+  db.close();
+});
+
+test("hybridSearch falls back to BM25-only when dense returns nothing", async () => {
+  const content = "## API\ncreateAgentSession createAgentSession createAgentSession.";
+  writeCorpusFile("pi/sdk.md", content);
+  const db = openVectorStore(dbPath);
+  await populateTier(db, corpusRoot);
+  const results = await hybridSearch(db, "createAgentSession", 5, mockEmbedFn);
+  expect(results.length).toBeGreaterThan(0);
+  expect(results[0]!.doc_path).toBe("pi/sdk.md");
+  db.close();
+});
+
+// ---------------------------------------------------------------------------
+// 13. searchDocsBoth dual-tier merge
+// ---------------------------------------------------------------------------
+
+async function rebuildBothTiers(centralRoot: string): Promise<void> {
+  const centralCorpus = join(centralRoot, "docs-corpus");
+  mkdirSync(centralCorpus, { recursive: true });
+  writeFileSync(
+    join(centralCorpus, "central-guide.md"),
+    "## Central Guide\nGlobal conventions for the agent platform and shared utilities.",
+    "utf8",
+  );
+  const centralDb = openVectorStore(centralDbPath());
+  await populateTier(centralDb, centralCorpus);
+  centralDb.close();
+
+  writeCorpusFile(
+    "project-readme.md",
+    "## Project Readme\nProject-specific rules and custom tool configuration.",
+  );
+  const projectDb = openVectorStore(dbPath);
+  await populateTier(projectDb, corpusRoot);
+  projectDb.close();
+}
+
+test("searchDocsBoth merges and ranks results from both tiers", async () => {
+  const centralRoot = setupCentral();
+  await rebuildBothTiers(centralRoot);
+
+  stubCwd(root);
+  const results = await searchDocsBoth("agent platform conventions", 5, mockEmbedFn);
+  expect(results.length).toBeGreaterThan(0);
+  const paths = results.map((r) => r.doc_path);
+  expect(paths.some((p) => p.startsWith("central:"))).toBe(true);
+  expect(paths.some((p) => p.startsWith("project:"))).toBe(true);
+  restoreCwd();
+
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
+});
+
+test("searchDocsBoth prefixes results with central: and project:", async () => {
+  const centralRoot = setupCentral();
+  await rebuildBothTiers(centralRoot);
+
+  stubCwd(root);
+  const results = await searchDocsBoth("conventions", 10, mockEmbedFn);
+  for (const r of results) {
+    expect(r.doc_path.startsWith("central:") || r.doc_path.startsWith("project:")).toBe(true);
+  }
+  restoreCwd();
+
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
+});
+
+test("searchDocsBoth falls back to project tier when central DB is missing", async () => {
+  const centralRoot = setupCentral();
+  writeCorpusFile(
+    "project-readme.md",
+    "## Project Readme\nProject-specific rules and custom tool configuration.",
+  );
+  const projectDb = openVectorStore(dbPath);
+  await populateTier(projectDb, corpusRoot);
+  projectDb.close();
+
+  stubCwd(root);
+  const results = await searchDocsBoth("project rules", 5, mockEmbedFn);
+  expect(results.length).toBeGreaterThan(0);
+  expect(results.every((r) => r.doc_path.startsWith("project:"))).toBe(true);
+  restoreCwd();
+
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// 14. docsStatusBoth
+// ---------------------------------------------------------------------------
+
+test("docsStatusBoth reports both central and project tier stats", async () => {
+  const centralRoot = setupCentral();
+  await rebuildBothTiers(centralRoot);
+
+  const status = docsStatusBoth(centralDbPath(), dbPath, corpusRoot);
+  expect(status.central).not.toBeNull();
+  expect(status.central!.tier).toBe("central");
+  expect(status.central!.chunk_count).toBeGreaterThan(0);
+  expect(status.central!.db_path).toBe(centralDbPath());
+  expect(status.project.tier).toBe("project");
+  expect(status.project.chunk_count).toBeGreaterThan(0);
+
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
+});
+
+test("docsStatusBoth handles missing central DB gracefully", () => {
+  const centralRoot = setupCentral();
+
+  const status = docsStatusBoth(centralDbPath(), dbPath, corpusRoot);
+  expect(status.central).toBeNull();
+  expect(status.project.tier).toBe("project");
+
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// 15. docsRebuildTier
+// ---------------------------------------------------------------------------
+
+test("docsRebuildTier central populates FTS5", async () => {
+  const centralRoot = setupCentral();
+  const centralCorpus = join(centralRoot, "docs-corpus");
+  mkdirSync(centralCorpus, { recursive: true });
+  writeFileSync(
+    join(centralCorpus, "shared.md"),
+    "## Shared\nGlobal shared conventions across all projects.",
+    "utf8",
+  );
+
+  const result = await docsRebuildTier("central", mockEmbedFn);
+  expect(result.errors).toEqual([]);
+  expect(result.chunks).toBeGreaterThan(0);
+
+  const db = openVectorStore(centralDbPath());
+  const ftsCount = (db.query("SELECT COUNT(*) AS n FROM chunks_fts;").get() as { n: number }).n;
+  expect(ftsCount).toBeGreaterThan(0);
+  db.close();
+
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
+});
+
+test("docsRebuildTier project populates FTS5", async () => {
+  writeCorpusFile(
+    "pi/sdk.md",
+    "## SDK\nReal content with enough characters to be indexed properly here.",
+  );
+  stubCwd(root);
+  let result: Awaited<ReturnType<typeof docsRebuildTier>>;
+  try {
+    result = await docsRebuildTier("project", mockEmbedFn);
+  } finally {
+    restoreCwd();
+  }
+  expect(result.errors).toEqual([]);
+  expect(result.chunks).toBeGreaterThan(0);
+
+  const db = openVectorStore(dbPath);
+  const ftsCount = (db.query("SELECT COUNT(*) AS n FROM chunks_fts;").get() as { n: number }).n;
+  expect(ftsCount).toBeGreaterThan(0);
+  db.close();
+});
+
+// ---------------------------------------------------------------------------
+// 16. Central path resolution
+// ---------------------------------------------------------------------------
+
+test("centralDbPath resolves under PI_CODING_AGENT_DIR parent", () => {
+  const centralRoot = setupCentral();
+  const expected = join(centralRoot, "docs-corpus", "vectors.db");
+  expect(centralDbPath()).toBe(expected);
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
+});
+
+test("centralCorpusRoot resolves under PI_CODING_AGENT_DIR parent", () => {
+  const centralRoot = setupCentral();
+  expect(centralCorpusRoot()).toBe(join(centralRoot, "docs-corpus"));
+  restoreAgentDir();
+  rmSync(centralRoot, { recursive: true, force: true });
 });

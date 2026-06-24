@@ -7,6 +7,7 @@
  * `approveDecision`, the single place that knows the threshold.
  */
 import { Database } from "bun:sqlite";
+import { ftsMatchQuery } from "../fts-utils.js";
 
 /** Decision lifecycle status. */
 export type DecisionStatus = "draft" | "under-review" | "ratified" | "archived" | "rejected";
@@ -203,13 +204,9 @@ export function searchDecisions(
   query: string,
   includeDrafts = false,
 ): SearchResult {
-  const ftsRows = db
-    .prepare(
-      "SELECT rowid AS id FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank",
-    )
-    .all(query) as readonly { id: number }[];
+  const ftsRows = ftsMatchQuery(db, "decisions_fts", query);
   if (ftsRows.length === 0) return { results: [] };
-  const ids = ftsRows.map((r) => r.id);
+  const ids = ftsRows.map((r) => r.rowid);
   const placeholders = ids.map(() => "?").join(",");
   const statusClause = includeDrafts ? "" : " AND status = 'ratified'";
   const orderByCase = ids.map((id, i) => `WHEN ${id} THEN ${i}`).join(" ");

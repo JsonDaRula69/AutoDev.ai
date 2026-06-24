@@ -209,7 +209,8 @@ export async function runInit(deps: InitModuleDeps): Promise<InstallFixResult[]>
 
 // ---- Step implementations ----
 
-/** Step 1: Create `.autodev/` subdirs (9 dirs, not config/skills/reference). */
+/** Step 1: Create `.autodev/` subdirs (9 dirs, not config/skills/reference)
+ * and `<project>/docs-corpus/`. */
 function runStep1Dirs(projectRoot: string, notify: (m: string, l: "info" | "warning" | "error") => void): InstallFixResult {
   notify("Creating .autodev/ subdirectories...", "info");
   const base = join(projectRoot, ".autodev");
@@ -217,7 +218,9 @@ function runStep1Dirs(projectRoot: string, notify: (m: string, l: "info" | "warn
     for (const dir of AUTODEV_SUBDIRS) {
       mkdirSync(join(base, dir), { recursive: true });
     }
-    return { name: "autodev-dirs", ok: true, detail: `Created ${AUTODEV_SUBDIRS.length} subdirs.` };
+    // docs-corpus lives at project root, not under .autodev/
+    mkdirSync(join(projectRoot, "docs-corpus"), { recursive: true });
+    return { name: "autodev-dirs", ok: true, detail: `Created ${AUTODEV_SUBDIRS.length} subdirs + docs-corpus.` };
   } catch (e) {
     return { name: "autodev-dirs", ok: false, detail: `Failed: ${(e as Error).message}` };
   }

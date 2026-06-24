@@ -18,8 +18,9 @@
  *   autodev onboard            — launch Harbor Master onboarding
  *   autodev status             — heartbeat state + active project
  *   autodev stop               — stop heartbeat timer
- *   autodev docs query <text> — docs query stub (print message)
- *   autodev docs rebuild       — docs rebuild stub (print message)
+ *   autodev docs query <text>      — search both project and central docs
+ *   autodev docs rebuild central     — reindex the central docs corpus
+ *   autodev docs rebuild project     — reindex the project docs corpus
  *   autodev debate start <topic>  — debate start stub (print message)
  *   autodev debate status      — debate status stub (print message)
  *   autodev stop-continuation  — stop all continuation loops
@@ -345,14 +346,52 @@ async function cmdDocs(parts: string[]): Promise<number> {
       notify("Usage: autodev docs query <search text>", "info");
       return 0;
     }
+    const { searchDocsBoth } = await import(
+      "../extensions/autodev/docs/index.js"
+    );
+    const results = await searchDocsBoth(query, 5);
     notify(`Searching docs for: "${query}"`, "info");
-    notify("Docs query dispatched. Results will appear in the session.", "info");
-  } else if (sub === "rebuild") {
-    notify("Rebuilding docs corpus index...", "info");
-    notify("Docs rebuild dispatched.", "info");
-  } else {
-    notify("Usage: autodev docs query <text> | autodev docs rebuild", "info");
+    if (results.length === 0) {
+      notify("No results found.", "info");
+      return 0;
+    }
+    for (const r of results) {
+      notify(`${r.doc_path} (#${r.chunk_index}) score=${r.score.toFixed(4)}`, "info");
+      notify(r.content, "info");
+      notify("", "info");
+    }
+    return 0;
   }
+
+  if (sub === "rebuild") {
+    const tier = parts[1]?.toLowerCase() ?? "";
+    if (tier === "central" || tier === "project") {
+      const { docsRebuildTier } = await import(
+        "../extensions/autodev/docs/index.js"
+      );
+      const { embed } = await import(
+        "../extensions/autodev/embeddings.js"
+      );
+      const result = await docsRebuildTier(tier, embed);
+      notify(`Rebuilding ${tier} docs corpus index...`, "info");
+      notify(`${result.chunks} chunks indexed, ${result.errors.length} errors`, "info");
+      for (const err of result.errors) {
+        notify(err, "error");
+      }
+      return 0;
+    }
+    if (tier === "") {
+      notify("Usage: autodev docs rebuild <central|project>", "info");
+      return 0;
+    }
+    notify(`Unknown tier: ${tier}. Use 'central' or 'project'.`, "error");
+    return 1;
+  }
+
+  notify(
+    "Usage: autodev docs query <text> | autodev docs rebuild <central|project>",
+    "info",
+  );
   return 0;
 }
 
@@ -437,7 +476,7 @@ async function main(): Promise<number> {
 
 /** Canonical subcommand list for help text. */
 export const HELP_SUBCOMMANDS =
-  "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation";
+  "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation";
 
 if (import.meta.main) {
   main()

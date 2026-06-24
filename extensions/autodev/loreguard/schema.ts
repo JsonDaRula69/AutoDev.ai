@@ -6,9 +6,13 @@
  * per-approver votes that drive the 3-distinct-approver auto-ratification rule.
  */
 import { Database } from "bun:sqlite";
+import {
+  SQLITE_MIN_VERSION,
+  compareVersions,
+  checkSqliteVersion,
+} from "../fts-utils.js";
 
-/** Minimum SQLite version required for FTS5 + external-content tables. */
-export const SQLITE_MIN_VERSION = "3.9.0";
+export { SQLITE_MIN_VERSION, compareVersions, checkSqliteVersion };
 
 /**
  * DDL executed once per DB connection to create all tables, triggers, and the
@@ -54,35 +58,7 @@ export const SCHEMA_SQL: readonly string[] = [
    )`,
 ];
 
-/**
- * Compare two dotted version strings. Returns negative/zero/positive like a
- * normal comparator. Used to verify FTS5 availability before opening the DB.
- */
-export function compareVersions(a: string, b: string): number {
-  const pa = a.split(".");
-  const pb = b.split(".");
-  const len = Math.max(pa.length, pb.length);
-  for (let i = 0; i < len; i++) {
-    const na = Number.parseInt(pa[i] ?? "0", 10);
-    const nb = Number.parseInt(pb[i] ?? "0", 10);
-    if (na !== nb) return na - nb;
-  }
-  return 0;
-}
-
-/**
- * Verify the underlying SQLite library supports FTS5. Throws a clear error
- * (not a silent failure) when the version is below the minimum.
- */
-export function checkSqliteVersion(db: Database): void {
-  const row = db.prepare("SELECT sqlite_version() AS v").get() as { v: string };
-  const version: string = row.v;
-  if (compareVersions(version, SQLITE_MIN_VERSION) < 0) {
-    throw new Error(
-      `Loreguard requires SQLite >= ${SQLITE_MIN_VERSION} for FTS5 support, got ${version}`,
-    );
-  }
-}
+// compareVersions and checkSqliteVersion are now in ../fts-utils.js
 
 /**
  * Create all tables, triggers, and the FTS5 index on the given DB connection.

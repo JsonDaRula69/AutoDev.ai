@@ -7,8 +7,9 @@
  *   autodev onboard         — launch Harbor Master onboarding
  *   autodev status          — show heartbeat state and work items
  *   autodev stop            — stop the heartbeat timer
- *   autodev docs query ...  — search the docs corpus
- *   autodev docs rebuild    — reingest docs-corpus/
+ *   autodev docs query <text>  — search both project and central docs
+ *   autodev docs rebuild central — reindex the central docs corpus
+ *   autodev docs rebuild project — reindex the project docs corpus
  *   autodev debate start .. — start a debate
  *   autodev debate status   — show active debate state
  *   autodev config [sub]    — interactive secrets configuration (llm, voyage, discord, github)
@@ -25,7 +26,7 @@ import { stopAllLoops } from "../autonomy/continuation.js";
 
 export function registerCommands(pi: ExtensionAPI): void {
   pi.registerCommand("autodev", {
-    description: "AutoDev — autonomous engineering team commands. Subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+    description: "AutoDev — autonomous engineering team commands. Subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       const parts = trimmed.split(/\s+/);
@@ -62,7 +63,7 @@ export function registerCommands(pi: ExtensionAPI): void {
           break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation",
             "info",
           );
       }
@@ -294,14 +295,52 @@ async function handleDocs(parts: string[], ctx: ExtensionCommandContext): Promis
       ctx.ui.notify("Usage: autodev docs query <search text>", "info");
       return;
     }
+    const { searchDocsBoth } = await import("../docs/index.js");
+    const results = await searchDocsBoth(query, 5);
     ctx.ui.notify(`Searching docs for: "${query}"`, "info");
-    ctx.ui.notify("Docs query dispatched. Results will appear in the session.", "info");
-  } else if (sub === "rebuild") {
-    ctx.ui.notify("Rebuilding docs corpus index...", "info");
-    ctx.ui.notify("Docs rebuild dispatched.", "info");
-  } else {
-    ctx.ui.notify("Usage: autodev docs query <text> | autodev docs rebuild", "info");
+    if (results.length === 0) {
+      ctx.ui.notify("No results found.", "info");
+      return;
+    }
+    for (const r of results) {
+      ctx.ui.notify(
+        `${r.doc_path} (#${r.chunk_index}) score=${r.score.toFixed(4)}`,
+        "info",
+      );
+      ctx.ui.notify(r.content, "info");
+      ctx.ui.notify("", "info");
+    }
+    return;
   }
+
+  if (sub === "rebuild") {
+    const tier = parts[1]?.toLowerCase() ?? "";
+    if (tier === "central" || tier === "project") {
+      const { docsRebuildTier } = await import("../docs/index.js");
+      const { embed } = await import("../embeddings.js");
+      const result = await docsRebuildTier(tier, embed);
+      ctx.ui.notify(`Rebuilding ${tier} docs corpus index...`, "info");
+      ctx.ui.notify(
+        `${result.chunks} chunks indexed, ${result.errors.length} errors`,
+        "info",
+      );
+      for (const err of result.errors) {
+        ctx.ui.notify(err, "error");
+      }
+      return;
+    }
+    if (tier === "") {
+      ctx.ui.notify("Usage: autodev docs rebuild <central|project>", "info");
+      return;
+    }
+    ctx.ui.notify(`Unknown tier: ${tier}. Use 'central' or 'project'.`, "error");
+    return;
+  }
+
+  ctx.ui.notify(
+    "Usage: autodev docs query <text> | autodev docs rebuild <central|project>",
+    "info",
+  );
 }
 
 async function handleDebate(parts: string[], ctx: ExtensionCommandContext): Promise<void> {

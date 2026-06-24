@@ -22,3 +22,6 @@ dist/
 
 # Session continuation state (runtime only)
 .omo/run-continuation/
+
+# Docs corpus (generated, not source)
+docs-corpus/

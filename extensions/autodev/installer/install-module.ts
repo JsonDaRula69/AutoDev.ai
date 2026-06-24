@@ -24,6 +24,8 @@ import { installMissingTools, type Platform } from "./tools.js";
 import { validateAndCreateConfig } from "./config-defaults.js";
 import { markStepCompleted, isStepCompleted } from "./state.js";
 import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
+import { openVectorStore } from "../docs/index.js";
+import { createCentralDbSchema } from "../docs/seeding.js";
 
 // ---- Types ----
 
@@ -197,20 +199,23 @@ async function runConfigFilesPhase(deps: InstallModuleDeps): Promise<InstallFixR
   notify("Symlinking .pi/ config files into ~/.AutoDev/ if missing...", "info");
   const configResults = await validateAndCreateConfig(packageRoot);
   const failed = configResults.filter((r) => !r.ok);
+  const agentDir = getAgentDir();
+  const centralDocsResult = createCentralDocsStructure(agentDir);
   if (failed.length === 0) {
     const created = configResults.filter((r) => r.created);
+    const configDetail = created.length > 0
+      ? `Created: ${created.map((r) => r.name).join(", ")}`
+      : "All config files already present.";
     return {
       name: "config-files",
-      ok: true,
-      detail: created.length > 0
-        ? `Created: ${created.map((r) => r.name).join(", ")}`
-        : "All config files already present.",
+      ok: centralDocsResult.ok,
+      detail: `${configDetail}; Central docs: ${centralDocsResult.detail}`,
     };
   }
   return {
     name: "config-files",
     ok: false,
-    detail: failed.map((r) => `${r.name}: ${r.detail}`).join("; "),
+    detail: `${failed.map((r) => `${r.name}: ${r.detail}`).join("; ")}; Central docs: ${centralDocsResult.detail}`,
   };
 }
 
@@ -282,6 +287,24 @@ async function runMagicContextSetupPhase(
     ok: true,
     detail: "Magic Context registered and magic-context.jsonc verified.",
   };
+}
+
+// ---- Public helpers ----
+
+export function createCentralDocsStructure(agentDir: string): { ok: boolean; detail: string } {
+  try {
+    const centralHome = join(agentDir, "..", "docs-corpus");
+    mkdirSync(centralHome, { recursive: true });
+    const db = openVectorStore(join(centralHome, "vectors.db"));
+    try {
+      createCentralDbSchema(db);
+      return { ok: true, detail: `initialized at ${centralHome}` };
+    } finally {
+      db.close();
+    }
+  } catch (e) {
+    return { ok: false, detail: `failed: ${(e as Error).message}` };
+  }
 }
 
 // ---- Helpers ----
