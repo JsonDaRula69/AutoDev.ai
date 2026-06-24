@@ -48,6 +48,8 @@ export interface InstallModuleDeps {
   readonly packageRoot?: string;
   /** If true, completed steps are skipped. Defaults to true. */
   readonly skipCompleted?: boolean;
+  /** Override provider installation (tests). When set, replaces live SDK calls. */
+  readonly providerInstallOverride?: (source: string) => Promise<{ ok: boolean; detail: string; alreadyInstalled: boolean }>;
 }
 
 // ---- Constants (mirror steps.ts so this module is standalone) ----
@@ -178,19 +180,21 @@ async function runProviderPhase(
   deps: InstallModuleDeps,
   skipCompleted: boolean,
 ): Promise<InstallFixResult> {
-  const { projectRoot, notify } = deps;
+  const { projectRoot, notify, providerInstallOverride } = deps;
 
   if (skipCompleted && await isStepCompleted(projectRoot, STEP_PROVIDER, "install")) {
     return { name: "ollama-cloud-provider", ok: true, detail: "Already completed (step 2)." };
   }
 
   const agentDir = getAgentDir();
-  const result = await installProvider({
-    source: OLLAMA_CLOUD_SOURCE,
-    cwd: agentDir,
-    agentDir,
-    notify,
-  });
+  const result = providerInstallOverride
+    ? await providerInstallOverride(OLLAMA_CLOUD_SOURCE)
+    : await installProvider({
+        source: OLLAMA_CLOUD_SOURCE,
+        cwd: agentDir,
+        agentDir,
+        notify,
+      });
 
   await markStepCompleted(projectRoot, STEP_PROVIDER, "install");
 
@@ -273,13 +277,12 @@ async function runMagicContextSetupPhase(
   configOk: boolean,
   skipCompleted: boolean,
 ): Promise<InstallFixResult> {
-  const { projectRoot, notify, execSyncOverride } = deps;
+  const { projectRoot, notify, execSyncOverride, providerInstallOverride } = deps;
 
   if (skipCompleted && await isStepCompleted(projectRoot, STEP_CONFIG_AND_MC, "install")) {
     return { name: "magic-context-setup", ok: true, detail: "Already completed (step 3)." };
   }
 
-  // If config file download failed, we cannot reliably proceed with MC registration.
   if (!configOk) {
     return {
       name: "magic-context-setup",
@@ -288,10 +291,6 @@ async function runMagicContextSetupPhase(
     };
   }
 
-  // Decision #14: the MC pre-check is a simple "does magic-context.jsonc exist?"
-  // in the central agent dir. T1's validateAndCreateConfig writes AutoDev defaults
-  // there, so this is a verify-only step. If the file is missing (e.g. T1 write
-  // failed or was skipped), write the defaults here as a self-healing fallback.
   const agentDir = getAgentDir();
   const mcPath = join(agentDir, "magic-context.jsonc");
   if (!existsSync(mcPath)) {
@@ -308,17 +307,15 @@ async function runMagicContextSetupPhase(
     }
   }
 
-  // Register the Magic Context pi extension programmatically via the SDK.
-  // This replaces the old `pi install npm:@cortexkit/pi-magic-context`
-  // shell-out which required the `pi` binary on PATH (it isn't — Bun only
-  // links the top-level package's bins, not transitive dependency bins).
   notify(`Installing ${MC_INSTALL_SOURCE} via SDK...`, "info");
-  const mcInstallResult = await installProvider({
-    source: MC_INSTALL_SOURCE,
-    cwd: agentDir,
-    agentDir,
-    notify,
-  });
+  const mcInstallResult = providerInstallOverride
+    ? await providerInstallOverride(MC_INSTALL_SOURCE)
+    : await installProvider({
+        source: MC_INSTALL_SOURCE,
+        cwd: agentDir,
+        agentDir,
+        notify,
+      });
   if (!mcInstallResult.ok) {
     return {
       name: "magic-context-setup",
@@ -327,7 +324,6 @@ async function runMagicContextSetupPhase(
     };
   }
 
-  // Verify the config file exists after registration.
   if (!existsSync(mcPath)) {
     return {
       name: "magic-context-setup",

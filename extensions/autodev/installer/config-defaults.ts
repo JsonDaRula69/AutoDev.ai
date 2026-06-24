@@ -54,7 +54,7 @@ function defaultPackageRoot(): string {
     "install",
     "global",
     "node_modules",
-    "autodev",
+    "autodev-ai",
   );
 }
 

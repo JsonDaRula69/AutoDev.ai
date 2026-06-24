@@ -92,6 +92,21 @@ function makeRecordingExec(calls: ExecCall[]): (cmd: string, o?: ExecSyncOptions
   };
 }
 
+/** Mock provider install that never touches the system. Returns success for any source. */
+function mockProviderInstallOk(): (source: string) => Promise<{ ok: boolean; detail: string; alreadyInstalled: boolean }> {
+  return async () => ({ ok: true, detail: "mocked", alreadyInstalled: false });
+}
+
+/** Mock provider install that simulates failure. */
+function mockProviderInstallFail(): (source: string) => Promise<{ ok: boolean; detail: string; alreadyInstalled: boolean }> {
+  return async () => ({ ok: false, detail: "mock failure", alreadyInstalled: false });
+}
+
+/** Mock provider install that reports already installed. */
+function mockProviderInstallAlready(): (source: string) => Promise<{ ok: boolean; detail: string; alreadyInstalled: boolean }> {
+  return async () => ({ ok: true, detail: "already installed", alreadyInstalled: true });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -116,9 +131,9 @@ test("runInstallFixes returns exactly 4 results and no doctor phase (happy path)
       execSyncOverride: makeRecordingExec(calls),
       packageRoot,
       skipCompleted: false,
+      providerInstallOverride: mockProviderInstallOk(),
     });
 
-    // THEN: exactly 4 results, names match the 4 phases.
     expect(results.length).toBe(4);
     expect(results.map((r: any) => r.name)).toEqual([
       "tools",
@@ -126,13 +141,11 @@ test("runInstallFixes returns exactly 4 results and no doctor phase (happy path)
       "config-files",
       "magic-context-setup",
     ]);
-    // No "magic-context-doctor" result exists.
     expect(results.find((r: any) => r.name === "magic-context-doctor")).toBeUndefined();
-
-    // Tools and config-files should be ok on the happy path.
-    // Provider and MC setup may succeed or fail depending on network/SDK availability.
     expect(results[0].ok).toBe(true);  // tools
+    expect(results[1].ok).toBe(true);  // ollama-cloud-provider
     expect(results[2].ok).toBe(true);  // config-files
+    expect(results[3].ok).toBe(true);  // magic-context-setup
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;
@@ -161,28 +174,22 @@ test("MC setup uses SDK installProvider, no interactive wizard or pi install she
       execSyncOverride: makeRecordingExec(calls),
       packageRoot,
       skipCompleted: false,
+      providerInstallOverride: mockProviderInstallOk(),
     });
 
-    // THEN: no `pi install` shell-out command was made — the MC extension
-    // is now installed programmatically via DefaultPackageManager, not exec.
     const piInstallCall = calls.find((c) => c.command.includes("pi install"));
     expect(piInstallCall).toBeUndefined();
 
-    // AND: no interactive `magic-context setup` wizard was invoked.
     const wizardCall = calls.find((c) => c.command.includes("magic-context") && c.command.includes("setup"));
     expect(wizardCall).toBeUndefined();
-    // AND: no `@clack/prompts` or `magic-context doctor` call.
     const doctorCall = calls.find((c) => c.command.includes("magic-context") && c.command.includes("doctor"));
     expect(doctorCall).toBeUndefined();
 
-    // AND: magic-context.jsonc exists in the agent dir (written by self-heal
-    // before the SDK installProvider call).
     expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
 
-    // AND: the MC setup result exists (ok may be true or false depending on
-    // whether the SDK install succeeds in the test env — network dependent).
     const mcResult = results.find((r: any) => r.name === "magic-context-setup");
     expect(mcResult).toBeDefined();
+    expect(mcResult.ok).toBe(true);
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;
@@ -211,20 +218,17 @@ test("MC setup handles installProvider failure gracefully", async () => {
       execSyncOverride: makeRecordingExec(calls),
       packageRoot,
       skipCompleted: false,
+      providerInstallOverride: mockProviderInstallFail(),
     });
 
-    // THEN: still 4 results.
     expect(results.length).toBe(4);
 
-    // AND: MC setup result exists — it may be ok (if SDK install succeeds
-    // in test env) or not ok (if network/SDK fails). Either is acceptable;
-    // the test verifies the result shape, not a specific network outcome.
     const mcResult = results.find((r: any) => r.name === "magic-context-setup");
     expect(mcResult).toBeDefined();
-    expect(typeof mcResult.ok).toBe("boolean");
+    expect(mcResult.ok).toBe(false);
     expect(typeof mcResult.detail).toBe("string");
+    expect(mcResult.detail).toContain("mock failure");
 
-    // AND: no doctor phase result.
     expect(results.find((r: any) => r.name === "magic-context-doctor")).toBeUndefined();
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
@@ -253,29 +257,27 @@ test("MC setup self-heals: writes magic-context.jsonc if missing before registra
       execSyncOverride: makeRecordingExec([]),
       packageRoot,
       skipCompleted: false,
+      providerInstallOverride: mockProviderInstallOk(),
     });
 
-    // The magic-context.jsonc should exist after the first run (written by
-    // the self-heal logic before the SDK installProvider call).
     expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
 
-    // WHEN: delete the jsonc to simulate it going missing.
     rmSync(join(agentDir, "magic-context.jsonc"), { force: true });
     expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(false);
 
-    // AND: run again — MC phase should self-heal (re-write the jsonc).
     const second = await runInstallFixes({
       projectRoot,
       notify: () => {},
       execSyncOverride: makeRecordingExec([]),
       packageRoot,
       skipCompleted: false,
+      providerInstallOverride: mockProviderInstallOk(),
     });
 
-    // THEN: jsonc exists again (self-heal re-wrote it).
     expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
     const mcSecond = second.find((r: any) => r.name === "magic-context-setup");
     expect(mcSecond).toBeDefined();
+    expect(mcSecond.ok).toBe(true);
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;

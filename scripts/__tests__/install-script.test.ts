@@ -52,9 +52,9 @@ test("install.sh creates ~/.AutoDev/config/ and copies docs-sources.yaml", () =>
   expect(installSh).toContain("docs-sources.yaml");
 });
 
-test("pi install command appears after bun install -g autodev", () => {
+test("pi install command appears after bun install -g autodev-ai", () => {
   const installSh = readFileSync(join(PROJECT_ROOT, "install.sh"), "utf-8");
-  const bunInstallIdx = installSh.indexOf("bun install -g autodev");
+  const bunInstallIdx = installSh.indexOf("bun install -g autodev-ai");
   const piInstallIdx = installSh.indexOf("pi-ollama-cloud");
   expect(bunInstallIdx).toBeGreaterThan(-1);
   expect(piInstallIdx).toBeGreaterThan(bunInstallIdx);

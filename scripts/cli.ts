@@ -423,6 +423,21 @@ async function cmdStopContinuation(): Promise<number> {
   return 0;
 }
 
+async function cmdUninstall(): Promise<number> {
+  const projectRoot = process.cwd();
+  const { runUninstall } = await import(
+    "../extensions/autodev/installer/uninstall-module.js"
+  );
+  const results = await runUninstall({ projectRoot, notify });
+  notify("", "info");
+  for (const r of results) {
+    const icon = r.ok ? "✓" : "✗";
+    notify(`  ${icon} ${r.name}: ${r.detail}`, r.ok ? "info" : "error");
+  }
+  const failed = results.filter((r) => !r.ok);
+  return failed.length > 0 ? 1 : 0;
+}
+
 // ---- Main ----
 
 async function main(): Promise<number> {
@@ -467,6 +482,9 @@ async function main(): Promise<number> {
     case "stop-continuation":
       return cmdStopContinuation();
 
+    case "uninstall":
+      return cmdUninstall();
+
     default:
       notify(`Unknown subcommand: ${subcommand}`, "error");
       notify(HELP_SUBCOMMANDS, "info");
@@ -476,7 +494,7 @@ async function main(): Promise<number> {
 
 /** Canonical subcommand list for help text. */
 export const HELP_SUBCOMMANDS =
-  "AutoDev subcommands: init, onboard, doctor, config, status, stop, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation";
+  "AutoDev subcommands: init, onboard, doctor, config, status, stop, uninstall, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation";
 
 if (import.meta.main) {
   main()

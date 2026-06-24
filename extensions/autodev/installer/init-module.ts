@@ -539,7 +539,7 @@ async function runStep10Onboard(
 function defaultPackageRoot(): string {
   return join(
     process.env.HOME ?? "",
-    ".bun", "install", "global", "node_modules", "autodev",
+    ".bun", "install", "global", "node_modules", "autodev-ai",
   );
 }
 

@@ -49,14 +49,16 @@ fi
 export PATH="$HOME/.bun/bin:$PATH"
 
 # ── Step 2: Install autodev globally ──────────────────────────────────────
+# Package is published as `autodev-ai` on npm (the `autodev` name is taken by
+# an unrelated 2017-era dev-server tool). The bin target remains `autodev`.
 # If a stale/root-owned cache causes EACCES, clear it and retry once.
 echo "Installing autodev globally..."
-if ! bun install -g autodev 2>&1; then
+if ! bun install -g autodev-ai 2>&1; then
   if [ -d "$HOME/.bun/install/cache" ]; then
     echo "Bun cache may be stale or have wrong permissions. Clearing cache and retrying..."
     rm -rf "$HOME/.bun/install/cache"
   fi
-  bun install -g autodev
+  bun install -g autodev-ai
 fi
 
 # ── Step 2.5: Install ollama-cloud provider ───────────────────────────────
