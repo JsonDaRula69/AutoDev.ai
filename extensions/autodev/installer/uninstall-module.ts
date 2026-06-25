@@ -17,6 +17,8 @@ export interface UninstallModuleDeps {
 const PI_PROVIDER_SOURCES = [
   "npm:pi-ollama-cloud",
   "npm:@cortexkit/pi-magic-context",
+  "npm:@cortexkit/aft-pi",
+  "npm:@dreki-gg/pi-lsp",
 ] as const;
 
 const SHELL_RC_CANDIDATES = [
@@ -33,8 +35,8 @@ export async function runUninstall(deps: UninstallModuleDeps): Promise<Uninstall
   const results: UninstallResult[] = [];
   const { projectRoot, notify } = deps;
 
-  results.push(removeCentralConfigHome(deps));
   results.push(await removePiProviders(deps));
+  results.push(removeCentralConfigHome(deps));
   results.push(removeShellEnvLines(deps));
   results.push(removeProjectStateFiles(projectRoot));
 

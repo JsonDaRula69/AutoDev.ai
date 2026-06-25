@@ -4,7 +4,7 @@
  *
  * Tests (Given/When/Then):
  *  - Removes central config home (~/.AutoDev/) when present
- *  - Calls uninstall for both pi providers (ollama-cloud, magic-context)
+ *  - Calls uninstall for all pi providers (ollama-cloud, magic-context, aft-pi, pi-lsp)
  *  - Removes PI_CODING_AGENT_DIR lines from shell rc files
  *  - Removes project state files (install-state.json, config-state.json, init-state.json)
  *  - Idempotent: re-running on a clean machine returns all ok with "already absent" details
@@ -96,7 +96,7 @@ test("removes central config home when present", async () => {
   expect(centralResult.ok).toBe(true);
 });
 
-test("calls uninstall for both pi providers", async () => {
+test("calls uninstall for all pi providers", async () => {
   const removedSources: string[] = [];
   const { fn } = makeNotify();
   await runUninstall({
@@ -107,6 +107,8 @@ test("calls uninstall for both pi providers", async () => {
 
   expect(removedSources).toContain("npm:pi-ollama-cloud");
   expect(removedSources).toContain("npm:@cortexkit/pi-magic-context");
+  expect(removedSources).toContain("npm:@cortexkit/aft-pi");
+  expect(removedSources).toContain("npm:@dreki-gg/pi-lsp");
 });
 
 test("removes PI_CODING_AGENT_DIR from .bashrc", async () => {
