@@ -30,9 +30,7 @@ export const DEFAULT_MAGIC_CONTEXT_JSONC = `{
       "review-user-memories":  { "schedule": "0 3 * * *", "promotion_threshold": 3 },
       "promote-primers":       { "schedule": "0 3 * * *", "promotion_threshold": 2 },
       "refresh-primers":       { "schedule": "0 3 * * *" }
-    },
-    "user_memories": { "enabled": true, "promotion_threshold": 3 },
-    "pin_key_files": { "enabled": true, "token_budget": 10000, "min_reads": 4 }
+    }
   },
 
   "embedding": {
