@@ -18,8 +18,19 @@ export const DEFAULT_MAGIC_CONTEXT_JSONC = `{
     "enabled": true,
     "model": "ollama-cloud/glm-5.2:cloud",
     "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
-    "schedule": "02:00-06:00",
-    "tasks": ["consolidate", "verify", "archive-stale", "improve", "maintain-docs"],
+    "tasks": {
+      "map-memories":      { "schedule": "0 2 * * *" },
+      "verify":            { "schedule": "0 3 * * *" },
+      "verify-broad":      { "schedule": "0 4 * * 0" },
+      "curate":            { "schedule": "0 4 * * 0" },
+      "classify-memories": { "schedule": "0 6 * * *" },
+      "retrospective":     { "schedule": "0 5 * * *" },
+      "maintain-docs":     { "schedule": "" },
+      "evaluate-smart-notes":  { "schedule": "0 3 * * *" },
+      "review-user-memories":  { "schedule": "0 3 * * *", "promotion_threshold": 3 },
+      "promote-primers":       { "schedule": "0 3 * * *", "promotion_threshold": 2 },
+      "refresh-primers":       { "schedule": "0 3 * * *" }
+    },
     "user_memories": { "enabled": true, "promotion_threshold": 3 },
     "pin_key_files": { "enabled": true, "token_budget": 10000, "min_reads": 4 }
   },
