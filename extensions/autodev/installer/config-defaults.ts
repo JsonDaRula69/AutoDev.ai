@@ -76,7 +76,7 @@ export async function validateAndCreateConfig(
 
   linkAgentFiles(results, pkg, centralHome, overrides);
 
-  linkSingle(results, "reference/", join(pkg, ".autodev", "reference"), join(centralHome, "reference"), "symlinked to package .autodev/reference/", overrides);
+  linkSingle(results, "reference/", join(pkg, ".autodev", "reference"), join(centralHome, "reference"), "symlinked to package .autodev/reference/", overrides, true);
   linkSingle(results, "skills/", join(pkg, ".pi", "skills"), join(centralHome, "skills"), "symlinked to package .pi/skills/", overrides);
   linkSingle(results, "extensions/autodev", join(pkg, "extensions", "autodev"), join(agentDir, "extensions", "autodev"), "symlinked to package extensions/autodev", overrides);
 
@@ -94,9 +94,10 @@ function linkSingle(
   link: string,
   createdMsg: string,
   overrides?: ValidateAndCreateConfigOverrides,
+  optional = false,
 ): void {
   if (!existsSync(target)) {
-    results.push({ name, ok: false, detail: "source file missing", created: false });
+    results.push({ name, ok: optional, detail: optional ? "source not bundled (optional)" : "source file missing", created: false });
     return;
   }
   const r = linkOrCopy(target, link, true, overrides);
