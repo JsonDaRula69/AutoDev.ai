@@ -11,7 +11,7 @@
  * writing.
  */
 import { execSync, type ExecSyncOptions } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { isStepCompleted, markStepCompleted } from "./state.js";
 import { setEnvVars, readEnv } from "./env.js";
@@ -186,6 +186,7 @@ async function handleLlm(deps: ConfigModuleDeps): Promise<ConfigResult> {
 
     await setEnvVars(deps.projectRoot, [[envVarName, apiKey]], envPath);
     await setProviderKey(deps.authPath, provider, `$${envVarName}`);
+    await writeAgentModelsJson(deps.authPath, provider, apiKey);
   }
 
   await markStepCompleted(deps.projectRoot, STEP_LLM, CONFIG_SCOPE);
@@ -412,4 +413,44 @@ Paste your token here (or press Enter to use interactive \`gh auth login --web\`
 
   await markStepCompleted(deps.projectRoot, STEP_GITHUB, CONFIG_SCOPE);
   return { subcommand: "github", step: STEP_GITHUB, status: "ok", message: "GitHub token configured and verified." };
+}
+
+const PROVIDER_MODEL_DEFS: Record<string, { api: string; baseUrl: string; models: { id: string; name: string; context: number; output: number }[] }> = {
+  "ollama-cloud": {
+    api: "openai",
+    baseUrl: "https://api.ollama.cloud/v1",
+    models: [
+      { id: "glm-5.2:cloud", name: "GLM 5.2 Cloud", context: 976000, output: 131072 },
+      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", context: 128000, output: 8192 },
+      { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", context: 128000, output: 8192 },
+      { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", context: 128000, output: 8192 },
+    ],
+  },
+};
+
+function writeAgentModelsJson(authPath: string, provider: string, envVarName: string): void {
+  const def = PROVIDER_MODEL_DEFS[provider];
+  if (!def) return;
+
+  const agentDir = dirname(authPath);
+  const modelsJsonPath = join(agentDir, "models.json");
+
+  let config: { providers: Record<string, unknown> } = { providers: {} };
+  if (existsSync(modelsJsonPath)) {
+    try {
+      config = JSON.parse(readFileSync(modelsJsonPath, "utf-8"));
+      if (!config.providers || typeof config.providers !== "object") config.providers = {};
+    } catch {
+      config = { providers: {} };
+    }
+  }
+
+  config.providers[provider] = {
+    api: def.api,
+    baseUrl: def.baseUrl,
+    apiKey: `$${envVarName}`,
+    models: def.models,
+  };
+
+  writeFileSync(modelsJsonPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
 }
