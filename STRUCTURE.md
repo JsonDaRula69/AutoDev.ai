@@ -80,7 +80,8 @@
 | `extensions/autodev/docs/` | Embeddings + `search_docs` | §11 Docs Query |
 | `extensions/autodev/tools/` | Custom tools (todowrite, etc.) | §12 Custom Tools |
 | `extensions/autodev/team-mode/` | Multi-agent coordination | §20 Team Mode |
-| `extensions/autodev/lsp/` | LSP diagnostics + navigation | §25 LSP Integration |
+| `@cortexkit/aft-pi` (npm) | AFT — tree-sitter code intelligence, hoisted read/write/edit/grep, background tasks | §24.5 AFT Integration |
+| `@dreki-gg/pi-lsp` (npm) | LSP — diagnostics, hover, definitions, references, symbols | §25 LSP Integration |
 | `extensions/autodev/tmux/` | Interactive bash + visualization | §26 Tmux Integration |
 | `extensions/autodev/comment-checker/` | AI-slop comment stripping | §21 Comment Checker |
 | `extensions/autodev/intent-gate/` | Intent analysis | §23 IntentGate |
@@ -129,6 +130,7 @@ Immutability rules:
 | `.pi/magic-context.jsonc` | Project root | Magic Context config (embedding, dreamer model, features) | No |
 | `.pi/auth.json` | Project root | LLM provider credentials | **YES** |
 | `.pi/lsp.json` | Project root | LSP server configuration | No |
+| `~/.pi/agent/aft.json` | Pi agent dir | AFT configuration (tool surface, semantic search, LSP) | No |
 | `.autodev/config/guardrails.yaml` | `.autodev/config/` | Hard/soft stop rules | No |
 | `.autodev/config/dispatch-rules.yaml` | `.autodev/config/` | Autonomous dispatch triggers | No |
 | `.autodev/config/debate-protocol.yaml` | `.autodev/config/` | Debate phase configuration | No |

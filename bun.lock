@@ -6,6 +6,7 @@
       "name": "autodev",
       "dependencies": {
         "@clack/prompts": "^1.6.0",
+        "@cortexkit/aft-pi": "^0.39.4",
         "@cortexkit/pi-magic-context": "^0.26.0",
         "@dreki-gg/pi-lsp": "^0.4.1",
         "@earendil-works/pi-coding-agent": "^0.79.9",
@@ -77,6 +78,22 @@
     "@clack/core": ["@clack/core@1.4.2", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-0Ty/1Gfm+Kb07sXcuESjyKfwEhSy4Ns1AgeEisHb/bDY5fWme0tTeTkU14T1Gmcs17YIjB/teiDe4uaCghbYqQ=="],
 
     "@clack/prompts": ["@clack/prompts@1.6.0", "", { "dependencies": { "@clack/core": "1.4.2", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-EYlRokl8szrP9Z25qT5aepMdBjzBvHF9ZEhzIiUBc9guz/T31EqRgvD0QSgZcpE93xiwrr+OkB4nz0BZyF6fSA=="],
+
+    "@cortexkit/aft-bridge": ["@cortexkit/aft-bridge@0.39.4", "", { "dependencies": { "undici": "^7.25.0" } }, "sha512-efZPB2NoRO9arnwUuSTpZUqMHRKpGGOACaKCdytOUHyvcKmLXbmg2ndfrW9f215pCvxwX5SpLS/LlheXcLFfcA=="],
+
+    "@cortexkit/aft-darwin-arm64": ["@cortexkit/aft-darwin-arm64@0.39.4", "", { "os": "darwin", "cpu": "arm64", "bin": { "aft": "bin/aft" } }, "sha512-o+oPfwo1AzzmB1GullqLVSBx3L917N2uX20JEi9dhVGG/3Vb2fBD9/9jvmrKS6N28t4LhqEA7/VxIXY6t9YJcw=="],
+
+    "@cortexkit/aft-darwin-x64": ["@cortexkit/aft-darwin-x64@0.39.4", "", { "os": "darwin", "cpu": "x64", "bin": { "aft": "bin/aft" } }, "sha512-J7Zc7ra3z0kYKutDeHdYNQUR1eAVJzYZxNp5hnIZuc48o5xVnilxV+ZGRX3mHa91f9LFdtmLFZQ9CCoQF6nWxg=="],
+
+    "@cortexkit/aft-linux-arm64": ["@cortexkit/aft-linux-arm64@0.39.4", "", { "os": "linux", "cpu": "arm64", "bin": { "aft": "bin/aft" } }, "sha512-zVmOzAZBf8rKxMwJ7mgnYK2AQyosvPZmQ/RxcJJw7/ST1zJTF7CbmS56v9hZBtCZHOTwAkQFFRofcSNatxHAdA=="],
+
+    "@cortexkit/aft-linux-x64": ["@cortexkit/aft-linux-x64@0.39.4", "", { "os": "linux", "cpu": "x64", "bin": { "aft": "bin/aft" } }, "sha512-Bkh870rWGaXiBkEbKDNIrBhZw5aV2JAvlcP+w/ojhB4OTUYAmH3RRtdTfB74OwCdvc/og+9oAUAaR9fP3Odifg=="],
+
+    "@cortexkit/aft-pi": ["@cortexkit/aft-pi@0.39.4", "", { "dependencies": { "@cortexkit/aft-bridge": "0.39.4", "@xterm/headless": "^5.5.0", "comment-json": "^5.0.0", "diff": "^8.0.4", "typebox": "^1.1.24", "zod": "^4.1.8" }, "optionalDependencies": { "@cortexkit/aft-darwin-arm64": "0.39.4", "@cortexkit/aft-darwin-x64": "0.39.4", "@cortexkit/aft-linux-arm64": "0.39.4", "@cortexkit/aft-linux-x64": "0.39.4", "@cortexkit/aft-win32-arm64": "0.39.4", "@cortexkit/aft-win32-x64": "0.39.4" }, "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "@earendil-works/pi-tui": "*" } }, "sha512-RX9a2fds7v8HTQk5/6VmNWDpcAC1/WU/qzlyMwrTAf7/rRmGMJvHJNbDoupQWBQVcuXCKnXzsUlPyPSFU4p1HQ=="],
+
+    "@cortexkit/aft-win32-arm64": ["@cortexkit/aft-win32-arm64@0.39.4", "", { "os": "win32", "cpu": "arm64", "bin": { "aft": "bin/aft.exe" } }, "sha512-vj45LMcuw73GoLMSIpzyYX0apFvDbjbMYJSz4oSHTVTxa/mJsWfuu89PVYwqBdyk1YYppCjYsZIQ9/CCypLbFA=="],
+
+    "@cortexkit/aft-win32-x64": ["@cortexkit/aft-win32-x64@0.39.4", "", { "os": "win32", "cpu": "x64", "bin": { "aft": "bin/aft.exe" } }, "sha512-LD1lAyDwIZ2EYZgasFXoAdEvcYRRkF/RTuzwKUAjcY/oInalE0vnCuNnRTTczGpKH7x0GCxHEW3nE5dhY2r+sw=="],
 
     "@cortexkit/pi-magic-context": ["@cortexkit/pi-magic-context@0.26.0", "", { "dependencies": { "@huggingface/transformers": "^4.1.0", "ai-tokenizer": "^1.0.6", "comment-json": "^4.2.5", "typebox": "^1.1.24", "zod": "^4.1.8" }, "peerDependencies": { "@earendil-works/pi-coding-agent": "^0.74.0", "@earendil-works/pi-tui": "^0.74.0" } }, "sha512-zWrgm3wm9JkXub9Z1ZQca9UwgAnoT+5f+Q4osQTv6AM3ehdzslfAAkcdWQIafy8wRi+8PjPtTIrHgNyPDMtSmQ=="],
 
@@ -228,6 +245,8 @@
 
     "@types/retry": ["@types/retry@0.12.0", "", {}, "sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA=="],
 
+    "@xterm/headless": ["@xterm/headless@5.5.0", "", {}, "sha512-5xXB7kdQlFBP82ViMJTwwEc3gKCLGKR/eoxQm4zge7GPBl86tCdI0IdPJjoKd8mUSFXz5V7i/25sfsEkP4j46g=="],
+
     "adm-zip": ["adm-zip@0.5.17", "", {}, "sha512-+Ut8d9LLqwEvHHJl1+PIHqoyDxFgVN847JTVM3Izi3xHDWPE4UtzzXysMZQs64DMcrJfBeS/uoEP4AD3HQHnQQ=="],
 
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
@@ -258,7 +277,7 @@
 
     "chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
 
-    "comment-json": ["comment-json@4.6.2", "", { "dependencies": { "array-timsort": "^1.0.3", "esprima": "^4.0.1" } }, "sha512-R2rze/hDX30uul4NZoIZ76ImSJLFxn/1/ZxtKC1L77y2X1k+yYu1joKbAtMA2Fg3hZrTOiw0I5mwVMo0cf250w=="],
+    "comment-json": ["comment-json@5.0.0", "", { "dependencies": { "array-timsort": "^1.0.3", "esprima": "^4.0.1" } }, "sha512-uiqLcOiVDJtBP8WGkZHEP+FZIhTzP1dxvn59EfoYUi9gqupjrBWVQkO2atDrbnKPwLeotFYDsuNb26uBMqB+hw=="],
 
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
 
@@ -465,6 +484,10 @@
     "@aws-sdk/credential-provider-sso/@aws-sdk/token-providers": ["@aws-sdk/token-providers@3.1071.0", "", { "dependencies": { "@aws-sdk/core": "^3.974.22", "@aws-sdk/nested-clients": "^3.997.22", "@aws-sdk/types": "^3.973.13", "@smithy/core": "^3.24.6", "@smithy/types": "^4.14.3", "tslib": "^2.6.2" } }, "sha512-4LDW2Qob6LoLFuqYSYZq2AyTE9koSE9+i+n5UZcm10GpmQOK0zRD9L4uYlzItiTKksIWgC/qMFChAi3RvKYtMg=="],
 
     "@aws-sdk/nested-clients/@smithy/node-http-handler": ["@smithy/node-http-handler@4.8.1", "", { "dependencies": { "@smithy/core": "^3.25.1", "@smithy/types": "^4.15.0", "tslib": "^2.6.2" } }, "sha512-emtXvoky671puri18ETf64AFIQUGIEA093F2drXpBgB0OGnBLjcwNR3CA2mYu62IAqNsS56xa5lnTxAgPq7cjw=="],
+
+    "@cortexkit/aft-bridge/undici": ["undici@7.28.0", "", {}, "sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA=="],
+
+    "@cortexkit/pi-magic-context/comment-json": ["comment-json@4.6.2", "", { "dependencies": { "array-timsort": "^1.0.3", "esprima": "^4.0.1" } }, "sha512-R2rze/hDX30uul4NZoIZ76ImSJLFxn/1/ZxtKC1L77y2X1k+yYu1joKbAtMA2Fg3hZrTOiw0I5mwVMo0cf250w=="],
 
     "onnxruntime-web/onnxruntime-common": ["onnxruntime-common@1.24.0-dev.20251116-b39e144322", "", {}, "sha512-BOoomdHYmNRL5r4iQ4bMvsl2t0/hzVQ3OM3PHD0gxeXu1PmggqBv3puZicEUVOA3AtHHYmqZtjMj9FOfGrATTw=="],
 

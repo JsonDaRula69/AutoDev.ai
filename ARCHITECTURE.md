@@ -455,6 +455,37 @@ Not Exa. AutoDev does not integrate Exa web search. Agents use pi's built-in web
 
 ---
 
+## 24.5. AFT Integration (Sensorimotor Cortex)
+
+AFT (Agent File Tools) is provided by the [`@cortexkit/aft-pi`](https://www.npmjs.com/package/@cortexkit/aft-pi) package, loaded as a pi extension alongside the AutoDev extension. From the same CortexKit ecosystem as Magic Context, AFT gives agents an IDE and OS layer — tree-sitter-powered code perception, symbol-aware edits, indexed search, and background task management.
+
+AFT **hoists** pi's built-in `read`, `write`, `edit`, and `grep` tools with tree-sitter-backed versions and adds an `aft_` family on top. The Rust binary (auto-downloaded, cached per-machine) speaks JSON-over-stdio. One process per project root stays alive for the project's lifetime, keeping parse trees warm.
+
+**Sensory (perceive):**
+- `aft_outline` — structural outline of any file, directory, or remote URL via tree-sitter (25+ languages)
+- `aft_zoom` — inspect a specific symbol with optional call-graph annotations
+- `aft_inspect` — codebase health snapshot: LSP errors, TODOs, dead code, unused exports, duplicates
+- `aft_conflicts` — git merge conflicts across the repository with line numbers
+- `grep` / `glob` — trigram-indexed, persisted to disk, kept fresh by file watcher
+
+**Motor (act):**
+- `edit` — find/replace with progressive fuzzy matching, symbol-level replacement, batch edits
+- `write` — auto-created dirs, backup, formatting, inline diagnostics
+- `aft_import` — language-aware import add/remove/organize (TS, JS, Python, Rust, Go, Solidity, etc.)
+- `aft_refactor` — workspace-wide symbol move, function extraction, inlining
+- `ast_grep_search` / `ast_grep_replace` — structural AST search and replace with meta-variables
+
+**Brainstem (keep alive):**
+- `bash` — shell execution with output compression and command rewriting
+- `bash_status` / `bash_watch` / `bash_kill` / `bash_write` — background task management, PTY sessions
+- `aft_safety` — per-file undo stack, named checkpoints, restore
+
+Config: `~/.pi/agent/aft.json` (auto-created by `npx @cortexkit/aft setup`). Storage at `~/.local/share/cortexkit/aft/`. Binary cache at `~/.cache/aft/bin/`.
+
+AFT and LSP (`@dreki-gg/pi-lsp`) are complementary: AFT provides tree-sitter-based structural understanding (fast, no server process, 25+ languages) while LSP provides semantic understanding (types, definitions, references, hover — requires a language server per language). Both are loaded as separate pi extensions.
+
+---
+
 ## 25. LSP Integration
 
 LSP is provided by the [`@dreki-gg/pi-lsp`](https://www.npmjs.com/package/@dreki-gg/pi-lsp) package, loaded as a pi extension alongside the AutoDev extension. It registers a single unified `lsp` tool with 11 operations, giving agents IDE-precision code intelligence. Servers are configured via `.pi/lsp.json`.

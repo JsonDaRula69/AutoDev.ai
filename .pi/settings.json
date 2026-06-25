@@ -20,6 +20,7 @@
   ],
   "extensions": [
     "./extensions/autodev",
+    "node_modules/@cortexkit/aft-pi",
     "node_modules/@dreki-gg/pi-lsp"
   ]
 }

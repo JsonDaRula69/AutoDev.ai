@@ -16,6 +16,7 @@ const EXPECTED_SKILLS = [
   "autodev-review",
   "autodev-deploy",
   "autodev-onboarding-harbor-master",
+  "autodev-use-lsp",
 ] as const;
 
 /** Parse YAML frontmatter (name + description) from a SKILL.md body. */
@@ -34,7 +35,7 @@ function parseFrontmatter(
   };
 }
 
-test("all 5 expected skill directories exist under .pi/skills/", () => {
+test("all 6 expected skill directories exist under .pi/skills/", () => {
   for (const skill of EXPECTED_SKILLS) {
     const dir = join(SKILLS_DIR, skill);
     expect(existsSync(dir)).toBe(true);
