@@ -287,6 +287,27 @@ async function runFirstRunFlow(
   // (3) Interactive config prompts — all four sub-commands.
   await runConfigSubcommands(deps, ["llm", "voyage", "discord", "github"], notify);
 
+  // (3.5) Reload .env into process.env — config prompts just wrote credentials
+  // to the .env file, but loadAgentEnv() ran at process start before the file
+  // existed. Without this, seeding and health checks can't resolve $VAR refs.
+  try {
+    const envPath = join(dirname(deps.authPath), ".env");
+    if (existsSync(envPath)) {
+      const raw = readFileSync(envPath, "utf-8");
+      for (const line of raw.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
+        const eq = trimmed.indexOf("=");
+        if (eq <= 0) continue;
+        const key = trimmed.slice(0, eq).trim();
+        const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+        if (process.env[key] === undefined) process.env[key] = value;
+      }
+    }
+  } catch {
+    // .env reload is best-effort — seeding will fall back to ONNX if missing
+  }
+
   // (4) MC install — deferred until after config prompts.
   notify("Registering Magic Context extension...", "info");
   const mcResult = await runMagicContextInstall(installDeps, configOk);
