@@ -39,8 +39,8 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.6.0",
-    "@cortexkit/aft-pi": "^0.39.4",
-    "@cortexkit/pi-magic-context": "^0.27.2",
+    "@cortexkit/aft-pi": "^0.42.0",
+    "@cortexkit/pi-magic-context": "^0.29.1",
     "@dreki-gg/pi-lsp": "^0.4.1",
     "@earendil-works/pi-coding-agent": "^0.79.9",
     "js-yaml": "^4.1.0",
