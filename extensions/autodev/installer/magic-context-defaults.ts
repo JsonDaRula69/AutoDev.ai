@@ -53,6 +53,9 @@ export const DEFAULT_MAGIC_CONTEXT_JSONC = `{
     "model": "ollama-cloud/glm-5.2:cloud",
     "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
     "timeout_ms": 30000
-  }
+  },
+
+  "smart_drops": false,
+  "toast_duration_ms": 4000
 }
 `;

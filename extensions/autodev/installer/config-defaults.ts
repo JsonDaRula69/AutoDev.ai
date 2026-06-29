@@ -21,6 +21,7 @@ import {
   linkOrCopy,
   type SymlinkOverrides,
 } from "./symlink-link.js";
+import { magicContextUserConfigPath } from "./cortexkit-config.js";
 
 const REQUIRED_AGENT_FILES = [
   "nemo",
@@ -180,14 +181,15 @@ function linkConfigDir(
   });
 }
 
-function writeMagicContext(results: ConfigCheckResult[], agentDir: string): void {
-  const mcPath = join(agentDir, "magic-context.jsonc");
+function writeMagicContext(results: ConfigCheckResult[], _agentDir: string): void {
+  const mcPath = magicContextUserConfigPath();
   if (existsSync(mcPath)) {
     results.push({ name: "magic-context.jsonc", ok: true, detail: "exists", created: false });
     return;
   }
   try {
-    if (!existsSync(agentDir)) mkdirSync(agentDir, { recursive: true });
+    const mcDir = join(mcPath, "..");
+    if (!existsSync(mcDir)) mkdirSync(mcDir, { recursive: true });
     writeFileSync(mcPath, DEFAULT_MAGIC_CONTEXT_JSONC, "utf-8");
     results.push({ name: "magic-context.jsonc", ok: true, detail: "written with AutoDev defaults", created: true });
   } catch (e) {

@@ -10,6 +10,7 @@ import { validateAndCreateConfig } from "./config-defaults.js";
 import { runInstallFixes, runInstallToolsAndConfig, runMagicContextInstall, type InstallModuleDeps } from "./install-module.js";
 import { runConfig, type ConfigModuleDeps } from "./config-module.js";
 import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
+import { magicContextUserConfigPath } from "./cortexkit-config.js";
 import { createPrompter, type Prompter } from "./prompts.js";
 import { reopenTty, type ReopenTtyDeps } from "./tty.js";
 import { seedCentralDocs } from "../docs/seeding.js";
@@ -24,7 +25,8 @@ const MC_DOCTOR_EXEC_OPTS: ExecSyncOptions = {
 };
 
 /**
- * Write AutoDev defaults to `magic-context.jsonc` in the central agent dir.
+ * Write AutoDev defaults to `magic-context.jsonc` in the CortexKit config dir
+ * (`~/.config/cortexkit/magic-context.jsonc`).
  *
  * Used as the retry hook when the MC doctor fails on its first attempt:
  * writing the defaults resolves the common case where the file is missing or
@@ -34,10 +36,11 @@ const MC_DOCTOR_EXEC_OPTS: ExecSyncOptions = {
  * No-op (and reports ok=false with the error message) if the write itself
  * fails — the caller decides whether to retry.
  */
-export function writeMagicContextDefaults(agentDir: string): { ok: boolean; detail: string } {
-  const mcPath = join(agentDir, "magic-context.jsonc");
+export function writeMagicContextDefaults(_agentDir: string): { ok: boolean; detail: string } {
+  const mcPath = magicContextUserConfigPath();
   try {
-    if (!existsSync(agentDir)) mkdirSync(agentDir, { recursive: true });
+    const mcDir = join(mcPath, "..");
+    if (!existsSync(mcDir)) mkdirSync(mcDir, { recursive: true });
     writeFileSync(mcPath, DEFAULT_MAGIC_CONTEXT_JSONC, "utf-8");
     return { ok: true, detail: "defaults written" };
   } catch (e) {

@@ -4,11 +4,12 @@
  * Runs the non-interactive "install" lifecycle in three phases:
  *   1. Install external tools (gh, git, bun) via `installMissingTools`.
  *   2. Symlink centralized config into `~/.AutoDev/` via `validateAndCreateConfig`
- *      (also writes `magic-context.jsonc` with AutoDev defaults).
+ *      (also writes `magic-context.jsonc` with AutoDev defaults to
+ *      `~/.config/cortexkit/magic-context.jsonc`).
  *   3. Register the Magic Context pi extension via the non-interactive
  *      `pi install npm:@cortexkit/pi-magic-context` command and verify that
- *      `magic-context.jsonc` exists in the agent dir. No interactive wizard
- *      is invoked and no TTY is required.
+ *      `magic-context.jsonc` exists in the CortexKit config dir. No interactive
+ *      wizard is invoked and no TTY is required.
  *
  * Completion is recorded in the `"install"` state scope so re-runs skip
  * finished work.
@@ -24,6 +25,7 @@ import { installMissingTools, type Platform } from "./tools.js";
 import { validateAndCreateConfig } from "./config-defaults.js";
 import { markStepCompleted, isStepCompleted } from "./state.js";
 import { DEFAULT_MAGIC_CONTEXT_JSONC } from "./magic-context-defaults.js";
+import { magicContextUserConfigPath } from "./cortexkit-config.js";
 import { openVectorStore } from "../docs/index.js";
 import { createCentralDbSchema } from "../docs/seeding.js";
 import { installProvider, type ProviderInstallDeps } from "./provider-install.js";
@@ -132,7 +134,7 @@ export async function runMagicContextInstall(
  *      (also writes `magic-context.jsonc` with AutoDev defaults).
  *   3. Register the Magic Context pi extension via the non-interactive
  *      `pi install npm:@cortexkit/pi-magic-context` command and verify
- *      `magic-context.jsonc` exists in the agent dir.
+ *      `magic-context.jsonc` exists in the CortexKit config dir.
  *
  * State is recorded in the `"install"` scope: step 0 after tools, step 3 after
  * config files AND Magic Context registration both succeed.
@@ -292,11 +294,12 @@ async function runMagicContextSetupPhase(
   }
 
   const agentDir = getAgentDir();
-  const mcPath = join(agentDir, "magic-context.jsonc");
+  const mcPath = magicContextUserConfigPath();
   if (!existsSync(mcPath)) {
     notify("magic-context.jsonc missing; writing AutoDev defaults...", "info");
     try {
-      if (!existsSync(agentDir)) mkdirSync(agentDir, { recursive: true });
+      const mcDir = join(mcPath, "..");
+      if (!existsSync(mcDir)) mkdirSync(mcDir, { recursive: true });
       writeFileSync(mcPath, DEFAULT_MAGIC_CONTEXT_JSONC, "utf-8");
     } catch (e) {
       return {
