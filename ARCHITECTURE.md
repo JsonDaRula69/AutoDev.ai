@@ -480,7 +480,7 @@ AFT **hoists** pi's built-in `read`, `write`, `edit`, and `grep` tools with tree
 - `bash_status` / `bash_watch` / `bash_kill` / `bash_write` — background task management, PTY sessions
 - `aft_safety` — per-file undo stack, named checkpoints, restore
 
-Config: `~/.pi/agent/aft.json` (auto-created by `npx @cortexkit/aft setup`). Storage at `~/.local/share/cortexkit/aft/`. Binary cache at `~/.cache/aft/bin/`.
+Config: `~/.config/cortexkit/aft.jsonc` (auto-created by `npx @cortexkit/aft setup`; auto-migrated from `~/.pi/agent/aft.json` on first run). Storage at `~/.local/share/cortexkit/aft/`. Binary cache at `~/.cache/aft/bin/`.
 
 AFT and LSP (`@dreki-gg/pi-lsp`) are complementary: AFT provides tree-sitter-based structural understanding (fast, no server process, 25+ languages) while LSP provides semantic understanding (types, definitions, references, hover — requires a language server per language). Both are loaded as separate pi extensions.
 
@@ -574,7 +574,7 @@ All 5 ctx_* tools are available:
 - `ctx_expand`: recovers original conversation from compacted session history.
 - `ctx_reduce`: marks spent tool outputs as discardable to reclaim context space.
 
-Features enabled in `.pi/magic-context.jsonc`:
+Features enabled in `~/.config/cortexkit/magic-context.jsonc`:
 
 - **Git commit indexing**: `memory.git_commit_indexing.enabled: true` for semantic search over git history.
 - **Key files pinning**: `dreamer.pin_key_files.enabled: true` to pin frequently-read files into context.
@@ -582,7 +582,7 @@ Features enabled in `.pi/magic-context.jsonc`:
 - **User memories**: enabled by default. Extracts behavioral patterns about the user.
 - **Workspaces**: configured if the project belongs to a workspace for shared memory across projects.
 
-Two hidden agents run in the background: the historian, which auto-extracts memories from sessions, and the dreamer, which consolidates and manages memory over time. Config at `.pi/magic-context.jsonc`. Implemented by T3 and T6 in the pi-foundation plan.
+Two hidden agents run in the background: the historian, which auto-extracts memories from sessions, and the dreamer, which consolidates and manages memory over time. Config at `~/.config/cortexkit/magic-context.jsonc` (auto-migrated from `.pi/magic-context.jsonc` on first run). Implemented by T3 and T6 in the pi-foundation plan.
 
 ---
 

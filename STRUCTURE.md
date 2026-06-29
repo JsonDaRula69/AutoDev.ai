@@ -42,7 +42,7 @@
     agents/              # 13 crew agent definitions (Markdown+YAML)
     skills/              # AutoDev skills (triage, implement, review, deploy)
     settings.json        # Pi project settings
-    magic-context.jsonc  # Magic Context config (embedding, dreamer model)
+    magic-context.jsonc  # Project-level MC config (moved to .cortexkit/ by MC v0.27+; kept for reference)
     auth.json            # LLM provider credentials (GITIGNORED)
   .autodev/
     reference/           # Immutable knowledge base (4 files)
@@ -88,7 +88,9 @@
 | `.pi/agents/` | 13 crew agent definitions | §4 Agent Sessions |
 | `.pi/skills/` | AutoDev skill definitions | §13 Skills System |
 | `.pi/settings.json` | Pi project settings | §2 Process Topology |
-| `.pi/magic-context.jsonc` | Magic Context config | §29 Magic Context |
+| `.pi/magic-context.jsonc` | Project-level MC config (legacy; MC v0.27+ reads from `.cortexkit/magic-context.jsonc`) | §29 Magic Context |
+| `~/.config/cortexkit/magic-context.jsonc` | User-level MC config (where AutoDev writes defaults) | §29 Magic Context |
+| `~/.config/cortexkit/aft.jsonc` | AFT config (auto-migrated from `~/.pi/agent/aft.json` by AFT v0.40+) | §24.5 AFT Integration |
 | `.pi/auth.json` | LLM credentials (gitignored) | §2 Process Topology |
 | `.autodev/reference/` | Immutable truth (4 files) | §28 Context Injection |
 | `.autodev/memory/` | Bootstrap context (Tier 1) | §28 Context Injection |
@@ -127,17 +129,18 @@ Immutability rules:
 | File | Location | Purpose | Gitignored? |
 |------|----------|---------|-------------|
 | `.pi/settings.json` | Project root | Pi project settings (extensions, model config) | No |
-| `.pi/magic-context.jsonc` | Project root | Magic Context config (embedding, dreamer model, features) | No |
+| `.pi/magic-context.jsonc` | Project root | Legacy project-level MC config (MC v0.27+ reads `.cortexkit/magic-context.jsonc`; auto-migrated on first run) | No |
+| `~/.config/cortexkit/magic-context.jsonc` | User config (`$XDG_CONFIG_HOME/cortexkit/`) | User-level MC config (embedding, dreamer, features; where AutoDev writes defaults) | No |
 | `.pi/auth.json` | Project root | LLM provider credentials | **YES** |
 | `.pi/lsp.json` | Project root | LSP server configuration | No |
-| `~/.pi/agent/aft.json` | Pi agent dir | AFT configuration (tool surface, semantic search, LSP) | No |
+| `~/.config/cortexkit/aft.jsonc` | User config (`$XDG_CONFIG_HOME/cortexkit/`) | AFT configuration (auto-created by `npx @cortexkit/aft setup`; auto-migrated from `~/.pi/agent/aft.json`) | No |
 | `.autodev/config/guardrails.yaml` | `.autodev/config/` | Hard/soft stop rules | No |
 | `.autodev/config/dispatch-rules.yaml` | `.autodev/config/` | Autonomous dispatch triggers | No |
 | `.autodev/config/debate-protocol.yaml` | `.autodev/config/` | Debate phase configuration | No |
 | `package.json` | Project root | Pi manifest (dependencies, extension entry) | No |
 | `.omo/boulder.json` | `.omo/` | Cross-session work tracking | No |
 
-The only secret on disk is `.pi/auth.json`. The VoyageAI key lives in the `VOYAGE_API_KEY` env var, referenced from `.pi/magic-context.jsonc` as `${VOYAGE_API_KEY}`.
+The only secret on disk is `.pi/auth.json`. The VoyageAI key lives in the `VOYAGE_API_KEY` env var, referenced from `~/.config/cortexkit/magic-context.jsonc` as `${VOYAGE_API_KEY}`.
 
 ## 5. Agent Definitions: `.pi/agents/`
 
