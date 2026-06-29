@@ -162,9 +162,12 @@ test("MC setup uses SDK installProvider, no interactive wizard or pi install she
   const centralDir = createTempDir();
   const packageRoot = createTempDir();
   const projectRoot = createTempDir();
+  const xdgDir = createTempDir();
   const agentDir = join(centralDir, "agent");
   const saved = process.env.PI_CODING_AGENT_DIR;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
 
   try {
     createMockPackage(packageRoot);
@@ -188,7 +191,7 @@ test("MC setup uses SDK installProvider, no interactive wizard or pi install she
     const doctorCall = calls.find((c) => c.command.includes("magic-context") && c.command.includes("doctor"));
     expect(doctorCall).toBeUndefined();
 
-    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
+    expect(existsSync(join(xdgDir, "cortexkit", "magic-context.jsonc"))).toBe(true);
 
     const mcResult = results.find((r: any) => r.name === "magic-context-setup");
     expect(mcResult).toBeDefined();
@@ -196,9 +199,12 @@ test("MC setup uses SDK installProvider, no interactive wizard or pi install she
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;
+    if (savedXdg !== undefined) process.env.XDG_CONFIG_HOME = savedXdg;
+    else delete process.env.XDG_CONFIG_HOME;
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
     cleanupTempDir(projectRoot);
+    cleanupTempDir(xdgDir);
   }
 });
 
@@ -246,9 +252,14 @@ test("MC setup self-heals: writes magic-context.jsonc if missing before registra
   const centralDir = createTempDir();
   const packageRoot = createTempDir();
   const projectRoot = createTempDir();
+  const xdgDir = createTempDir();
   const agentDir = join(centralDir, "agent");
   const saved = process.env.PI_CODING_AGENT_DIR;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
+
+  const mcPath = join(xdgDir, "cortexkit", "magic-context.jsonc");
 
   try {
     createMockPackage(packageRoot);
@@ -263,10 +274,10 @@ test("MC setup self-heals: writes magic-context.jsonc if missing before registra
       providerInstallOverride: mockProviderInstallOk(),
     });
 
-    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
+    expect(existsSync(mcPath)).toBe(true);
 
-    rmSync(join(agentDir, "magic-context.jsonc"), { force: true });
-    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(false);
+    rmSync(mcPath, { force: true });
+    expect(existsSync(mcPath)).toBe(false);
 
     const second = await runInstallFixes({
       projectRoot,
@@ -277,16 +288,19 @@ test("MC setup self-heals: writes magic-context.jsonc if missing before registra
       providerInstallOverride: mockProviderInstallOk(),
     });
 
-    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
+    expect(existsSync(mcPath)).toBe(true);
     const mcSecond = second.find((r: any) => r.name === "magic-context-setup");
     expect(mcSecond).toBeDefined();
     expect(mcSecond.ok).toBe(true);
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;
+    if (savedXdg !== undefined) process.env.XDG_CONFIG_HOME = savedXdg;
+    else delete process.env.XDG_CONFIG_HOME;
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
     cleanupTempDir(projectRoot);
+    cleanupTempDir(xdgDir);
   }
 });
 
@@ -294,12 +308,15 @@ test("getAgentDir fallback: when PI_CODING_AGENT_DIR unset, MC setup writes to S
   const packageRoot = createTempDir();
   const projectRoot = createTempDir();
   const fallbackDir = createTempDir();
+  const xdgDir = createTempDir();
   const agentDir = join(fallbackDir, ".pi", "agent");
   mkdirSync(agentDir, { recursive: true });
   const saved = process.env.PI_CODING_AGENT_DIR;
   const savedHome = process.env.HOME;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   process.env.HOME = fallbackDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
 
   try {
     createMockPackage(packageRoot);
@@ -323,14 +340,18 @@ test("getAgentDir fallback: when PI_CODING_AGENT_DIR unset, MC setup writes to S
     const mcResult = results.find((r: any) => r.name === "magic-context-setup");
     expect(mcResult).toBeDefined();
 
-    const mcPath = join(expectedAgentDir, "magic-context.jsonc");
+    const mcPath = join(xdgDir, "cortexkit", "magic-context.jsonc");
     expect(existsSync(mcPath)).toBe(true);
+    expect(expectedAgentDir).toBe(agentDir);
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;
     if (savedHome !== undefined) process.env.HOME = savedHome;
+    if (savedXdg !== undefined) process.env.XDG_CONFIG_HOME = savedXdg;
+    else delete process.env.XDG_CONFIG_HOME;
     cleanupTempDir(fallbackDir);
     cleanupTempDir(packageRoot);
     cleanupTempDir(projectRoot);
+    cleanupTempDir(xdgDir);
   }
 });

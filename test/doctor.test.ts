@@ -247,9 +247,12 @@ test("doctor symlinks missing config files from package", async () => {
   const authPath = join(dir, "auth.json");
   const packageRoot = createTempDir();
   const centralDir = createTempDir();
+  const xdgDir = createTempDir();
   const agentDir = join(centralDir, "agent");
   const saved = process.env.PI_CODING_AGENT_DIR;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
   try {
     await setProviderKey(authPath, "ollama-cloud", "sk-test-key");
     await setEnvVars(dir, [["OLLAMA_CLOUD_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
@@ -273,9 +276,12 @@ test("doctor symlinks missing config files from package", async () => {
   } finally {
     if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = saved;
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
     cleanupTempDir(dir);
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
+    cleanupTempDir(xdgDir);
   }
 });
 
@@ -345,9 +351,12 @@ test("Magic Context check passes healthy on first attempt", async () => {
   const authPath = join(dir, "auth.json");
   const packageRoot = createTempDir();
   const centralDir = createTempDir();
+  const xdgDir = createTempDir();
   const agentDir = join(centralDir, "agent");
   const saved = process.env.PI_CODING_AGENT_DIR;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
   try {
     await setupFullConfig(dir, authPath);
     createMockPackage(packageRoot);
@@ -361,13 +370,16 @@ test("Magic Context check passes healthy on first attempt", async () => {
     const mcCheck = result.checks.find((c) => c.name === "Magic Context");
     expect(mcCheck?.ok).toBe(true);
     expect(mcCheck?.detail).toBe("healthy");
-    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
+    expect(existsSync(join(xdgDir, "cortexkit", "magic-context.jsonc"))).toBe(true);
   } finally {
     if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = saved;
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
     cleanupTempDir(dir);
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
+    cleanupTempDir(xdgDir);
   }
 });
 
@@ -376,9 +388,12 @@ test("Magic Context check recovers after writing defaults on first failure", asy
   const authPath = join(dir, "auth.json");
   const packageRoot = createTempDir();
   const centralDir = createTempDir();
+  const xdgDir = createTempDir();
   const agentDir = join(centralDir, "agent");
   const saved = process.env.PI_CODING_AGENT_DIR;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
   try {
     await setupFullConfig(dir, authPath);
     createMockPackage(packageRoot);
@@ -392,14 +407,17 @@ test("Magic Context check recovers after writing defaults on first failure", asy
     const mcCheck = result.checks.find((c) => c.name === "Magic Context");
     expect(mcCheck?.ok).toBe(true);
     expect(mcCheck?.detail).toBe("healthy (after defaults written)");
-    const written = readFileSync(join(agentDir, "magic-context.jsonc"), "utf-8");
+    const written = readFileSync(join(xdgDir, "cortexkit", "magic-context.jsonc"), "utf-8");
     expect(written).toBe(DEFAULT_MAGIC_CONTEXT_JSONC);
   } finally {
     if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = saved;
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
     cleanupTempDir(dir);
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
+    cleanupTempDir(xdgDir);
   }
 });
 
@@ -408,9 +426,12 @@ test("Magic Context check fails after retry when both attempts fail", async () =
   const authPath = join(dir, "auth.json");
   const packageRoot = createTempDir();
   const centralDir = createTempDir();
+  const xdgDir = createTempDir();
   const agentDir = join(centralDir, "agent");
   const saved = process.env.PI_CODING_AGENT_DIR;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
   try {
     await setupFullConfig(dir, authPath);
     createMockPackage(packageRoot);
@@ -424,27 +445,35 @@ test("Magic Context check fails after retry when both attempts fail", async () =
     const mcCheck = result.checks.find((c) => c.name === "Magic Context");
     expect(mcCheck?.ok).toBe(false);
     expect(mcCheck?.detail).toContain("MC doctor failed after retry");
-    expect(existsSync(join(agentDir, "magic-context.jsonc"))).toBe(true);
+    expect(existsSync(join(xdgDir, "cortexkit", "magic-context.jsonc"))).toBe(true);
   } finally {
     if (saved === undefined) delete process.env.PI_CODING_AGENT_DIR;
     else process.env.PI_CODING_AGENT_DIR = saved;
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
     cleanupTempDir(dir);
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
+    cleanupTempDir(xdgDir);
   }
 });
 
-test("writeMagicContextDefaults writes the JSONC block to the agent dir", () => {
-  const centralDir = createTempDir();
-  const agentDir = join(centralDir, "agent");
+test("writeMagicContextDefaults writes the JSONC block to the CortexKit config dir", () => {
+  const xdgDir = createTempDir();
+  const agentDir = createTempDir();
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = xdgDir;
   try {
     const result = writeMagicContextDefaults(agentDir);
     expect(result.ok).toBe(true);
     expect(result.detail).toBe("defaults written");
-    const written = readFileSync(join(agentDir, "magic-context.jsonc"), "utf-8");
+    const written = readFileSync(join(xdgDir, "cortexkit", "magic-context.jsonc"), "utf-8");
     expect(written).toBe(DEFAULT_MAGIC_CONTEXT_JSONC);
   } finally {
-    cleanupTempDir(centralDir);
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+    cleanupTempDir(xdgDir);
+    cleanupTempDir(agentDir);
   }
 });
 // ---- T14: central ~/.AutoDev/ path resolution & install-state threshold ----

@@ -3,7 +3,7 @@
  *
  * Verifies the AutoDev extension's interaction with Magic Context's 5
  * ctx_* tools via the shared mock fixture, plus a config-override test
- * that reads `.pi/magic-context.jsonc` and asserts the glm-5.2:cloud
+ * that reads `.cortexkit/magic-context.jsonc` and asserts the glm-5.2:cloud
  * model and related settings are wired correctly.
  *
  * Test groups (per task spec):
@@ -11,7 +11,7 @@
  *   2. ctx_search — storeDecision routes to loreguard:adr, not ctx_memory
  *   3. ctx_note write — mock accepts write actions
  *   4. ctx_expand + ctx_reduce — callable, expected shapes
- *   5. Config override — .pi/magic-context.jsonc field assertions
+ *   5. Config override — .cortexkit/magic-context.jsonc field assertions
  *   6. Notepad-to-MagicContext integration — all 5 store* backends routed
  */
 import { test, expect, beforeEach, afterEach } from "bun:test";
@@ -41,7 +41,7 @@ import {
 import { setDb, resetDb, createSchema, checkSqliteVersion, suggestDecision } from "../extensions/autodev/loreguard/index.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..");
-const CONFIG_PATH = resolve(PROJECT_ROOT, ".pi", "magic-context.jsonc");
+const CONFIG_PATH = resolve(PROJECT_ROOT, ".cortexkit", "magic-context.jsonc");
 
 /**
  * Strip // and block comments from JSONC so JSON.parse can read it.
@@ -245,10 +245,10 @@ test("ctx_reduce mock accepts a single tag id", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Group 5: Config override — .pi/magic-context.jsonc field assertions
+// Group 5: Config override — .cortexkit/magic-context.jsonc field assertions
 // ---------------------------------------------------------------------------
 
-test("config file exists at .pi/magic-context.jsonc", () => {
+test("config file exists at .cortexkit/magic-context.jsonc", () => {
   const text = readFileSync(CONFIG_PATH, "utf8");
   expect(text.length).toBeGreaterThan(0);
 });
@@ -277,10 +277,12 @@ test("config: memory.git_commit_indexing.enabled is true", () => {
   expect(memory.git_commit_indexing.enabled).toBe(true);
 });
 
-test("config: dreamer.pin_key_files.enabled is true", () => {
+test("config: dreamer.tasks has per-task schedule format", () => {
   const cfg = parseJsonc(readFileSync(CONFIG_PATH, "utf8"));
-  const dreamer = cfg["dreamer"] as { pin_key_files: { enabled: boolean } };
-  expect(dreamer.pin_key_files.enabled).toBe(true);
+  const dreamer = cfg["dreamer"] as { tasks: Record<string, { schedule: string }> };
+  expect(dreamer.tasks).toBeDefined();
+  expect(dreamer.tasks["verify"].schedule).toBe("0 3 * * *");
+  expect(dreamer.tasks["maintain-docs"].schedule).toBe("");
 });
 
 test("config: sidekick.enabled is true", () => {
@@ -289,10 +291,9 @@ test("config: sidekick.enabled is true", () => {
   expect(sidekick.enabled).toBe(true);
 });
 
-test("config: dreamer.user_memories.enabled is true", () => {
+test("config: smart_drops is false (opt-in)", () => {
   const cfg = parseJsonc(readFileSync(CONFIG_PATH, "utf8"));
-  const dreamer = cfg["dreamer"] as { user_memories: { enabled: boolean } };
-  expect(dreamer.user_memories.enabled).toBe(true);
+  expect(cfg["smart_drops"]).toBe(false);
 });
 
 // ---------------------------------------------------------------------------

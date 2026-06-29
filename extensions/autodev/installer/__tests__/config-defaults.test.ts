@@ -165,10 +165,13 @@ test("getAgentDir returns custom dir when PI_CODING_AGENT_DIR is set", async () 
 test("validateAndCreateConfig creates all symlinks and magic-context.jsonc on happy path", async () => {
   const centralDir = createTempDir();
   const packageRoot = createTempDir();
+  const xdgDir = createTempDir();
   // Set env var so getAgentDir() returns our temp central agent dir.
   const agentDir = join(centralDir, "agent");
   const saved = process.env.PI_CODING_AGENT_DIR;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.XDG_CONFIG_HOME = xdgDir;
 
   try {
     createMockPackage(packageRoot);
@@ -219,16 +222,19 @@ test("validateAndCreateConfig creates all symlinks and magic-context.jsonc on ha
     expect(configFiles.length).toBe(10);
     expect(configFiles).toContain("docs-sources.yaml");
 
-    // magic-context.jsonc is a real file (not symlink)
-    const mcPath = join(agentDir, "magic-context.jsonc");
+    // magic-context.jsonc is a real file at the CortexKit config path (~/.config/cortexkit/)
+    const mcPath = join(xdgDir, "cortexkit", "magic-context.jsonc");
     expect(existsSync(mcPath)).toBe(true);
     expect(lstatSync(mcPath).isSymbolicLink()).toBe(false);
     expect(lstatSync(mcPath).isFile()).toBe(true);
   } finally {
     if (saved !== undefined) process.env.PI_CODING_AGENT_DIR = saved;
     else delete process.env.PI_CODING_AGENT_DIR;
+    if (savedXdg !== undefined) process.env.XDG_CONFIG_HOME = savedXdg;
+    else delete process.env.XDG_CONFIG_HOME;
     cleanupTempDir(centralDir);
     cleanupTempDir(packageRoot);
+    cleanupTempDir(xdgDir);
   }
 });
 
