@@ -242,12 +242,16 @@ async function cmdConfig(parts: string[]): Promise<number> {
   return 0;
 }
 
-export async function cmdOnboard(parts: string[], opts?: {
+export async function cmdOnboard(partsOrOpts: string[] | {
+  readonly runOnboardOverride?: typeof import("./onboard.js")["runOnboard"];
+} = [], opts?: {
   readonly runOnboardOverride?: typeof import("./onboard.js")["runOnboard"];
 }): Promise<number> {
+  const parts = Array.isArray(partsOrOpts) ? partsOrOpts : [];
+  const runOnboardOverride = Array.isArray(partsOrOpts) ? opts?.runOnboardOverride : partsOrOpts.runOnboardOverride;
   const verbose = parts.includes("--verbose") || parts.includes("-v");
   const projectRoot = process.cwd();
-  const runOnboard = opts?.runOnboardOverride
+  const runOnboard = runOnboardOverride
     ?? (await import("./onboard.js")).runOnboard;
   return runOnboard({ projectRoot, notify, ...(verbose ? { verbose: true } : {}) });
 }
