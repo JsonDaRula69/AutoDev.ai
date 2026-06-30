@@ -63,28 +63,26 @@ export async function voyageEmbed(
   return out;
 }
 
-/**
- * Local ONNX embedding provider using `@xenova/transformers` with the
- * `Xenova/all-MiniLM-L6-v2` model (384-dimensional). The model downloads on
- * first use (~90MB). Used as a fallback when `VOYAGE_API_KEY` is unset.
- *
- * The transformers import is dynamic so the (heavy) dependency is only loaded
- * when actually needed — tests never hit this path.
- */
 export async function onnxEmbed(texts: string[]): Promise<Float32Array[]> {
-  // Lazy import — keeps the module load cheap and lets tests inject a mock
-  // without pulling the transformers runtime into the test process.
-  const mod = (await import("@xenova/transformers")) as {
-    pipeline: (task: string, model: string) => Promise<{
-      featureExtraction: (
-        texts: string[],
-        opts: { pooling: string; normalize: boolean },
-      ) => Promise<{ tolist: () => number[][] }>;
-    }>;
+  const mod = (await import("@xenova/transformers")) as unknown as {
+    pipeline: (task: string, model: string) => Promise<
+      (texts: string[], opts: { pooling: string; normalize: boolean }) => Promise<{
+        data: Float32Array | number[];
+        dims: number[];
+      }>
+    >;
   };
   const extractor = await mod.pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-  const output = await extractor.featureExtraction(texts, { pooling: "mean", normalize: true });
-  return output.tolist().map((v) => new Float32Array(v));
+  const output = await extractor(texts, { pooling: "mean", normalize: true });
+  const data = output.data as Float32Array;
+  const dims = output.dims;
+  const hidden = dims[dims.length - 1] ?? 0;
+  if (hidden === 0) throw new Error("ONNX pipeline returned empty dims");
+  const result: Float32Array[] = [];
+  for (let i = 0; i < texts.length; i++) {
+    result.push(data.slice(i * hidden, (i + 1) * hidden));
+  }
+  return result;
 }
 
 /**

@@ -25,6 +25,33 @@ const MC_DOCTOR_EXEC_OPTS: ExecSyncOptions = {
 };
 
 /**
+ * Reload `.env` into `process.env` after config prompts write credentials.
+ * `loadAgentEnv()` runs at process start before `.env` exists, so `$VAR`
+ * refs in `auth.json` would otherwise resolve to undefined. Overwrites
+ * empty strings — a stale `KEY=""` from a prior run must not block a real key.
+ */
+function reloadAgentEnv(authPath: string): void {
+  try {
+    const envPath = join(dirname(authPath), ".env");
+    if (!existsSync(envPath)) return;
+    const raw = readFileSync(envPath, "utf-8");
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      if (process.env[key] === undefined || process.env[key] === "") {
+        process.env[key] = value;
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+/**
  * Write AutoDev defaults to `magic-context.jsonc` in the CortexKit config dir
  * (`~/.config/cortexkit/magic-context.jsonc`).
  *
@@ -248,6 +275,10 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   const subcommands = await brokenInstallSubcommands(firstResult.checks, deps);
   await runConfigSubcommands(deps, subcommands, notify);
 
+  // (2.5) Reload .env into process.env — config prompts may have written
+  // credentials that loadAgentEnv() didn't pick up at process start.
+  reloadAgentEnv(deps.authPath);
+
   // (3) Re-run all health checks to report what's still broken.
   const rechecked = await runHealthChecks(deps);
   return {
@@ -293,23 +324,7 @@ async function runFirstRunFlow(
   // (3.5) Reload .env into process.env — config prompts just wrote credentials
   // to the .env file, but loadAgentEnv() ran at process start before the file
   // existed. Without this, seeding and health checks can't resolve $VAR refs.
-  try {
-    const envPath = join(dirname(deps.authPath), ".env");
-    if (existsSync(envPath)) {
-      const raw = readFileSync(envPath, "utf-8");
-      for (const line of raw.split("\n")) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0 || trimmed.startsWith("#")) continue;
-        const eq = trimmed.indexOf("=");
-        if (eq <= 0) continue;
-        const key = trimmed.slice(0, eq).trim();
-        const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
-        if (process.env[key] === undefined) process.env[key] = value;
-      }
-    }
-  } catch {
-    // .env reload is best-effort — seeding will fall back to ONNX if missing
-  }
+  reloadAgentEnv(deps.authPath);
 
   // (4) MC install — deferred until after config prompts.
   notify("Registering Magic Context extension...", "info");
