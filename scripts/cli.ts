@@ -24,6 +24,7 @@
  *   autodev debate start <topic>  — debate start stub (print message)
  *   autodev debate status      — debate status stub (print message)
  *   autodev stop-continuation  — stop all continuation loops
+ *   autodev update             — self-update: migrate config, then update the package
  */
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -465,6 +466,128 @@ async function cmdUninstall(): Promise<number> {
   return failed.length > 0 ? 1 : 0;
 }
 
+async function cmdUpdate(): Promise<number> {
+  notify("AutoDev Update", "info");
+  notify("============================================", "info");
+
+  // 1. Detect current version from installed package.json.
+  let currentVersion: string;
+  try {
+    const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
+      getPackageDir: () => string;
+    };
+    const pkgDir = configModule.getPackageDir();
+    const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8"));
+    currentVersion = pkg.version ?? "0.0.0";
+  } catch {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8"));
+    currentVersion = pkg.version ?? "0.0.0";
+  }
+  notify(`Current version: ${currentVersion}`, "info");
+
+  // 2. Check npm registry for latest version.
+  let latestVersion: string;
+  try {
+    const result = execSync("npm view autodev-ai version 2>/dev/null", { encoding: "utf-8", timeout: 15_000 }).trim();
+    latestVersion = result || currentVersion;
+  } catch {
+    notify("Could not reach npm registry. Check your network connection.", "warning");
+    return 1;
+  }
+  notify(`Latest version:  ${latestVersion}`, "info");
+
+  // 3. Compare versions.
+  const { compareSemver } = await import("../extensions/autodev/installer/migrations.js");
+  if (compareSemver(latestVersion, currentVersion) <= 0) {
+    notify("Already up to date.", "info");
+    return 0;
+  }
+
+  // 4. Resolve agent dir for migrations.
+  let agentDir: string;
+  try {
+    const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
+    agentDir = getAgentDir();
+  } catch {
+    agentDir = join(process.env.HOME ?? "~", ".AutoDev", "agent");
+  }
+
+  // 5. Run migrations between current and target version.
+  const { MIGRATIONS, getLastMigratedVersion, writeCurrentVersion, selectMigrations, runMigrations } =
+    await import("../extensions/autodev/installer/migrations.js");
+
+  const lastMigrated = getLastMigratedVersion(agentDir);
+  const pendingMigrations = selectMigrations(MIGRATIONS, lastMigrated ?? currentVersion, latestVersion);
+
+  if (pendingMigrations.length > 0) {
+    notify(`\nRunning ${pendingMigrations.length} migration(s)...`, "info");
+    const migrationResults = runMigrations(pendingMigrations, agentDir);
+    for (const r of migrationResults) {
+      const icon = r.ok ? "✓" : "✗";
+      notify(`  ${icon} ${r.name}: ${r.detail}`, r.ok ? "info" : "error");
+    }
+    const failedMigrations = migrationResults.filter((r) => !r.ok);
+    if (failedMigrations.length > 0) {
+      notify(`${failedMigrations.length} migration(s) failed. Aborting update.`, "error");
+      return 1;
+    }
+    writeCurrentVersion(agentDir, latestVersion);
+    notify("Migrations complete.", "info");
+  } else {
+    notify("No migrations needed for this update.", "info");
+    writeCurrentVersion(agentDir, latestVersion);
+  }
+
+  // 6. Self-update via the package manager.
+  notify("\nUpdating autodev-ai...", "info");
+  let updateCommand: string | null = null;
+  try {
+    const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
+      getSelfUpdateCommand: (pkg: string) => { display: string } | undefined;
+    };
+    const cmd = configModule.getSelfUpdateCommand("autodev-ai");
+    if (cmd) {
+      updateCommand = cmd.display;
+    }
+  } catch {
+    // SDK config module not available — fall back to bun
+  }
+
+  if (updateCommand === null) {
+    updateCommand = "bun install -g autodev-ai@latest";
+  }
+  notify(`Running: ${updateCommand}`, "info");
+
+  try {
+    execSync(updateCommand, { stdio: "inherit", timeout: 120_000 });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    notify(`Update failed: ${msg}`, "error");
+    notify("You may need to update manually.", "warning");
+    return 1;
+  }
+
+  // 7. Post-update verification.
+  notify("\nVerifying update...", "info");
+  try {
+    const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
+      getPackageDir: () => string;
+    };
+    const pkgDir = configModule.getPackageDir();
+    const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8"));
+    const newVersion = pkg.version ?? "unknown";
+    notify(`Updated to version ${newVersion}.`, "info");
+    if (newVersion === currentVersion) {
+      notify("Warning: version unchanged after update. You may need to restart your shell.", "warning");
+    }
+  } catch {
+    notify("Could not verify new version. Run 'autodev doctor' to check health.", "info");
+  }
+
+  notify("\nUpdate complete. Run 'autodev doctor' to verify your setup.", "info");
+  return 0;
+}
+
 // ---- Main ----
 
 async function main(): Promise<number> {
@@ -512,6 +635,9 @@ async function main(): Promise<number> {
     case "uninstall":
       return cmdUninstall();
 
+    case "update":
+      return cmdUpdate();
+
     default:
       notify(`Unknown subcommand: ${subcommand}`, "error");
       notify(HELP_SUBCOMMANDS, "info");
@@ -521,7 +647,7 @@ async function main(): Promise<number> {
 
 /** Canonical subcommand list for help text. */
 export const HELP_SUBCOMMANDS =
-  "AutoDev subcommands: init, onboard, doctor, config, status, stop, uninstall, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation";
+  "AutoDev subcommands: init, onboard, doctor, config, status, stop, update, uninstall, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation";
 
 if (import.meta.main) {
   main()

@@ -75,9 +75,9 @@ test("executeOnboardingCheckMailbox returns messages when team is active", () =>
   const details = result.details as { messages: unknown[]; active: boolean };
   expect(details.active).toBe(true);
   expect(details.messages.length).toBe(2);
-  const text = result.content[0]!.text;
-  expect(text).toContain("momus");
-  expect(text).toContain("conseil");
+  const text = result.content[0];
+  expect(text?.type === "text" ? text.text : "").toContain("momus");
+  expect(text?.type === "text" ? text.text : "").toContain("conseil");
 });
 
 test("executeOnboardingCheckMailbox returns empty when no messages", () => {
@@ -86,7 +86,8 @@ test("executeOnboardingCheckMailbox returns empty when no messages", () => {
   const details = result.details as { messages: unknown[]; active: boolean };
   expect(details.active).toBe(true);
   expect(details.messages.length).toBe(0);
-  expect(result.content[0]!.text).toContain("empty");
+  const content = result.content[0];
+  expect(content?.type === "text" ? content.text : "").toContain("empty");
 });
 
 test("executeOnboardingCheckMailbox returns inactive when no team", () => {
