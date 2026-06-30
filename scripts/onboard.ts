@@ -211,11 +211,61 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   // 9. Subscribe to message_end to accumulate assistant messages into the log.
   const unsubscribe = subscribeToAssistantMessages(session, conversationLog);
 
-  // 10. Build and send the opening prompt.
+  // 10. Build and send the opening prompt, then enter interactive loop.
   const openingPrompt = buildOpeningPrompt(intentAnalysis);
   try {
     conversationLog.push({ role: "user", content: openingPrompt, timestamp: new Date().toISOString() });
     await session.prompt(openingPrompt);
+
+    // 10b. Interactive readline loop — let the user converse with the Harbor Master.
+    // Only enter the loop when stdin is a TTY (interactive terminal).
+    // In non-interactive mode (piped stdin, tests, CI), the session ends after
+    // the opening prompt.
+    if (process.stdin.isTTY === true) {
+      const { createInterface } = await import("node:readline");
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true,
+      });
+
+      const askQuestion = (): Promise<string> =>
+        new Promise((resolve) => {
+          rl.question("> ", (answer) => resolve(answer));
+        });
+
+      while (true) {
+        const userInput = await askQuestion();
+        const trimmed = userInput.trim();
+
+        if (trimmed === "" || trimmed === "exit" || trimmed === "quit" || trimmed === "/done") {
+          break;
+        }
+
+        if (trimmed === "/finalize") {
+          const { executeOnboardingFinalize } = await import(
+            "../extensions/autodev/onboarding/index.js"
+          );
+          const result = executeOnboardingFinalize(undefined);
+          const details = result.details as { ready: boolean; missing: string[] };
+          if (details.ready) {
+            notify("Onboarding finalized — all coverage requirements met.", "info");
+            break;
+          } else {
+            notify(`Not ready yet. Missing: ${details.missing.join(", ")}`, "warning");
+            continue;
+          }
+        }
+
+        conversationLog.push({ role: "user", content: trimmed, timestamp: new Date().toISOString() });
+        await session.prompt(trimmed);
+      }
+
+      rl.close();
+    } else {
+      notify("Non-interactive stdin detected. Onboarding session completed with opening prompt only.", "info");
+      notify("To run interactive onboarding, run 'autodev onboard' in a terminal.", "info");
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     notify(`Onboarding session ended with error: ${msg}`, "warning");

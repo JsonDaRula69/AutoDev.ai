@@ -15,6 +15,7 @@ import { createBridge, type BridgeConfig } from "./bridge.js";
 
 /** Module-level reference so tests can inspect state. */
 let bridgeHandle: { stop: () => void } | null = null;
+let registerCount = 0;
 let discordClient: DiscordClient | null = null;
 let enabled = false;
 
@@ -66,9 +67,12 @@ export function register(pi: ExtensionAPI): void {
 
   bridgeHandle = createBridge(pi, discordClient, config);
 
-  console.log(
-    `[discord] Bridge enabled. Channel: ${channelId}${
-      liaisonChannelId ? `, Liaison channel: ${liaisonChannelId}` : ""
-    }`,
-  );
+  registerCount++;
+  if (registerCount === 1) {
+    console.log(
+      `[discord] Bridge enabled. Channel: ${channelId}${
+        liaisonChannelId ? `, Liaison channel: ${liaisonChannelId}` : ""
+      }`,
+    );
+  }
 }
