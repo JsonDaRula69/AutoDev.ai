@@ -12,7 +12,7 @@ import {
   checkSqliteVersion,
 } from "../fts-utils.js";
 
-export { SQLITE_MIN_VERSION, compareVersions, checkSqliteVersion };
+export { SQLITE_MIN_VERSION, checkSqliteVersion };
 
 /**
  * DDL executed once per DB connection to create all tables, triggers, and the
