@@ -548,6 +548,19 @@ async function cmdUpdate(): Promise<number> {
 
   // 6. Self-update via the package manager.
   notify("\nUpdating autodev-ai...", "info");
+
+  // Clear bun's global cache to avoid serving a stale older version.
+  const home = process.env.HOME ?? "~";
+  const bunCacheDir = join(home, ".bun", "install", "cache");
+  if (existsSync(bunCacheDir)) {
+    try {
+      execSync(`rm -rf "${bunCacheDir}"`, { stdio: "pipe", timeout: 10_000 });
+      notify("Cleared bun global cache.", "info");
+    } catch {
+      // Non-fatal — cache clear is best-effort
+    }
+  }
+
   let updateCommand: string | null = null;
   try {
     const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
@@ -558,11 +571,10 @@ async function cmdUpdate(): Promise<number> {
       updateCommand = cmd.display;
     }
   } catch {
-    // SDK config module not available — fall back to bun
   }
 
   if (updateCommand === null) {
-    updateCommand = "bun install -g autodev-ai@latest";
+    updateCommand = `bun install -g autodev-ai@${latestVersion}`;
   }
   notify(`Running: ${updateCommand}`, "info");
 
