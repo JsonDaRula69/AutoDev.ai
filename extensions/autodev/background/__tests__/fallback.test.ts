@@ -50,13 +50,13 @@ import { loadAgentFallbackChains } from "../fallback.js";
 // --- Happy path ------------------------------------------------------------
 
 test("loadAgentFallbackChains reads fallback_models from central agents dir", () => {
-  writeCentralAgent("nemo", "ollama-cloud/glm-5.1:cloud, ollama-cloud/deepseek-v4-pro", "ollama-cloud/glm-5.2:cloud");
+  writeCentralAgent("nemo", "ollama-cloud/glm-5.1, ollama-cloud/deepseek-v4-pro", "ollama-cloud/glm-5.2");
   writeCentralAgent("oracle", "ollama-cloud/deepseek-v4-flash", "ollama-cloud/deepseek-v4-pro");
 
   const chains = loadAgentFallbackChains("/unused/project/root");
   expect(chains["nemo"]).toBeDefined();
   expect(chains["nemo"]!.fallback_models).toEqual([
-    "ollama-cloud/glm-5.1:cloud",
+    "ollama-cloud/glm-5.1",
     "ollama-cloud/deepseek-v4-pro",
   ]);
   expect(chains["oracle"]).toBeDefined();
@@ -64,8 +64,8 @@ test("loadAgentFallbackChains reads fallback_models from central agents dir", ()
 });
 
 test("loadAgentFallbackChains skips agents without fallback_models field", () => {
-  writeCentralAgent("nemo", "ollama-cloud/glm-5.1:cloud", "ollama-cloud/glm-5.2:cloud");
-  writeCentralAgent("no-fallback", undefined, "ollama-cloud/glm-5.2:cloud");
+  writeCentralAgent("nemo", "ollama-cloud/glm-5.1", "ollama-cloud/glm-5.2");
+  writeCentralAgent("no-fallback", undefined, "ollama-cloud/glm-5.2");
 
   const chains = loadAgentFallbackChains("/unused");
   expect(chains["nemo"]).toBeDefined();
@@ -73,7 +73,7 @@ test("loadAgentFallbackChains skips agents without fallback_models field", () =>
 });
 
 test("loadAgentFallbackChains skips agents whose fallback_models is empty after trim", () => {
-  writeCentralAgent("empty-fb", " , ", "ollama-cloud/glm-5.2:cloud");
+  writeCentralAgent("empty-fb", " , ", "ollama-cloud/glm-5.2");
   const chains = loadAgentFallbackChains("/unused");
   expect(chains["empty-fb"]).toBeUndefined();
 });
@@ -89,7 +89,7 @@ test("loadAgentFallbackChains returns {} when central agents dir is missing", ()
 test("loadAgentFallbackChains skips agents with no `name` frontmatter field", () => {
   writeFileSync(
     join(agentDir, "noname.md"),
-    `---\ndescription: no name\ntools: read\nfallback_models: ollama-cloud/glm-5.1:cloud\nmodel: ollama-cloud/glm-5.2:cloud\n---\nBody.`,
+    `---\ndescription: no name\ntools: read\nfallback_models: ollama-cloud/glm-5.1\nmodel: ollama-cloud/glm-5.2\n---\nBody.`,
   );
   const chains = loadAgentFallbackChains("/unused");
   // Without a `name` field the chain cannot be keyed, so it is skipped.

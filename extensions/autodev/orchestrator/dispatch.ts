@@ -198,7 +198,7 @@ export async function dispatchIssue(config: DispatchConfig): Promise<string> {
   const systemPrompt = buildNemoPrompt(config);
 
   const taskId = manager.spawn({
-    model: config.model ?? "ollama-cloud/glm-5.2:cloud",
+    model: config.model ?? "ollama-cloud/glm-5.2",
     systemPrompt,
     tools: ["read", "write", "edit", "bash", "grep", "find", "ls"],
     agentName: "nemo",

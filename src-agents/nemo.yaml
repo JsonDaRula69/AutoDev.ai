@@ -1,9 +1,9 @@
 name: nemo
 display_name: Captain Nemo
 role: Captain
-model_preference: ollama-cloud/glm-5.2:cloud
+model_preference: ollama-cloud/glm-5.2
 fallback_models:
-  - ollama-cloud/glm-5.1:cloud
+  - ollama-cloud/glm-5.1
   - ollama-cloud/deepseek-v4-flash
 description: >
   Triage, delegate, set course. Authority is decisive because indecision

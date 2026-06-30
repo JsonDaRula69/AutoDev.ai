@@ -59,15 +59,15 @@ const BUILTIN_CATEGORIES: Readonly<Record<string, CategoryDefinition>> = {
     thinkingLevel: "xhigh",
   },
   "visual-engineering": {
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/glm-5.2",
     description: "Model tuned for frontend / visual work and UI engineering.",
   },
   artistry: {
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/glm-5.2",
     description: "Model for creative design, aesthetics, and craft.",
   },
   writing: {
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/glm-5.2",
     description: "Model for prose, documentation, and communication.",
   },
   "unspecified-low": {
@@ -75,7 +75,7 @@ const BUILTIN_CATEGORIES: Readonly<Record<string, CategoryDefinition>> = {
     description: "Low-cost default when no specific category fits.",
   },
   "unspecified-high": {
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/glm-5.2",
     description: "Higher-capability default when no specific category fits.",
   },
 };

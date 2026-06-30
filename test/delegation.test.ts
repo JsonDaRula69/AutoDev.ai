@@ -100,8 +100,8 @@ beforeEach(() => {
   writeFileSync(
     join(projectRoot, ".autodev", "config", "models.json"),
     JSON.stringify([
-      "ollama-cloud/glm-5.2:cloud",
-      "ollama-cloud/glm-5.1:cloud",
+      "ollama-cloud/glm-5.2",
+      "ollama-cloud/glm-5.1",
       "ollama-cloud/deepseek-v4-pro",
       "ollama-cloud/deepseek-v4-flash",
       "ollama-cloud/kimi-k2.7-code",
@@ -189,7 +189,7 @@ test("task(category=quick, run_in_background=true) returns task ID immediately",
 test("task(subagent_type=explore) spawns session with explore agent config", async () => {
   writeAgent(
     "explore",
-    "ollama-cloud/glm-5.2:cloud",
+    "ollama-cloud/glm-5.2",
     "read, bash, grep, glob, webfetch, websearch",
     "You are Explore, the investigator. Map the codebase and report findings with file paths.",
   );
@@ -203,7 +203,7 @@ test("task(subagent_type=explore) spawns session with explore agent config", asy
 
   expect(spawner.spawns.length).toBe(1);
   const task = spawner.spawns[0]!;
-  expect(task.config.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(task.config.model).toBe("ollama-cloud/glm-5.2");
   expect(task.config.agentName).toBe("explore");
   // The agent's system prompt body must be included.
   expect(task.config.systemPrompt).toContain("You are Explore");
@@ -296,7 +296,7 @@ test("category models are loaded from config, not hardcoded — custom override 
 
 test("custom category not in built-ins is accepted when in categories.json", async () => {
   writeCategories({
-    "custom-cat": { model: "ollama-cloud/glm-5.2:cloud", description: "a custom category" },
+    "custom-cat": { model: "ollama-cloud/glm-5.2", description: "a custom category" },
   });
 
   const spawner = new FakeSpawner();
@@ -308,7 +308,7 @@ test("custom category not in built-ins is accepted when in categories.json", asy
 
   expect(spawner.spawns.length).toBe(1);
   const task = spawner.spawns[0]!;
-  expect(task.config.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(task.config.model).toBe("ollama-cloud/glm-5.2");
   expect(task.config.agentName).toBe("category:custom-cat");
   // No error.
   expect(result.terminate).toBeUndefined();
@@ -370,7 +370,7 @@ test("anti-re-delegation: task tool is stripped from spawned session tools", asy
   // Agent whose tools list includes `task`.
   writeAgent(
     "recursive",
-    "ollama-cloud/glm-5.2:cloud",
+    "ollama-cloud/glm-5.2",
     "read, bash, task",
     "You are a recursive agent.",
   );
@@ -445,11 +445,11 @@ test("default model mapping: all 8 categories resolve to their spec'd models wit
   expect(map["quick"]?.model).toBe("ollama-cloud/deepseek-v4-flash");
   expect(map["deep"]?.model).toBe("ollama-cloud/kimi-k2.7-code");
   expect(map["ultrabrain"]?.model).toBe("ollama-cloud/deepseek-v4-pro");
-  expect(map["visual-engineering"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
-  expect(map["artistry"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
-  expect(map["writing"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(map["visual-engineering"]?.model).toBe("ollama-cloud/glm-5.2");
+  expect(map["artistry"]?.model).toBe("ollama-cloud/glm-5.2");
+  expect(map["writing"]?.model).toBe("ollama-cloud/glm-5.2");
   expect(map["unspecified-low"]?.model).toBe("ollama-cloud/deepseek-v4-flash");
-  expect(map["unspecified-high"]?.model).toBe("ollama-cloud/glm-5.2:cloud");
+  expect(map["unspecified-high"]?.model).toBe("ollama-cloud/glm-5.2");
 });
 
 // --- thinkingLevel wiring (M5) -----------------------------------------------
@@ -504,8 +504,8 @@ test("loadAgent returns undefined for missing agent file", () => {
 });
 
 test("listAgentNames returns all .md filenames without extension", () => {
-  writeAgent("alpha", "ollama-cloud/glm-5.2:cloud", "read", "body");
-  writeAgent("beta", "ollama-cloud/glm-5.2:cloud", "read", "body");
+  writeAgent("alpha", "ollama-cloud/glm-5.2", "read", "body");
+  writeAgent("beta", "ollama-cloud/glm-5.2", "read", "body");
   const names = listAgentNames(projectRoot);
   expect(names).toContain("alpha");
   expect(names).toContain("beta");

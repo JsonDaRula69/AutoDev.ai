@@ -97,7 +97,7 @@ function makeManager(options: {
     concurrencyConfig: options.concurrencyConfig ?? { "ollama-cloud": { max: 5 } },
     fallbackConfig: options.fallbackConfig ?? {
       chains: {},
-      allowlist: ["ollama-cloud/glm-5.2:cloud", "ollama-cloud/deepseek-v4-pro"],
+      allowlist: ["ollama-cloud/glm-5.2", "ollama-cloud/deepseek-v4-pro"],
     },
     defaultStaleTimeoutMs: options.defaultStaleTimeoutMs ?? 50,
   });
@@ -119,7 +119,7 @@ test("spawn 3 concurrent sessions and all complete", async () => {
   const { manager } = makeManager({});
   const ids: string[] = [];
   for (let i = 0; i < 3; i++) {
-    ids.push(manager.spawn(spawnConfig("ollama-cloud/glm-5.2:cloud") as never));
+    ids.push(manager.spawn(spawnConfig("ollama-cloud/glm-5.2") as never));
   }
 
   // Sessions are created async — let microtasks flush.
@@ -144,12 +144,12 @@ test("spawn session with bad model falls back to configured fallback model", asy
       chains: {
         explore: { fallback_models: ["ollama-cloud/deepseek-v4-pro"] },
       },
-      allowlist: ["ollama-cloud/glm-5.2:cloud", "ollama-cloud/deepseek-v4-pro"],
+      allowlist: ["ollama-cloud/glm-5.2", "ollama-cloud/deepseek-v4-pro"],
     },
   });
 
   const id = manager.spawn({
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/glm-5.2",
     systemPrompt: "explore task",
     tools: ["read"],
     agentName: "explore",
@@ -179,7 +179,7 @@ test("spawn session with bad model falls back to configured fallback model", asy
 test("circuit breaker trips after stale timeout (fake timers)", async () => {
   const { manager } = makeManager({ defaultStaleTimeoutMs: 50 });
 
-  const id = manager.spawn(spawnConfig("ollama-cloud/glm-5.2:cloud") as never);
+  const id = manager.spawn(spawnConfig("ollama-cloud/glm-5.2") as never);
   await new Promise((r) => setTimeout(r, 0));
 
   expect(mockSessionRegistry.sessions.length).toBe(1);
@@ -205,7 +205,7 @@ test("parent session notified when child completes", async () => {
   let notifiedResult: unknown = undefined;
 
   const id = manager.spawn({
-    model: "ollama-cloud/glm-5.2:cloud",
+    model: "ollama-cloud/glm-5.2",
     systemPrompt: "child task",
     tools: ["read"],
     onParentWake: (_taskId: string, status: string, result: unknown) => {
@@ -236,7 +236,7 @@ test("concurrency limit enforced — 6th task queued when limit is 5", async () 
 
   const ids: string[] = [];
   for (let i = 0; i < 6; i++) {
-    ids.push(manager.spawn(spawnConfig("ollama-cloud/glm-5.2:cloud") as never));
+    ids.push(manager.spawn(spawnConfig("ollama-cloud/glm-5.2") as never));
   }
 
   // 5 sessions start, 6th is queued. Flush microtasks.
@@ -308,13 +308,13 @@ test("resolveFallbackModel returns proactive chain model for configured agent", 
     chains: {
       explore: { fallback_models: ["ollama-cloud/deepseek-v4-pro"] },
     },
-    allowlist: ["ollama-cloud/glm-5.2:cloud", "ollama-cloud/deepseek-v4-pro"],
+    allowlist: ["ollama-cloud/glm-5.2", "ollama-cloud/deepseek-v4-pro"],
   };
   const result = resolveFallbackModel({
     agentName: "explore",
     error: { status: 429, message: "rate limited" },
-    currentModel: "ollama-cloud/glm-5.2:cloud",
-    triedModels: ["ollama-cloud/glm-5.2:cloud"],
+    currentModel: "ollama-cloud/glm-5.2",
+    triedModels: ["ollama-cloud/glm-5.2"],
     config,
   });
   expect(result).toBeDefined();
@@ -325,13 +325,13 @@ test("resolveFallbackModel returns proactive chain model for configured agent", 
 test("resolveFallbackModel returns reactive allowlist model when no proactive chain", () => {
   const config = {
     chains: {},
-    allowlist: ["ollama-cloud/glm-5.2:cloud", "ollama-cloud/deepseek-v4-pro"],
+    allowlist: ["ollama-cloud/glm-5.2", "ollama-cloud/deepseek-v4-pro"],
   };
   const result = resolveFallbackModel({
     agentName: "unknown-agent",
     error: { status: 503, message: "unavailable" },
-    currentModel: "ollama-cloud/glm-5.2:cloud",
-    triedModels: ["ollama-cloud/glm-5.2:cloud"],
+    currentModel: "ollama-cloud/glm-5.2",
+    triedModels: ["ollama-cloud/glm-5.2"],
     config,
   });
   expect(result).toBeDefined();
@@ -342,13 +342,13 @@ test("resolveFallbackModel returns reactive allowlist model when no proactive ch
 test("resolveFallbackModel returns undefined for non-retryable errors", () => {
   const config = {
     chains: { explore: { fallback_models: ["ollama-cloud/deepseek-v4-pro"] } },
-    allowlist: ["ollama-cloud/glm-5.2:cloud", "ollama-cloud/deepseek-v4-pro"],
+    allowlist: ["ollama-cloud/glm-5.2", "ollama-cloud/deepseek-v4-pro"],
   };
   const result = resolveFallbackModel({
     agentName: "explore",
     error: { status: 401, message: "unauthorized" },
-    currentModel: "ollama-cloud/glm-5.2:cloud",
-    triedModels: ["ollama-cloud/glm-5.2:cloud"],
+    currentModel: "ollama-cloud/glm-5.2",
+    triedModels: ["ollama-cloud/glm-5.2"],
     config,
   });
   expect(result).toBeUndefined();
@@ -375,7 +375,7 @@ test("resolveFallbackModel skips already-tried models", () => {
 test("loadFallbackConfig loads from project root", () => {
   const config = loadFallbackConfig(process.cwd());
   expect(config.allowlist.length).toBeGreaterThan(0);
-  expect(config.allowlist).toContain("ollama-cloud/glm-5.2:cloud");
+  expect(config.allowlist).toContain("ollama-cloud/glm-5.2");
 });
 
 // --- M4: default session factory wiring -------------------------------------
@@ -386,7 +386,7 @@ test("BackgroundManager uses the default session factory when none is provided",
     sessionFactory: factory,
     setTimer: (fn, ms) => scheduler.setTimer(fn, ms),
   });
-  const id = manager.spawn(spawnConfig("ollama-cloud/glm-5.2:cloud") as never);
+  const id = manager.spawn(spawnConfig("ollama-cloud/glm-5.2") as never);
   const task = manager.getTask(id);
   expect(task).toBeDefined();
   expect(task?.status).not.toBe("error");

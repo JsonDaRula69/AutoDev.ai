@@ -107,7 +107,7 @@ function makeFakeAgentBody(name: string): string {
     `name: ${name}`,
     `description: test agent`,
     `tools: read, bash, grep, glob, write, onboarding_progress, onboarding_dispatch_hint, onboarding_finalize, onboarding_check_mailbox, task`,
-    `model: ollama-cloud/glm-5.2:cloud`,
+    `model: ollama-cloud/glm-5.2`,
     `---`,
     `You are ${name}.`,
   ].join("\n");
@@ -194,7 +194,7 @@ test("runOnboard builds session with systemPromptOverride from harbor-master bod
     notify: () => {},
     piSdkOverride: deps,
     loadAgentOverride: () =>
-      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2", tools: [] }),
     analyzeOnboardingIntentOverride: () =>
       ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
@@ -243,7 +243,7 @@ test("runOnboard calls analyzeOnboardingIntent and injects results into opening 
     notify: () => {},
     piSdkOverride: deps,
     loadAgentOverride: () =>
-      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2", tools: [] }),
     analyzeOnboardingIntentOverride: (text: string) => {
       analyzeCalls.push(text);
       return {
@@ -290,7 +290,7 @@ test("runOnboard prefers SessionManager.create and falls back to inMemory on fai
     notify: (msg, level) => messages.push({ msg, level }),
     piSdkOverride: deps,
     loadAgentOverride: () =>
-      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2", tools: [] }),
     analyzeOnboardingIntentOverride: () =>
       ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
@@ -323,7 +323,7 @@ test("runOnboard throws descriptive error when both find and getDefault return n
       notify: (msg, level) => messages.push({ msg, level }),
       piSdkOverride: deps,
       loadAgentOverride: () =>
-        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2", tools: [] }),
       analyzeOnboardingIntentOverride: () =>
         ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), }),
     ).rejects.toThrow(/No usable model found for Harbor Master onboarding/i);
@@ -349,7 +349,7 @@ test("runOnboard accumulates assistant text from message_end into conversationLo
     notify: () => {},
     piSdkOverride: deps,
     loadAgentOverride: () =>
-      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2", tools: [] }),
     analyzeOnboardingIntentOverride: () =>
       ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
@@ -393,7 +393,7 @@ test("runOnboard accumulates assistant text from message_end into conversationLo
     notify: () => {},
     piSdkOverride: deps,
     loadAgentOverride: () =>
-      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2", tools: [] }),
     analyzeOnboardingIntentOverride: () =>
       ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
@@ -430,7 +430,7 @@ test("runOnboard still returns 0 when session ends with error and writes harbor 
     notify: (msg, level) => messages.push({ msg, level }),
     piSdkOverride: deps,
     loadAgentOverride: () =>
-      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2", tools: [] }),
     analyzeOnboardingIntentOverride: () =>
       ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
