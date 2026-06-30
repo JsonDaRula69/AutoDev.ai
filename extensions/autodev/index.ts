@@ -60,12 +60,27 @@ const MODULES: ReadonlyArray<{ readonly name: string; readonly register: (pi: Ex
 export const MODULE_NAMES: readonly string[] = MODULES.map((m) => m.name);
 
 async function loadAgentEnv(): Promise<void> {
+  const home = process.env.HOME ?? "~";
+  const autodevAgentDir = join(home, ".AutoDev", "agent");
+
+  // install.sh writes .env/models.json/auth.json to ~/.AutoDev/agent/ and
+  // exports PI_CODING_AGENT_DIR in the install shell + user's shell rc. A new
+  // shell that hasn't reloaded its rc will be missing the env var, causing
+  // getAgentDir() to fall back to ~/.pi/agent (empty). When the env var is
+  // unset, prefer ~/.AutoDev/agent/ if it exists on disk and set the env var
+  // so every downstream getAgentDir() call in this process resolves correctly.
+  if (process.env.PI_CODING_AGENT_DIR === undefined) {
+    if (existsSync(autodevAgentDir)) {
+      process.env.PI_CODING_AGENT_DIR = autodevAgentDir;
+    }
+  }
+
   let agentDir: string;
   try {
     const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
     agentDir = getAgentDir();
   } catch {
-    agentDir = join(process.env.HOME ?? "~", ".pi", "agent");
+    agentDir = join(home, ".pi", "agent");
   }
   const envPath = join(agentDir, ".env");
   if (!existsSync(envPath)) return;

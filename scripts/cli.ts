@@ -26,7 +26,7 @@
  *   autodev stop-continuation  — stop all continuation loops
  */
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import type { DoctorExecFn } from "../extensions/autodev/installer/doctor.js";
 
@@ -96,18 +96,42 @@ function loadEnvFile(filePath: string): void {
 }
 
 /**
- * Load ~/.pi/agent/.env into process.env.
- * Resolves the agent dir via dynamic import of getAgentDir, falling back
- * to ~/.pi/agent when unavailable.
+ * Resolve the pi agent directory, honoring `PI_CODING_AGENT_DIR` when set.
+ *
+ * install.sh writes models.json/auth.json/.env to `~/.AutoDev/agent/` and
+ * exports `PI_CODING_AGENT_DIR` in the install shell + user's shell rc. But a
+ * new shell that hasn't reloaded its rc will be missing the env var, so the
+ * SDK's `getAgentDir()` falls back to its default `~/.pi/agent` — which has
+ * nothing. When the env var is unset, prefer `~/.AutoDev/agent/` (the
+ * install.sh location) if it exists on disk, and set the env var so every
+ * downstream `getAgentDir()` call in this process resolves correctly.
  */
-async function loadAgentEnv(): Promise<void> {
-  let agentDir: string;
+export async function resolveAgentDir(): Promise<string> {
+  const home = process.env.HOME ?? "~";
+  const autodevAgentDir = join(home, ".AutoDev", "agent");
+
+  if (process.env.PI_CODING_AGENT_DIR === undefined) {
+    if (existsSync(autodevAgentDir)) {
+      process.env.PI_CODING_AGENT_DIR = autodevAgentDir;
+    }
+  }
+
   try {
     const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
-    agentDir = getAgentDir();
+    return getAgentDir();
   } catch {
-    agentDir = join(process.env.HOME ?? "~", ".pi", "agent");
+    return join(home, ".pi", "agent");
   }
+}
+
+/**
+ * Load <agentDir>/.env into process.env.
+ * Resolves the agent dir via `resolveAgentDir()`, which honors
+ * `PI_CODING_AGENT_DIR` and falls back to `~/.AutoDev/agent/` when the env
+ * var is unset but that directory exists (the install.sh location).
+ */
+async function loadAgentEnv(): Promise<void> {
+  const agentDir = await resolveAgentDir();
   loadEnvFile(join(agentDir, ".env"));
 }
 
