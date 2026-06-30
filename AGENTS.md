@@ -98,6 +98,10 @@ Files called AGENTS.md commonly appear in many places inside a container - at "/
 
 Their purpose is to pass along human guidance to you, the agent. Such guidance can include coding standards, explanations of the project layout, steps for building or testing, and even wording that must accompany a GitHub pull-request description produced by the agent; all of it is to be followed.
 
+## Code Search Rules
+
+**NEVER** search code by running `grep`, `rg`, `find`, `sed`, `cat`, or `awk` through `bash` — these are unindexed, unranked, serial, and routinely surface the wrong hit. **ALWAYS** use `aft_search` (auto-routes concepts, identifiers, regex, literals), `read`, `aft_outline`, or `aft_zoom` instead. Use `bash` only for shell facts (git state, file metadata, processes). This applies to all code exploration in every session.
+
 Each AGENTS.md governs the entire directory that contains it and every child directory beneath that point. Whenever you change a file, you have to comply with every AGENTS.md whose scope covers that file. Naming conventions, stylistic rules and similar directives are restricted to the code that falls inside its scope unless the document explicitly states otherwise.
 
 When two AGENTS.md files disagree, the one located deeper in the directory structure overrides the higher-level file, while instructions given directly in the prompt by the system, developer, or user outrank any AGENTS.md content.
