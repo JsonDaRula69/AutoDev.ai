@@ -87,9 +87,22 @@ export function createBridge(
     if (stopped) return;
     if (!event.messages || event.messages.length === 0) return;
 
-    const lastMessage = event.messages[event.messages.length - 1] as { content?: string } | undefined;
-    const content = lastMessage?.content;
-    if (!content) return;
+    const lastMessage = event.messages[event.messages.length - 1] as {
+      content?: string | Array<{ type?: string; text?: string }>;
+    } | undefined;
+    const rawContent = lastMessage?.content;
+    if (rawContent === undefined || rawContent === null) return;
+
+    const content = typeof rawContent === "string"
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent
+            .filter((part) => part?.type === "text" && typeof part.text === "string")
+            .map((part) => part.text!)
+            .join("")
+        : "";
+
+    if (content.length === 0) return;
 
     void client.sendMessage(config.channelId, truncateResponse(content));
   }
