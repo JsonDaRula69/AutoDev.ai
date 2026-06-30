@@ -12,7 +12,7 @@
  * (treats the install as pre-migration-framework).
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 
 export interface MigrationResult {
@@ -113,6 +113,58 @@ export const MIGRATIONS: readonly Migration[] = [
         name: "0.1.14-pi-agent-dir-fallback",
         ok: true,
         detail: "No action needed — env var already set or ~/.AutoDev/agent absent.",
+      };
+    },
+  },
+  {
+    version: "0.1.27",
+    description: "Remove :cloud suffix from model strings in central agent files",
+    run: (agentDir: string): MigrationResult => {
+      let changed = 0;
+      const agentsDir = join(agentDir, "..", "agents");
+      if (existsSync(agentsDir)) {
+        for (const file of readdirSync(agentsDir)) {
+          if (!file.endsWith(".md")) continue;
+          const path = join(agentsDir, file);
+          try {
+            const content = readFileSync(path, "utf-8");
+            if (content.includes(":cloud")) {
+              writeFileSync(path, content.replace(/:cloud/g, ""), "utf-8");
+              changed++;
+            }
+          } catch {
+            // Skip unreadable files
+          }
+        }
+      }
+      const modelsPath = join(agentDir, "models.json");
+      if (existsSync(modelsPath)) {
+        try {
+          const content = readFileSync(modelsPath, "utf-8");
+          if (content.includes(":cloud")) {
+            writeFileSync(modelsPath, content.replace(/:cloud/g, ""), "utf-8");
+            changed++;
+          }
+        } catch {
+          // Skip
+        }
+      }
+      const settingsPath = join(agentDir, "settings.json");
+      if (existsSync(settingsPath)) {
+        try {
+          const content = readFileSync(settingsPath, "utf-8");
+          if (content.includes(":cloud")) {
+            writeFileSync(settingsPath, content.replace(/:cloud/g, ""), "utf-8");
+            changed++;
+          }
+        } catch {
+          // Skip
+        }
+      }
+      return {
+        name: "0.1.27-remove-cloud-suffix",
+        ok: true,
+        detail: changed > 0 ? `Rewrote :cloud suffix in ${changed} file(s).` : "No :cloud suffixes found.",
       };
     },
   },

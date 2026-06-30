@@ -122,3 +122,43 @@ test("0.1.14 migration runs without error", () => {
   const result = migration.run(agentDir);
   expect(result.ok).toBe(true);
 });
+
+test("MIGRATIONS array includes the 0.1.27 migration", () => {
+  const v0127 = MIGRATIONS.find((m) => m.version === "0.1.27");
+  expect(v0127).toBeDefined();
+  expect(v0127!.description).toContain(":cloud");
+});
+
+test("0.1.27 migration rewrites :cloud suffix in agent files", () => {
+  const agentDir = join(tempDir, "agent");
+  mkdirSync(agentDir, { recursive: true });
+  const agentsDir = join(tempDir, "agent", "..", "agents");
+  mkdirSync(agentsDir, { recursive: true });
+  writeFileSync(join(agentsDir, "nemo.md"), "---\nmodel: ollama-cloud/glm-5.2:cloud\n---\nBody.\n");
+  writeFileSync(join(agentDir, "models.json"), '["ollama-cloud/glm-5.2:cloud"]');
+  writeFileSync(join(agentDir, "settings.json"), '{"defaultModel": "glm-5.2:cloud"}');
+
+  const migration = MIGRATIONS.find((m) => m.version === "0.1.27")!;
+  const result = migration.run(agentDir);
+  expect(result.ok).toBe(true);
+  expect(result.detail).toContain("3 file");
+
+  const nemoContent = readFileSync(join(agentsDir, "nemo.md"), "utf-8");
+  expect(nemoContent).not.toContain(":cloud");
+  expect(nemoContent).toContain("glm-5.2");
+
+  const modelsContent = readFileSync(join(agentDir, "models.json"), "utf-8");
+  expect(modelsContent).not.toContain(":cloud");
+
+  const settingsContent = readFileSync(join(agentDir, "settings.json"), "utf-8");
+  expect(settingsContent).not.toContain(":cloud");
+});
+
+test("0.1.27 migration reports no changes when no :cloud suffixes exist", () => {
+  const agentDir = join(tempDir, "agent");
+  mkdirSync(agentDir, { recursive: true });
+  const migration = MIGRATIONS.find((m) => m.version === "0.1.27")!;
+  const result = migration.run(agentDir);
+  expect(result.ok).toBe(true);
+  expect(result.detail).toContain("No :cloud");
+});

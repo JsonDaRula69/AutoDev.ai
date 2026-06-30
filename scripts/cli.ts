@@ -494,6 +494,11 @@ async function cmdUpdate(): Promise<number> {
   notify(`Current version: ${currentVersion}`, "info");
 
   // 2. Check npm registry for latest version.
+  // Clear npm cache first to avoid stale version data.
+  try {
+    execSync("npm cache clean --force 2>/dev/null", { encoding: "utf-8", timeout: 15_000 });
+  } catch {
+  }
   let latestVersion: string;
   try {
     const result = execSync("npm view autodev-ai version 2>/dev/null", { encoding: "utf-8", timeout: 15_000 }).trim();
