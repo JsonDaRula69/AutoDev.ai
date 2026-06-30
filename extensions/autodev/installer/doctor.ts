@@ -252,13 +252,14 @@ export async function runDoctor(deps: DoctorDeps): Promise<DoctorResult> {
   }
 
   // ---- Broken-install path ----
-  notify("Some health checks failed. Something needs fixing...", "warning");
   const firstResult = await runHealthChecks(deps);
   const failed = firstResult.checks.length - firstResult.passed;
 
   if (failed === 0) {
     return firstResult;
   }
+
+  notify("Some health checks failed. Something needs fixing...", "warning");
 
   // (1) Install module — always, no prompts, safe in CI.
   notify("Running install fixes...", "info");

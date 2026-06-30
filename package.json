@@ -1,6 +1,6 @@
 {
   "name": "autodev-ai",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "AutoDev — Autonomous Engineering Team. DevTeam in a Box. Runs on pi.",
   "license": "MIT",
   "type": "module",
