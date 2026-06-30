@@ -24,25 +24,31 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Construct the webhook payload (mimics GitHub PR webhook format)
-          PAYLOAD=$(cat <<'EOF'
-          {
-            "action": "${PR_ACTION}",
-            "pull_request": {
-              "number": ${PR_NUMBER},
-              "title": "${PR_TITLE}",
-              "user": { "login": "${PR_USER}" },
-              "head": { "sha": "${PR_HEAD_SHA}" }
-            },
-            "repository": {
-              "full_name": "${REPO_FULL_NAME}"
-            }
-          }
-          EOF
-          )
+          if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_SECRET" ]; then
+            echo "❌ HERMES_WEBHOOK_URL or HERMES_WEBHOOK_SECRET not set"
+            exit 1
+          fi
 
-          # Substitute env vars into payload
-          PAYLOAD=$(echo "$PAYLOAD" | envsubst)
+          # Construct the webhook payload as JSON
+          PAYLOAD=$(jq -n \
+            --arg action "$PR_ACTION" \
+            --argjson number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" \
+            --arg user "$PR_USER" \
+            --arg sha "$PR_HEAD_SHA" \
+            --arg repo "$REPO_FULL_NAME" \
+            '{
+              action: $action,
+              pull_request: {
+                number: $number,
+                title: $title,
+                user: { login: $user },
+                head: { sha: $sha }
+              },
+              repository: {
+                full_name: $repo
+              }
+            }')
 
           # Compute HMAC-SHA256 signature
           SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')
