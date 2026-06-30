@@ -23,7 +23,7 @@ import * as store from "../team-mode/store.js";
 
 type ToolResult = AgentToolResult<unknown>;
 
-const ONBOARDING_OBSERVERS = ["harbor-master", "conseil", "metis", "momus"] as const;
+const ONBOARDING_OBSERVERS = ["harbor-master", "momus", "metis", "aronnax", "conseil", "explore", "navigator"] as const;
 
 let _activeOnboardingTeam: string | null = null;
 
