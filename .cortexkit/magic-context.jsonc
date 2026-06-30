@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cortexkit/magic-context/master/assets/magic-context.schema.json",
+  "enabled": true,
+  "cache_ttl": "5m",
+  "protected_tags": 20,
+  "temporal_awareness": true,
+
+  "historian": {
+    "model": "ollama-cloud/glm-5.2:cloud",
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"]
+  },
+
+  "dreamer": {
+    "enabled": true,
+    "model": "ollama-cloud/glm-5.2:cloud",
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
+    "tasks": {
+      "map-memories":      { "schedule": "0 2 * * *" },
+      "verify":            { "schedule": "0 3 * * *" },
+      "verify-broad":      { "schedule": "0 4 * * 0" },
+      "curate":            { "schedule": "0 4 * * 0" },
+      "classify-memories": { "schedule": "0 6 * * *" },
+      "retrospective":     { "schedule": "0 5 * * *" },
+      "maintain-docs":     { "schedule": "" },
+      "evaluate-smart-notes":  { "schedule": "0 3 * * *" },
+      "review-user-memories":  { "schedule": "0 3 * * *", "promotion_threshold": 3 },
+      "promote-primers":       { "schedule": "0 3 * * *", "promotion_threshold": 2 },
+      "refresh-primers":       { "schedule": "0 3 * * *" }
+    }
+  },
+
+  "embedding": {
+    "provider": "openai-compatible",
+    "model": "voyage-3-large",
+    "endpoint": "https://api.voyageai.com/v1",
+    "api_key": "${VOYAGE_API_KEY}"
+  },
+
+  "memory": {
+    "enabled": true,
+    "injection_budget_tokens": 4000,
+    "auto_promote": true,
+    "auto_search": { "enabled": true, "score_threshold": 0.6, "min_prompt_chars": 20 },
+    "git_commit_indexing": { "enabled": true, "since_days": 365, "max_commits": 2000 }
+  },
+
+  "sidekick": {
+    "enabled": true,
+    "model": "ollama-cloud/glm-5.2:cloud",
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
+    "timeout_ms": 30000
+  },
+
+  "smart_drops": false,
+  "toast_duration_ms": 4000
+}
