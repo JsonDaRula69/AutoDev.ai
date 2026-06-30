@@ -253,13 +253,13 @@ test("config file exists at .cortexkit/magic-context.jsonc", () => {
   expect(text.length).toBeGreaterThan(0);
 });
 
-test("config: dreamer.model is ollama-cloud/glm-5.2:cloud", () => {
+test("config: dreamer.model is ollama-cloud/glm-5.2", () => {
   const cfg = parseJsonc(readFileSync(CONFIG_PATH, "utf8"));
   const dreamer = cfg["dreamer"] as { model: string };
   expect(dreamer.model).toBe("ollama-cloud/glm-5.2");
 });
 
-test("config: dreamer.fallback_models includes glm-5.1:cloud", () => {
+test("config: dreamer.fallback_models includes glm-5.1", () => {
   const cfg = parseJsonc(readFileSync(CONFIG_PATH, "utf8"));
   const dreamer = cfg["dreamer"] as { fallback_models: string[] };
   expect(dreamer.fallback_models).toContain("ollama-cloud/glm-5.1");
