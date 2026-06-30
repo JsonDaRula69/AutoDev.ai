@@ -471,7 +471,7 @@ async function cmdUpdate(): Promise<number> {
   notify("============================================", "info");
 
   // 1. Detect current version from installed package.json.
-  let currentVersion: string;
+  let currentVersion: string = "0.0.0";
   try {
     const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
       getPackageDir: () => string;
@@ -480,8 +480,22 @@ async function cmdUpdate(): Promise<number> {
     const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8"));
     currentVersion = pkg.version ?? "0.0.0";
   } catch {
-    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8"));
-    currentVersion = pkg.version ?? "0.0.0";
+    try {
+      const { dirname, join: pathJoin } = require("node:path") as { dirname: (p: string) => string; join: (...p: string[]) => string };
+      let dir = dirname(__dirname);
+      while (dir !== dirname(dir)) {
+        const pkgPath = pathJoin(dir, "package.json");
+        if (existsSync(pkgPath)) {
+          const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+          currentVersion = pkg.version ?? "0.0.0";
+          break;
+        }
+        dir = dirname(dir);
+      }
+      if (currentVersion === undefined) currentVersion = "0.0.0";
+    } catch {
+      currentVersion = "0.0.0";
+    }
   }
   notify(`Current version: ${currentVersion}`, "info");
 
