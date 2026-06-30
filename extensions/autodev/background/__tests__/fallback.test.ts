@@ -50,17 +50,17 @@ import { loadAgentFallbackChains } from "../fallback.js";
 // --- Happy path ------------------------------------------------------------
 
 test("loadAgentFallbackChains reads fallback_models from central agents dir", () => {
-  writeCentralAgent("nemo", "ollama-cloud/glm-5.1, ollama-cloud/deepseek-v4-pro", "ollama-cloud/glm-5.2:cloud");
-  writeCentralAgent("oracle", "ollama-cloud/deepseek-v4-flash", "ollama-cloud/deepseek-v4-pro");
+  writeCentralAgent("nemo", "ollama-cloud/glm-5.1:cloud, ollama-cloud/deepseek-v4-pro:cloud", "ollama-cloud/glm-5.2:cloud");
+  writeCentralAgent("oracle", "ollama-cloud/deepseek-v4-flash:cloud", "ollama-cloud/deepseek-v4-pro:cloud");
 
   const chains = loadAgentFallbackChains("/unused/project/root");
   expect(chains["nemo"]).toBeDefined();
   expect(chains["nemo"]!.fallback_models).toEqual([
     "ollama-cloud/glm-5.1:cloud",
-    "ollama-cloud/deepseek-v4-pro",
+    "ollama-cloud/deepseek-v4-pro:cloud",
   ]);
   expect(chains["oracle"]).toBeDefined();
-  expect(chains["oracle"]!.fallback_models).toEqual(["ollama-cloud/deepseek-v4-flash"]);
+  expect(chains["oracle"]!.fallback_models).toEqual(["ollama-cloud/deepseek-v4-flash:cloud"]);
 });
 
 test("loadAgentFallbackChains skips agents without fallback_models field", () => {
