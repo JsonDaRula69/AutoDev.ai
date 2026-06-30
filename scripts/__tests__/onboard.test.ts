@@ -17,7 +17,7 @@
  *  - On session end: writes full transcript to `.autodev/onboarding/harbor-log.md`
  *    and summary to `.autodev/memory/harbor-log-summary.md`.
  *  - Task tool wrapper forces `run_in_background: true`.
- *  - Opening prompt: `/skill:autodev-onboarding-harbor-master` + IntentGate results
+ *  - Opening prompt: IntentGate results + session start (skill loaded via resourceLoader, not /skill: command).
  *    + session start.
  *  - NO `noExtensions`, NO `noContextFiles`. Session runs with the full extension.
  *  - Tools allowlist includes read, bash, grep, glob, write, onboarding_progress,
@@ -222,7 +222,8 @@ test("runOnboard builds session with systemPromptOverride from harbor-master bod
       "task",
     ]);
     expect(promptCalls.length).toBe(1);
-    expect(promptCalls[0]).toContain("/skill:autodev-onboarding-harbor-master");
+    expect(promptCalls[0]).toContain("The visitor just arrived");
+    expect(promptCalls[0]).not.toContain("/skill:");
   } finally {
     cleanupTempDir(projectRoot);
   }
@@ -259,7 +260,8 @@ test("runOnboard calls analyzeOnboardingIntent and injects results into opening 
 
     expect(promptCalls.length).toBe(1);
     const opening = promptCalls[0];
-    expect(opening).toContain("/skill:autodev-onboarding-harbor-master");
+    expect(opening).toContain("The visitor just arrived");
+    expect(opening).not.toContain("/skill:");
     expect(opening).toContain("Stake tier: critical");
     expect(opening).toContain("Technical depth: technical");
     expect(opening).toContain("security");

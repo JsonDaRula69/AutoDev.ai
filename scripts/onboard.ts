@@ -569,8 +569,6 @@ function subscribeToAssistantMessages(
 
 function buildOpeningPrompt(intent: OnboardingIntentAnalysis): string {
   const lines: string[] = [
-    `/skill:${HM_SKILL_NAME}`,
-    "",
     "The visitor just arrived. Begin the onboarding conversation now.",
     "",
     `Stake tier: ${intent.stake}`,
