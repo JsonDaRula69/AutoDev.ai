@@ -92,7 +92,7 @@ test("removes central config home when present", async () => {
   });
 
   expect(existsSync(join(tempHome, ".AutoDev"))).toBe(false);
-  const centralResult = results.find((r: any) => r.name === "central-config-home");
+  const centralResult = results.find((r: any) => r.name === "central-config-homes");
   expect(centralResult.ok).toBe(true);
 });
 
@@ -196,7 +196,7 @@ test("idempotent: re-run on clean machine returns all ok", async () => {
   const failed = results.filter((r: any) => !r.ok);
   expect(failed.length).toBe(0);
 
-  const centralResult = results.find((r: any) => r.name === "central-config-home");
+  const centralResult = results.find((r: any) => r.name === "central-config-homes");
   expect(centralResult.detail).toContain("absent");
 
   const stateResult = results.find((r: any) => r.name === "project-state-files");

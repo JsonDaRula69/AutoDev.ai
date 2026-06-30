@@ -1,6 +1,5 @@
-import { rmSync, existsSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 export interface UninstallResult {
   readonly name: string;
@@ -36,8 +35,10 @@ export async function runUninstall(deps: UninstallModuleDeps): Promise<Uninstall
   const { projectRoot, notify } = deps;
 
   results.push(await removePiProviders(deps));
-  results.push(removeCentralConfigHome(deps));
+  results.push(removeCentralConfigHomes(deps));
+  results.push(removeNpmGlobalPackage(deps));
   results.push(removeShellEnvLines(deps));
+  results.push(removeCortexkitConfig(deps));
   results.push(removeProjectStateFiles(projectRoot));
 
   const failed = results.filter((r) => !r.ok);
@@ -50,32 +51,116 @@ export async function runUninstall(deps: UninstallModuleDeps): Promise<Uninstall
   return results;
 }
 
-function removeCentralConfigHome(deps: UninstallModuleDeps): UninstallResult {
+function removeCentralConfigHomes(deps: UninstallModuleDeps): UninstallResult {
   const { notify } = deps;
-  let agentDir: string;
-  try {
-    agentDir = getAgentDir();
-  } catch {
-    agentDir = join(process.env.HOME ?? "~", ".pi", "agent");
-  }
-  const centralHome = join(agentDir, "..");
-  const resolvedCentral = resolvePath(centralHome);
+  const home = process.env.HOME ?? "~";
+  const targets = [
+    join(home, ".AutoDev"),
+    join(home, ".pi"),
+    join(home, ".autodev"),
+  ];
+  const removed: string[] = [];
+  const errors: string[] = [];
 
-  if (!existsSync(resolvedCentral)) {
-    return { name: "central-config-home", ok: true, detail: "already absent" };
+  for (const dir of targets) {
+    if (!existsSync(dir)) continue;
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      removed.push(dir);
+      notify(`Removed ${dir}`, "info");
+    } catch (e) {
+      errors.push(`${dir}: ${(e as Error).message}`);
+    }
   }
 
-  notify(`Removing central config home at ${resolvedCentral}...`, "info");
-  try {
-    rmSync(resolvedCentral, { recursive: true, force: true });
-    return { name: "central-config-home", ok: true, detail: `removed ${resolvedCentral}` };
-  } catch (e) {
-    return {
-      name: "central-config-home",
-      ok: false,
-      detail: `failed: ${(e as Error).message}`,
-    };
+  if (errors.length > 0) {
+    return { name: "central-config-homes", ok: false, detail: errors.join("; ") };
   }
+  return {
+    name: "central-config-homes",
+    ok: true,
+    detail: removed.length > 0 ? `removed ${removed.join(", ")}` : "already absent",
+  };
+}
+
+function removeNpmGlobalPackage(deps: UninstallModuleDeps): UninstallResult {
+  const { notify } = deps;
+  const home = process.env.HOME ?? "~";
+  const removed: string[] = [];
+  const errors: string[] = [];
+
+  const packageDir = join(home, "node_modules", "autodev-ai");
+  if (existsSync(packageDir)) {
+    try {
+      rmSync(packageDir, { recursive: true, force: true });
+      removed.push("package");
+    } catch (e) {
+      errors.push(`package: ${(e as Error).message}`);
+    }
+  }
+
+  const binSymlinks = [
+    join(home, ".bun", "bin", "autodev"),
+    join(home, "node_modules", ".bin", "autodev"),
+  ];
+  for (const link of binSymlinks) {
+    if (!existsSync(link)) continue;
+    try {
+      rmSync(link, { force: true });
+      removed.push(link);
+    } catch (e) {
+      errors.push(`${link}: ${(e as Error).message}`);
+    }
+  }
+
+  if (removed.length > 0) notify(`Removed npm global package and bin symlinks`, "info");
+
+  if (errors.length > 0) {
+    return { name: "npm-global-package", ok: false, detail: errors.join("; ") };
+  }
+  return {
+    name: "npm-global-package",
+    ok: true,
+    detail: removed.length > 0 ? `removed ${removed.length} item(s)` : "already absent",
+  };
+}
+
+function removeCortexkitConfig(deps: UninstallModuleDeps): UninstallResult {
+  const { notify } = deps;
+  const home = process.env.HOME ?? "~";
+  const removed: string[] = [];
+  const errors: string[] = [];
+
+  const mcConfig = join(home, ".config", "cortexkit", "magic-context.jsonc");
+  if (existsSync(mcConfig)) {
+    try {
+      rmSync(mcConfig, { force: true });
+      removed.push("magic-context.jsonc");
+    } catch (e) {
+      errors.push(`magic-context.jsonc: ${(e as Error).message}`);
+    }
+  }
+
+  const autodevEnv = join(home, ".config", "autodev.env");
+  if (existsSync(autodevEnv)) {
+    try {
+      rmSync(autodevEnv, { force: true });
+      removed.push("autodev.env");
+    } catch (e) {
+      errors.push(`autodev.env: ${(e as Error).message}`);
+    }
+  }
+
+  if (removed.length > 0) notify(`Removed CortexKit config files`, "info");
+
+  if (errors.length > 0) {
+    return { name: "cortexkit-config", ok: false, detail: errors.join("; ") };
+  }
+  return {
+    name: "cortexkit-config",
+    ok: true,
+    detail: removed.length > 0 ? `removed ${removed.join(", ")}` : "already absent",
+  };
 }
 
 async function removePiProviders(deps: UninstallModuleDeps): Promise<UninstallResult> {
@@ -182,10 +267,3 @@ function removeProjectStateFiles(projectRoot: string): UninstallResult {
   };
 }
 
-function resolvePath(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
-}
