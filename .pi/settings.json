@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/earendil-works/pi-mono/main/packages/coding-agent/docs/settings.schema.json",
   "defaultProvider": "ollama-cloud",
-  "defaultModel": "glm-5.2",
+  "defaultModel": "glm-5.2:cloud",
   "defaultThinkingLevel": "medium",
   "theme": "dark",
   "compaction": {
@@ -12,8 +12,8 @@
     "maxRetries": 3
   },
   "enabledModels": [
-    "ollama-cloud/glm-5.2",
-    "ollama-cloud/glm-5.1",
+    "ollama-cloud/glm-5.2:cloud",
+    "ollama-cloud/glm-5.1:cloud",
     "ollama-cloud/deepseek-v4-pro",
     "ollama-cloud/deepseek-v4-flash",
     "ollama-cloud/kimi-k2.7-code"

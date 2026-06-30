@@ -117,10 +117,59 @@ export const MIGRATIONS: readonly Migration[] = [
     },
   },
   {
-    version: "0.1.27",
-    description: "Remove :cloud suffix from model strings in central agent files",
+    version: "0.1.32",
+    description: "Fix ollama-cloud provider config: API type, baseUrl, env var name, model IDs",
     run: (agentDir: string): MigrationResult => {
       let changed = 0;
+
+      // Fix .env: rename OLLAMA_CLOUD_API_KEY to OLLAMA_API_KEY
+      const envPath = join(agentDir, ".env");
+      if (existsSync(envPath)) {
+        try {
+          const content = readFileSync(envPath, "utf-8");
+          if (content.includes("OLLAMA_CLOUD_API_KEY")) {
+            writeFileSync(envPath, content.replace(/OLLAMA_CLOUD_API_KEY/g, "OLLAMA_API_KEY"), "utf-8");
+            changed++;
+          }
+        } catch {
+        }
+      }
+
+      // Fix auth.json: change $OLLAMA_CLOUD_API_KEY to $OLLAMA_API_KEY
+      const authPath = join(agentDir, "auth.json");
+      if (existsSync(authPath)) {
+        try {
+          const content = readFileSync(authPath, "utf-8");
+          if (content.includes("OLLAMA_CLOUD_API_KEY")) {
+            writeFileSync(authPath, content.replace(/OLLAMA_CLOUD_API_KEY/g, "OLLAMA_API_KEY"), "utf-8");
+            changed++;
+          }
+        } catch {
+        }
+      }
+
+      // Fix models.json: change api type, baseUrl, add :cloud to model IDs
+      const modelsPath = join(agentDir, "models.json");
+      if (existsSync(modelsPath)) {
+        try {
+          const content = readFileSync(modelsPath, "utf-8");
+          let updated = content
+            .replace(/"api":\s*"openai"/g, '"api": "openai-completions"')
+            .replace(/"baseUrl":\s*"https:\/\/api\.ollama\.cloud\/v1"/g, '"baseUrl": "https://ollama.com/v1"')
+            .replace(/"apiKey":\s*"\$OLLAMA_CLOUD_API_KEY"/g, '"apiKey": "$OLLAMA_API_KEY"');
+          // Add :cloud to model IDs that are missing it
+          for (const id of ["glm-5.2", "deepseek-v4-pro", "deepseek-v4-flash", "kimi-k2.7-code", "glm-5.1"]) {
+            updated = updated.replace(new RegExp(`"id":\\s*"${id}"`, "g"), `"id": "${id}:cloud"`);
+          }
+          if (updated !== content) {
+            writeFileSync(modelsPath, updated, "utf-8");
+            changed++;
+          }
+        } catch {
+        }
+      }
+
+      // Fix agent .md files: add :cloud to model strings
       const agentsDir = join(agentDir, "..", "agents");
       if (existsSync(agentsDir)) {
         for (const file of readdirSync(agentsDir)) {
@@ -128,43 +177,23 @@ export const MIGRATIONS: readonly Migration[] = [
           const path = join(agentsDir, file);
           try {
             const content = readFileSync(path, "utf-8");
-            if (content.includes(":cloud")) {
-              writeFileSync(path, content.replace(/:cloud/g, ""), "utf-8");
+            let updated = content;
+            for (const id of ["glm-5.2", "deepseek-v4-pro", "deepseek-v4-flash", "kimi-k2.7-code", "glm-5.1"]) {
+              updated = updated.replace(new RegExp(`ollama-cloud/${id}$`, "gm"), `ollama-cloud/${id}:cloud`);
+            }
+            if (updated !== content) {
+              writeFileSync(path, updated, "utf-8");
               changed++;
             }
           } catch {
-            // Skip unreadable files
           }
         }
       }
-      const modelsPath = join(agentDir, "models.json");
-      if (existsSync(modelsPath)) {
-        try {
-          const content = readFileSync(modelsPath, "utf-8");
-          if (content.includes(":cloud")) {
-            writeFileSync(modelsPath, content.replace(/:cloud/g, ""), "utf-8");
-            changed++;
-          }
-        } catch {
-          // Skip
-        }
-      }
-      const settingsPath = join(agentDir, "settings.json");
-      if (existsSync(settingsPath)) {
-        try {
-          const content = readFileSync(settingsPath, "utf-8");
-          if (content.includes(":cloud")) {
-            writeFileSync(settingsPath, content.replace(/:cloud/g, ""), "utf-8");
-            changed++;
-          }
-        } catch {
-          // Skip
-        }
-      }
+
       return {
-        name: "0.1.27-remove-cloud-suffix",
+        name: "0.1.32-fix-ollama-cloud-config",
         ok: true,
-        detail: changed > 0 ? `Rewrote :cloud suffix in ${changed} file(s).` : "No :cloud suffixes found.",
+        detail: changed > 0 ? `Fixed ${changed} file(s).` : "No config changes needed.",
       };
     },
   },

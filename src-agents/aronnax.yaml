@@ -1,9 +1,9 @@
 name: aronnax
 display_name: Professor Aronnax
 role: Professor
-model_preference: ollama-cloud/glm-5.2
+model_preference: ollama-cloud/glm-5.2:cloud
 fallback_models:
-  - ollama-cloud/glm-5.1
+  - ollama-cloud/glm-5.1:cloud
   - ollama-cloud/deepseek-v4-flash
 description: >
   Deep planning, validated implementation plans. Produce detailed, validated

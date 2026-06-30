@@ -172,7 +172,7 @@ export interface DoctorDeps {
  *      references against `process.env`).
  *   2. `.autodev/install-state.json` has any completed steps.
  *   3. `~/.pi/agent/.env` (resolved via `dirname(authPath)`) has a non-empty
- *      `OLLAMA_CLOUD_API_KEY`.
+ *      `OLLAMA_API_KEY`.
  *
  * Used to fork the config flow: a fresh install runs all four config
  * sub-commands (llm, voyage, discord, github); a broken existing install
@@ -205,11 +205,11 @@ export async function isFirstRun(deps: Pick<DoctorDeps, "projectRoot" | "authPat
     // ignore
   }
 
-  // Signal 3: ~/.pi/agent/.env has OLLAMA_CLOUD_API_KEY.
+  // Signal 3: ~/.pi/agent/.env has OLLAMA_API_KEY.
   const envPath = join(dirname(deps.authPath), ".env");
   try {
     const env = await readEnv(deps.projectRoot, envPath);
-    const v = env.get("OLLAMA_CLOUD_API_KEY");
+    const v = env.get("OLLAMA_API_KEY");
     if (v !== undefined && v !== "") return false;
   } catch {
     // ignore
@@ -466,7 +466,7 @@ function targetedSubcommands(checks: readonly DoctorCheck[]): string[] {
     if (c.name === "LLM credentials") subs.add("llm");
     if (c.name === "GitHub auth") subs.add("github");
     if (c.name === "Environment vars") {
-      // Env check fails on missing OLLAMA_CLOUD_API_KEY → `llm` writes it.
+      // Env check fails on missing OLLAMA_API_KEY → `llm` writes it.
       subs.add("llm");
       if (c.detail.includes("VOYAGE_API_KEY: missing")) subs.add("voyage");
     }
@@ -537,12 +537,12 @@ async function runHealthChecks(deps: DoctorDeps): Promise<DoctorResult> {
   try {
     const envPath = join(dirname(deps.authPath), ".env");
     const env = await readEnv(deps.projectRoot, envPath);
-    const hasOllama = env.get("OLLAMA_CLOUD_API_KEY") !== undefined && env.get("OLLAMA_CLOUD_API_KEY") !== "";
+    const hasOllama = env.get("OLLAMA_API_KEY") !== undefined && env.get("OLLAMA_API_KEY") !== "";
     const hasVoyage = env.get("VOYAGE_API_KEY") !== undefined;
     checks.push({
       name: "Environment vars",
       ok: hasOllama,
-      detail: `OLLAMA_CLOUD_API_KEY: ${hasOllama ? "set" : "missing"}, VOYAGE_API_KEY: ${hasVoyage ? "set (or ONNX fallback)" : "missing"}`,
+      detail: `OLLAMA_API_KEY: ${hasOllama ? "set" : "missing"}, VOYAGE_API_KEY: ${hasVoyage ? "set (or ONNX fallback)" : "missing"}`,
     });
   } catch {
     checks.push({ name: "Environment vars", ok: false, detail: ".env not found" });

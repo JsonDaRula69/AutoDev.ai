@@ -65,7 +65,7 @@ import { loadAgent, listAgentNames } from "../agents.js";
 test("loadAgent reads from central agents dir and parses frontmatter + body", () => {
   writeCentralAgent(
     "nemo",
-    "ollama-cloud/glm-5.2",
+    "ollama-cloud/glm-5.2:cloud",
     "read, bash, grep",
     "You are Captain Nemo.\nTriage and delegate.",
   );
@@ -74,16 +74,16 @@ test("loadAgent reads from central agents dir and parses frontmatter + body", ()
   const agent = loadAgent("/unused/project/root", "nemo");
   expect(agent).toBeDefined();
   expect(agent?.name).toBe("nemo");
-  expect(agent?.model).toBe("ollama-cloud/glm-5.2");
+  expect(agent?.model).toBe("ollama-cloud/glm-5.2:cloud");
   expect(agent?.tools).toEqual(["read", "bash", "grep"]);
   expect(agent?.systemPrompt).toContain("You are Captain Nemo");
   expect(agent?.systemPrompt).toContain("Triage and delegate");
 });
 
 test("listAgentNames lists all .md filenames in the central agents dir", () => {
-  writeCentralAgent("alpha", "ollama-cloud/glm-5.2", "read", "body-a");
-  writeCentralAgent("beta", "ollama-cloud/glm-5.2", "read", "body-b");
-  writeCentralAgent("gamma", "ollama-cloud/glm-5.2", "read", "body-g");
+  writeCentralAgent("alpha", "ollama-cloud/glm-5.2:cloud", "read", "body-a");
+  writeCentralAgent("beta", "ollama-cloud/glm-5.2:cloud", "read", "body-b");
+  writeCentralAgent("gamma", "ollama-cloud/glm-5.2:cloud", "read", "body-g");
 
   const names = listAgentNames("/unused/project/root");
   expect(names).toContain("alpha");
@@ -95,7 +95,7 @@ test("listAgentNames lists all .md filenames in the central agents dir", () => {
 test("loadAgent falls back to filename when frontmatter `name` is absent", () => {
   writeFileSync(
     join(agentDir, "unnamed.md"),
-    `---\ndescription: no name field\ntools: read\nmodel: ollama-cloud/glm-5.2\n---\nBody only.`,
+    `---\ndescription: no name field\ntools: read\nmodel: ollama-cloud/glm-5.2:cloud\n---\nBody only.`,
   );
 
   const agent = loadAgent("/unused", "unnamed");

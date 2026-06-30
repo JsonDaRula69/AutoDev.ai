@@ -10,14 +10,14 @@ export const DEFAULT_MAGIC_CONTEXT_JSONC = `{
   "temporal_awareness": true,
 
   "historian": {
-    "model": "ollama-cloud/glm-5.2",
-    "fallback_models": ["ollama-cloud/glm-5.1", "ollama-cloud/deepseek-v4-flash"]
+    "model": "ollama-cloud/glm-5.2:cloud",
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"]
   },
 
   "dreamer": {
     "enabled": true,
-    "model": "ollama-cloud/glm-5.2",
-    "fallback_models": ["ollama-cloud/glm-5.1", "ollama-cloud/deepseek-v4-flash"],
+    "model": "ollama-cloud/glm-5.2:cloud",
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
     "tasks": {
       "map-memories":      { "schedule": "0 2 * * *" },
       "verify":            { "schedule": "0 3 * * *" },
@@ -50,8 +50,8 @@ export const DEFAULT_MAGIC_CONTEXT_JSONC = `{
 
   "sidekick": {
     "enabled": true,
-    "model": "ollama-cloud/glm-5.2",
-    "fallback_models": ["ollama-cloud/glm-5.1", "ollama-cloud/deepseek-v4-flash"],
+    "model": "ollama-cloud/glm-5.2:cloud",
+    "fallback_models": ["ollama-cloud/glm-5.1:cloud", "ollama-cloud/deepseek-v4-flash"],
     "timeout_ms": 30000
   },
 

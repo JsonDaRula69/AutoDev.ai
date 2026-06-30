@@ -222,11 +222,11 @@ test("tryImportAuth imports from existing auth file", async () => {
 
     // Verify auth.json has $VAR reference (not literal key)
     const target = await readAuth(targetPath);
-    expect(target["ollama-cloud"]!.key).toBe("$OLLAMA_CLOUD_API_KEY");
+    expect(target["ollama-cloud"]!.key).toBe("$OLLAMA_API_KEY");
 
     // Verify .env has the actual key
     const env = await readEnv(dir, join(dir, ".env"));
-    expect(env.get("OLLAMA_CLOUD_API_KEY")).toBe("sk-imported-key");
+    expect(env.get("OLLAMA_API_KEY")).toBe("sk-imported-key");
   } finally {
     cleanupTempDir(dir);
   }

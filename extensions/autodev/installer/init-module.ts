@@ -60,10 +60,10 @@ const AUTODEV_SUBDIRS = [
 
 /** Default model allowlist written to `.autodev/config/models.json`. */
 const DEFAULT_MODEL_ALLOWLIST: readonly string[] = [
-  "ollama-cloud/glm-5.2",
+  "ollama-cloud/glm-5.2:cloud",
   "ollama-cloud/deepseek-v4-pro",
   "ollama-cloud/deepseek-v4-flash",
-  "ollama-cloud/glm-5.1",
+  "ollama-cloud/glm-5.1:cloud",
 ];
 
 /** Templates copied from the central package into `.autodev/templates/`. */

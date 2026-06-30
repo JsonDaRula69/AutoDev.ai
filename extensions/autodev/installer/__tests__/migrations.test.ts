@@ -123,42 +123,57 @@ test("0.1.14 migration runs without error", () => {
   expect(result.ok).toBe(true);
 });
 
-test("MIGRATIONS array includes the 0.1.27 migration", () => {
-  const v0127 = MIGRATIONS.find((m) => m.version === "0.1.27");
-  expect(v0127).toBeDefined();
-  expect(v0127!.description).toContain(":cloud");
+test("MIGRATIONS array includes the 0.1.32 migration", () => {
+  const v0132 = MIGRATIONS.find((m) => m.version === "0.1.32");
+  expect(v0132).toBeDefined();
+  expect(v0132!.description).toContain("ollama-cloud");
 });
 
-test("0.1.27 migration rewrites :cloud suffix in agent files", () => {
+test("0.1.32 migration fixes models.json api type, baseUrl, and model IDs", () => {
   const agentDir = join(tempDir, "agent");
   mkdirSync(agentDir, { recursive: true });
   const agentsDir = join(tempDir, "agent", "..", "agents");
   mkdirSync(agentsDir, { recursive: true });
-  writeFileSync(join(agentsDir, "nemo.md"), "---\nmodel: ollama-cloud/glm-5.2:cloud\n---\nBody.\n");
-  writeFileSync(join(agentDir, "models.json"), '["ollama-cloud/glm-5.2:cloud"]');
-  writeFileSync(join(agentDir, "settings.json"), '{"defaultModel": "glm-5.2:cloud"}');
+  writeFileSync(join(agentsDir, "nemo.md"), "---\nmodel: ollama-cloud/glm-5.2\n---\nBody.\n");
+  writeFileSync(join(agentDir, "models.json"), JSON.stringify({
+    providers: {
+      "ollama-cloud": {
+        api: "openai",
+        baseUrl: "https://api.ollama.cloud/v1",
+        apiKey: "$OLLAMA_CLOUD_API_KEY",
+        models: [{ id: "glm-5.2", name: "GLM 5.2", context: 976000, output: 131072 }],
+      },
+    },
+  }));
+  writeFileSync(join(agentDir, ".env"), "OLLAMA_CLOUD_API_KEY=test-key\n");
+  writeFileSync(join(agentDir, "auth.json"), JSON.stringify({
+    "ollama-cloud": { type: "api_key", key: "$OLLAMA_CLOUD_API_KEY" },
+  }));
 
-  const migration = MIGRATIONS.find((m) => m.version === "0.1.27")!;
+  const migration = MIGRATIONS.find((m) => m.version === "0.1.32")!;
   const result = migration.run(agentDir);
   expect(result.ok).toBe(true);
-  expect(result.detail).toContain("3 file");
-
-  const nemoContent = readFileSync(join(agentsDir, "nemo.md"), "utf-8");
-  expect(nemoContent).not.toContain(":cloud");
-  expect(nemoContent).toContain("glm-5.2");
+  expect(result.detail).toContain("file");
 
   const modelsContent = readFileSync(join(agentDir, "models.json"), "utf-8");
-  expect(modelsContent).not.toContain(":cloud");
+  expect(modelsContent).toContain("openai-completions");
+  expect(modelsContent).toContain("https://ollama.com/v1");
+  expect(modelsContent).toContain("glm-5.2:cloud");
+  expect(modelsContent).toContain("$OLLAMA_API_KEY");
 
-  const settingsContent = readFileSync(join(agentDir, "settings.json"), "utf-8");
-  expect(settingsContent).not.toContain(":cloud");
+  const envContent = readFileSync(join(agentDir, ".env"), "utf-8");
+  expect(envContent).toContain("OLLAMA_API_KEY=test-key");
+  expect(envContent).not.toContain("OLLAMA_CLOUD_API_KEY");
+
+  const nemoContent = readFileSync(join(agentsDir, "nemo.md"), "utf-8");
+  expect(nemoContent).toContain("ollama-cloud/glm-5.2:cloud");
 });
 
-test("0.1.27 migration reports no changes when no :cloud suffixes exist", () => {
+test("0.1.32 migration reports no changes when config is already correct", () => {
   const agentDir = join(tempDir, "agent");
   mkdirSync(agentDir, { recursive: true });
-  const migration = MIGRATIONS.find((m) => m.version === "0.1.27")!;
+  const migration = MIGRATIONS.find((m) => m.version === "0.1.32")!;
   const result = migration.run(agentDir);
   expect(result.ok).toBe(true);
-  expect(result.detail).toContain("No :cloud");
+  expect(result.detail).toContain("No config changes");
 });

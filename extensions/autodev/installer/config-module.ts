@@ -428,13 +428,13 @@ Paste your token here (or press Enter to use interactive \`gh auth login --web\`
 
 const PROVIDER_MODEL_DEFS: Record<string, { api: string; baseUrl: string; models: { id: string; name: string; context: number; output: number }[] }> = {
   "ollama-cloud": {
-    api: "openai",
-    baseUrl: "https://api.ollama.cloud/v1",
+    api: "openai-completions",
+    baseUrl: "https://ollama.com/v1",
     models: [
-      { id: "glm-5.2", name: "GLM 5.2 Cloud", context: 976000, output: 131072 },
-      { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", context: 128000, output: 8192 },
-      { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", context: 128000, output: 8192 },
-      { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", context: 128000, output: 8192 },
+      { id: "glm-5.2:cloud", name: "GLM 5.2 Cloud", context: 976000, output: 131072 },
+      { id: "deepseek-v4-pro:cloud", name: "DeepSeek V4 Pro", context: 128000, output: 8192 },
+      { id: "deepseek-v4-flash:cloud", name: "DeepSeek V4 Flash", context: 128000, output: 8192 },
+      { id: "kimi-k2.7-code:cloud", name: "Kimi K2.7 Code", context: 128000, output: 8192 },
     ],
   },
 };

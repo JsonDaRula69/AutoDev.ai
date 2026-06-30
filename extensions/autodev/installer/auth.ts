@@ -91,7 +91,7 @@ export async function tryImportAuth(
 
 export function providerToEnvVar(provider: string): string {
   const map: Record<string, string> = {
-    "ollama-cloud": "OLLAMA_CLOUD_API_KEY",
+    "ollama-cloud": "OLLAMA_API_KEY",
     anthropic: "ANTHROPIC_API_KEY",
     openai: "OPENAI_API_KEY",
     deepseek: "DEEPSEEK_API_KEY",
