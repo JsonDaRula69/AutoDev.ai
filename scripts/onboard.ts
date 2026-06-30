@@ -217,6 +217,12 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
     conversationLog.push({ role: "user", content: openingPrompt, timestamp: new Date().toISOString() });
     await session.prompt(openingPrompt);
 
+    // Print the Harbor Master's opening response.
+    const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
+    if (lastAssistant) {
+      process.stdout.write(`\n${lastAssistant.content}\n\n`);
+    }
+
     // 10b. Interactive readline loop — let the user converse with the Harbor Master.
     // Only enter the loop when stdin is a TTY (interactive terminal).
     // In non-interactive mode (piped stdin, tests, CI), the session ends after
@@ -258,7 +264,15 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
         }
 
         conversationLog.push({ role: "user", content: trimmed, timestamp: new Date().toISOString() });
+        const logLengthBefore = conversationLog.length;
         await session.prompt(trimmed);
+
+        // Print any new assistant messages from this prompt.
+        const newEntries = conversationLog.slice(logLengthBefore);
+        const newAssistant = newEntries.filter((e) => e.role === "assistant");
+        for (const msg of newAssistant) {
+          process.stdout.write(`\n${msg.content}\n\n`);
+        }
       }
 
       rl.close();
