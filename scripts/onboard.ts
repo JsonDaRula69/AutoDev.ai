@@ -214,7 +214,18 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   // Also subscribe to all events for debugging when AUTODEV_DEBUG is set.
   if (process.env.AUTODEV_DEBUG === "true") {
     session.subscribe((event: any) => {
-      if (event.type !== "message_update") {
+      if (event.type === "message_end") {
+        const msg = event.message;
+        const role = msg?.role;
+        const contentType = typeof msg?.content;
+        const isArray = Array.isArray(msg?.content);
+        const contentPreview = isArray
+          ? JSON.stringify(msg?.content?.slice(0, 2))
+          : typeof msg?.content === "string"
+            ? msg?.content?.slice(0, 200)
+            : String(msg?.content)?.slice(0, 200);
+        console.error(`[debug] message_end: role=${role}, content type=${contentType}, isArray=${isArray}, preview=${contentPreview}`);
+      } else if (event.type !== "message_update") {
         console.error(`[debug] event: ${event.type}`);
       }
     });
