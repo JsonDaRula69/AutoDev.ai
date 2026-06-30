@@ -242,13 +242,14 @@ async function cmdConfig(parts: string[]): Promise<number> {
   return 0;
 }
 
-export async function cmdOnboard(opts?: {
+export async function cmdOnboard(parts: string[], opts?: {
   readonly runOnboardOverride?: typeof import("./onboard.js")["runOnboard"];
 }): Promise<number> {
+  const verbose = parts.includes("--verbose") || parts.includes("-v");
   const projectRoot = process.cwd();
   const runOnboard = opts?.runOnboardOverride
     ?? (await import("./onboard.js")).runOnboard;
-  return runOnboard({ projectRoot, notify });
+  return runOnboard({ projectRoot, notify, ...(verbose ? { verbose: true } : {}) });
 }
 
 /**
@@ -649,7 +650,7 @@ async function main(): Promise<number> {
       return cmdInit(rest);
 
     case "onboard":
-      return cmdOnboard();
+      return cmdOnboard(rest);
 
     case "status":
       return cmdStatus();
@@ -681,7 +682,7 @@ async function main(): Promise<number> {
 
 /** Canonical subcommand list for help text. */
 export const HELP_SUBCOMMANDS =
-  "AutoDev subcommands: init, onboard, doctor, config, status, stop, update, uninstall, docs query, docs rebuild central, docs rebuild project, docs sources, debate start, debate status, stop-continuation";
+  "AutoDev subcommands: init, onboard [--verbose], doctor, config [llm|voyage|discord|github|verbose], status, stop, update, uninstall, docs query, docs rebuild central, docs rebuild project, docs sources, debate start, debate status, stop-continuation";
 
 if (import.meta.main) {
   main()

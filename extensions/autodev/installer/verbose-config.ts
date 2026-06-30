@@ -1,0 +1,1 @@
+export { resolveVerboseConfig, writeVerboseConfig, type VerboseConfig, DEFAULT_VERBOSE_CONFIG } from "../onboarding/verbose.js";
