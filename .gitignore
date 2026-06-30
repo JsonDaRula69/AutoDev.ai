@@ -23,5 +23,11 @@ dist/
 # Session continuation state (runtime only)
 .omo/run-continuation/
 
+# OmO working state (plans, evidence, notepads, boulder — runtime/local only)
+.omo/
+
+# OpenCode local state (historian exports, node_modules, config — not source)
+.opencode/
+
 # Docs corpus (generated, not source)
 docs-corpus/

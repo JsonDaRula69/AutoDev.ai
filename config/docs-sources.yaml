@@ -24,6 +24,32 @@ sources:
     targetSubdir: pi
     active: true
 
+# External reference sources — third-party agent/memory systems relevant to AutoDev.
+# Uncomment to enable.
+#
+# - name: hindsight
+#   type: llms-full
+#   url: https://hindsight.vectorize.io/llms-full.txt
+#   targetSubdir: hindsight
+#   active: false
+#   # Vectorize Hindsight: agent memory system (retain/recall/reflect).
+#   # Aggregated single-file docs; llms.txt index links to non-.md pages.
+#
+# - name: codebase-memory-mcp
+#   type: git-sparse
+#   url: https://github.com/DeusData/codebase-memory-mcp
+#   sparsePath: .
+#   targetSubdir: codebase-memory-mcp
+#   excludePatterns:
+#     - CODE_OF_CONDUCT.md
+#     - SECURITY.md
+#     - THIRD_PARTY.md
+#     - DCO
+#     - CONTRIBUTING.md
+#   active: false
+#   # DeusData codebase-memory-mcp: codebase knowledge-graph MCP server.
+#   # Main docs are the root README.md; docs/ contains only benchmark/eval/security aux files.
+
 # Active sources — currently maintained by AutoDev. Uncomment to enable.
 #
 # - name: magic-context
