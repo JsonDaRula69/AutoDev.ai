@@ -21,6 +21,7 @@ jobs:
           PR_USER: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO_FULL_NAME: ${{ github.event.repository.full_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
 
@@ -69,9 +70,76 @@ jobs:
           echo "Response: $BODY"
           echo "HTTP Status: $HTTP_CODE"
 
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "✅ Hermes review triggered successfully"
-          else
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "❌ Failed to trigger Hermes review"
             exit 1
           fi
+
+          echo "✅ Hermes review triggered, waiting for review..."
+
+      - name: Wait for Hermes Review
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO_FULL_NAME: ${{ github.event.repository.full_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+
+          # Poll the PR reviews API for a review from Traderbot-Auto-Dev
+          # Timeout after 10 minutes (40 iterations * 15s sleep)
+          MAX_ATTEMPTS=40
+          SLEEP_INTERVAL=15
+
+          echo "Polling for Hermes PR review on PR #$PR_NUMBER..."
+          echo "Looking for review from Traderbot-Auto-Dev on commit $PR_HEAD_SHA"
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Attempt $i/$MAX_ATTEMPTS..."
+
+            # Fetch reviews for this PR
+            REVIEWS=$(gh api repos/$REPO_FULL_NAME/pulls/$PR_NUMBER/reviews 2>/dev/null)
+
+            if [ -n "$REVIEWS" ] && [ "$REVIEWS" != "[]" ]; then
+              # Find a review from Traderbot-Auto-Dev on this commit
+              REVIEW_STATE=$(echo "$REVIEWS" | jq -r \
+                --arg sha "$PR_HEAD_SHA" \
+                '.[] | select(.user.login == "Traderbot-Auto-Dev" and .commit_id == $sha) | .state' \
+                | tail -1)
+
+              if [ -n "$REVIEW_STATE" ]; then
+                echo "Found review: $REVIEW_STATE"
+
+                case "$REVIEW_STATE" in
+                  "APPROVED")
+                    echo "✅ Hermes approved the PR"
+                    exit 0
+                    ;;
+                  "CHANGES_REQUESTED")
+                    echo "❌ Hermes requested changes on the PR"
+                    # Print the review body for context
+                    REVIEW_BODY=$(echo "$REVIEWS" | jq -r \
+                      --arg sha "$PR_HEAD_SHA" \
+                      '.[] | select(.user.login == "Traderbot-Auto-Dev" and .commit_id == $sha) | .body' \
+                      | tail -1)
+                    echo "Review: $REVIEW_BODY"
+                    exit 1
+                    ;;
+                  "COMMENTED")
+                    # A comment review is informational — check if there's a later APPROVED or CHANGES_REQUESTED
+                    echo "Hermes posted a comment review (informational). Checking for later reviews..."
+                    # Continue polling — a formal review may follow
+                    ;;
+                  *)
+                    echo "Unknown review state: $REVIEW_STATE"
+                    ;;
+                esac
+              fi
+            fi
+
+            sleep $SLEEP_INTERVAL
+          done
+
+          echo "❌ Timed out waiting for Hermes review (10 minutes)"
+          echo "The review may still be processing. Check the PR comments manually."
+          exit 1
