@@ -274,10 +274,6 @@ async function handleVoyage(deps: ConfigModuleDeps): Promise<ConfigResult> {
 }
 
 async function handleDiscord(deps: ConfigModuleDeps): Promise<ConfigResult> {
-  if (await isStepCompleted(deps.projectRoot, STEP_DISCORD, CONFIG_SCOPE)) {
-    return { subcommand: "discord", step: STEP_DISCORD, status: "skipped", message: "Already configured." };
-  }
-
   const setupText = `Do you want to set up Discord integration?
 
 AutoDev uses Discord as its crew-to-liaison bridge. To create and invite a bot:

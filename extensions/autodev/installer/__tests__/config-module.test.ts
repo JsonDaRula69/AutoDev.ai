@@ -174,11 +174,11 @@ test("handleDiscord no-TTY: prompt returns empty → warns, returns warning", as
   }
 });
 
-test("handleDiscord already-configured: STEP_DISCORD complete → returns skipped without prompting", async () => {
+test("handleDiscord re-configurable: STEP_DISCORD complete → still prompts (no skip gate)", async () => {
   const prompter = new MockPrompter();
+  prompter.answers = ["n"];
   const h = await makeHarness(prompter);
   try {
-    // Pre-mark the step complete
     const { markStepCompleted } = await import("../state.js");
     await markStepCompleted(h.projectRoot, 5, "config");
 
@@ -188,9 +188,7 @@ test("handleDiscord already-configured: STEP_DISCORD complete → returns skippe
     const r = results[0];
     expect(r.subcommand).toBe("discord");
     expect(r.status).toBe("skipped");
-    expect(r.message).toContain("Already configured");
-    // prompter not consumed
-    expect(prompter.answers.length).toBe(0);
+    expect(r.message).toContain("skipped");
   } finally {
     cleanupTempDir(h.projectRoot);
   }
