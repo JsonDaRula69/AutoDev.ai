@@ -38,12 +38,14 @@ fi
 export PATH="$HOME/.bun/bin:$PATH"
 
 echo "Installing autodev-ai globally..."
-if ! bun install -g autodev-ai 2>&1; then
-  if [ -d "$HOME/.bun/install/cache" ]; then
-    echo "Bun cache may be stale. Clearing cache and retrying..."
-    rm -rf "$HOME/.bun/install/cache"
-  fi
-  bun install -g autodev-ai
+# Clear bun's global cache to avoid serving a stale older version.
+if [ -d "$HOME/.bun/install/cache" ]; then
+  rm -rf "$HOME/.bun/install/cache"
+fi
+if ! bun install -g autodev-ai@latest 2>&1; then
+  echo "Install failed. Retrying without cache..."
+  rm -rf "$HOME/.bun/install/cache"
+  bun install -g autodev-ai@latest
 fi
 
 export PI_CODING_AGENT_DIR="$HOME/.AutoDev/agent"

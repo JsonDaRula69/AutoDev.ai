@@ -64,7 +64,7 @@ export async function voyageEmbed(
 }
 
 export async function onnxEmbed(texts: string[]): Promise<Float32Array[]> {
-  const mod = (await import("@xenova/transformers")) as unknown as {
+  let mod: {
     pipeline: (task: string, model: string) => Promise<
       (texts: string[], opts: { pooling: string; normalize: boolean }) => Promise<{
         data: Float32Array | number[];
@@ -72,6 +72,15 @@ export async function onnxEmbed(texts: string[]): Promise<Float32Array[]> {
       }>
     >;
   };
+  try {
+    mod = (await import("@xenova/transformers")) as unknown as typeof mod;
+  } catch {
+    throw new Error(
+      "ONNX fallback unavailable: @xenova/transformers is not installed. " +
+        "Set VOYAGE_API_KEY to use VoyageAI, or install @xenova/transformers: " +
+        "bun install -g @xenova/transformers",
+    );
+  }
   const extractor = await mod.pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
   const output = await extractor(texts, { pooling: "mean", normalize: true });
   const data = output.data as Float32Array;
