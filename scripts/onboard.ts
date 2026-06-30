@@ -345,6 +345,7 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
         prompt: async (criticId: string, systemPrompt: string, userPrompt: string): Promise<string> => {
           const criticSessionManager = sdk.SessionManager.inMemory();
           const { session: criticSession } = await sdk.createAgentSession({
+            cwd: projectRoot,
             model,
             thinkingLevel: "low",
             tools: [],
