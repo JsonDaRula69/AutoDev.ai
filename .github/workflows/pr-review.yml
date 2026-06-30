@@ -1,0 +1,70 @@
+name: Hermes PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  hermes-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    steps:
+      - name: Trigger Hermes Review
+        env:
+          WEBHOOK_URL: ${{ secrets.HERMES_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.HERMES_WEBHOOK_SECRET }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO_FULL_NAME: ${{ github.event.repository.full_name }}
+        run: |
+          set -euo pipefail
+
+          # Construct the webhook payload (mimics GitHub PR webhook format)
+          PAYLOAD=$(cat <<'EOF'
+          {
+            "action": "${PR_ACTION}",
+            "pull_request": {
+              "number": ${PR_NUMBER},
+              "title": "${PR_TITLE}",
+              "user": { "login": "${PR_USER}" },
+              "head": { "sha": "${PR_HEAD_SHA}" }
+            },
+            "repository": {
+              "full_name": "${REPO_FULL_NAME}"
+            }
+          }
+          EOF
+          )
+
+          # Substitute env vars into payload
+          PAYLOAD=$(echo "$PAYLOAD" | envsubst)
+
+          # Compute HMAC-SHA256 signature
+          SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')
+
+          # Send to Hermes webhook
+          echo "Triggering Hermes review for PR #$PR_NUMBER: $PR_TITLE"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: pull_request" \
+            -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Hermes review triggered successfully"
+          else
+            echo "❌ Failed to trigger Hermes review"
+            exit 1
+          fi
