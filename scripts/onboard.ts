@@ -199,6 +199,7 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
 
   // 8. Create the session with the full extension active.
   const { session } = await sdk.createAgentSession({
+    cwd: projectRoot,
     model,
     thinkingLevel: "medium",
     tools: HM_TOOLS_ALLOWLIST,
