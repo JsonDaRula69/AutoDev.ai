@@ -211,16 +211,34 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   // 9. Subscribe to message_end to accumulate assistant messages into the log.
   const unsubscribe = subscribeToAssistantMessages(session, conversationLog);
 
+  // Also subscribe to all events for debugging when AUTODEV_DEBUG is set.
+  if (process.env.AUTODEV_DEBUG === "true") {
+    session.subscribe((event: any) => {
+      if (event.type !== "message_update") {
+        console.error(`[debug] event: ${event.type}`);
+      }
+    });
+  }
+
   // 10. Build and send the opening prompt, then enter interactive loop.
   const openingPrompt = buildOpeningPrompt(intentAnalysis);
   try {
     conversationLog.push({ role: "user", content: openingPrompt, timestamp: new Date().toISOString() });
+    if (process.env.AUTODEV_DEBUG === "true") {
+      console.error(`[debug] sending opening prompt (${openingPrompt.length} chars)`);
+    }
     await session.prompt(openingPrompt);
+    if (process.env.AUTODEV_DEBUG === "true") {
+      console.error(`[debug] prompt returned, log has ${conversationLog.length} entries`);
+      console.error(`[debug] assistant entries: ${conversationLog.filter(e => e.role === "assistant").length}`);
+    }
 
     // Print the Harbor Master's opening response.
     const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
     if (lastAssistant) {
       process.stdout.write(`\n${lastAssistant.content}\n\n`);
+    } else if (process.env.AUTODEV_DEBUG === "true") {
+      console.error("[debug] no assistant message found in conversation log after opening prompt");
     }
 
     // 10b. Interactive readline loop — let the user converse with the Harbor Master.
@@ -265,7 +283,13 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
 
         conversationLog.push({ role: "user", content: trimmed, timestamp: new Date().toISOString() });
         const logLengthBefore = conversationLog.length;
+        if (process.env.AUTODEV_DEBUG === "true") {
+          console.error(`[debug] sending user prompt: "${trimmed}"`);
+        }
         await session.prompt(trimmed);
+        if (process.env.AUTODEV_DEBUG === "true") {
+          console.error(`[debug] prompt returned, new entries: ${conversationLog.length - logLengthBefore}`);
+        }
 
         // Print any new assistant messages from this prompt.
         const newEntries = conversationLog.slice(logLengthBefore);
