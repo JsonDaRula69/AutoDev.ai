@@ -18,7 +18,7 @@ import {
 
 async function setupFullConfig(dir: string, authPath: string): Promise<void> {
   await setProviderKey(authPath, "ollama-cloud", "sk-test-key");
-  await setEnvVars(dir, [["OLLAMA_CLOUD_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
+  await setEnvVars(dir, [["OLLAMA_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
   for (let i = -1; i <= 5; i++) await markStepCompleted(dir, i, "install");
   await markStepCompleted(dir, 9, "install");
 }
@@ -85,7 +85,7 @@ test("doctor detects missing auth.json", async () => {
   const saved = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
-    await setEnvVars(dir, [["OLLAMA_CLOUD_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
+    await setEnvVars(dir, [["OLLAMA_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
     for (let i = -1; i <= 5; i++) await markStepCompleted(dir, i, "install");
     await markStepCompleted(dir, 9, "install");
     createMockPackage(packageRoot);
@@ -146,7 +146,7 @@ test("doctor detects incomplete install state", async () => {
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
     await setProviderKey(authPath, "ollama-cloud", "sk-test-key");
-    await setEnvVars(dir, [["OLLAMA_CLOUD_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
+    await setEnvVars(dir, [["OLLAMA_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
     await markStepCompleted(dir, 1, "install");
     await markStepCompleted(dir, 2, "install");
     createMockPackage(packageRoot);
@@ -181,7 +181,7 @@ test("doctor symlinks missing config files from package", async () => {
   process.env.XDG_CONFIG_HOME = xdgDir;
   try {
     await setProviderKey(authPath, "ollama-cloud", "sk-test-key");
-    await setEnvVars(dir, [["OLLAMA_CLOUD_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
+    await setEnvVars(dir, [["OLLAMA_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
     for (let i = -1; i <= 5; i++) await markStepCompleted(dir, i, "install");
     await markStepCompleted(dir, 9, "install");
     createMockPackage(packageRoot);
@@ -252,7 +252,7 @@ test("doctor detects VoyageAI fallback (empty key still ok)", async () => {
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
     await setupFullConfig(dir, authPath);
-    await setEnvVars(dir, [["OLLAMA_CLOUD_API_KEY", "sk-test"], ["VOYAGE_API_KEY", ""]]);
+    await setEnvVars(dir, [["OLLAMA_API_KEY", "sk-test"], ["VOYAGE_API_KEY", ""]]);
     createMockPackage(packageRoot);
     const result = await runDoctor({
       projectRoot: dir,
@@ -419,7 +419,7 @@ test("doctor install-state threshold excludes the 'init' scope (Decision #20)", 
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
     await setProviderKey(authPath, "ollama-cloud", "sk-test-key");
-    await setEnvVars(dir, [["OLLAMA_CLOUD_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
+    await setEnvVars(dir, [["OLLAMA_API_KEY", "sk-test"], ["VOYAGE_API_KEY", "voy-test"]]);
     // Complete many steps in the "init" scope ONLY — but zero in install/config.
     for (let i = 1; i <= 10; i++) await markStepCompleted(dir, i, "init");
     createMockPackage(packageRoot);
@@ -457,11 +457,11 @@ test("doctor isFirstRun reads .env from the central agent dir (dirname(authPath)
   const saved = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;
   try {
-    // Plant OLLAMA_CLOUD_API_KEY in the central .env (dirname(authPath)).
-    writeFileSync(join(agentDir, ".env"), "OLLAMA_CLOUD_API_KEY=sk-central\n");
+    // Plant OLLAMA_API_KEY in the central .env (dirname(authPath)).
+    writeFileSync(join(agentDir, ".env"), "OLLAMA_API_KEY=sk-central\n");
     const { isFirstRun } = await import("../extensions/autodev/installer/doctor.js");
     const firstRun = await isFirstRun({ projectRoot: dir, authPath });
-    // Signal 3 (OLLAMA_CLOUD_API_KEY present) should be satisfied → not first run.
+    // Signal 3 (OLLAMA_API_KEY present) should be satisfied → not first run.
     expect(firstRun).toBe(false);
     // And the file was read from the central path, not the project dir.
     expect(existsSync(join(dir, ".env"))).toBe(false);
