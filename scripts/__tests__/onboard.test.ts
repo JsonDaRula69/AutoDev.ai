@@ -21,7 +21,7 @@
  *    + session start.
  *  - NO `noExtensions`, NO `noContextFiles`. Session runs with the full extension.
  *  - Tools allowlist includes read, bash, grep, glob, write, onboarding_progress,
- *    onboarding_dispatch_hint, onboarding_finalize, task.
+ *    onboarding_dispatch_hint, onboarding_finalize, onboarding_check_mailbox, task.
  *  - Calls `setConversationLog()` before session creation.
  *  - Registers skill override so the skill is discoverable.
  */
@@ -106,7 +106,7 @@ function makeFakeAgentBody(name: string): string {
     `---`,
     `name: ${name}`,
     `description: test agent`,
-    `tools: read, bash, grep, glob, write, onboarding_progress, onboarding_dispatch_hint, onboarding_finalize, task`,
+    `tools: read, bash, grep, glob, write, onboarding_progress, onboarding_dispatch_hint, onboarding_finalize, onboarding_check_mailbox, task`,
     `model: ollama-cloud/glm-5.2:cloud`,
     `---`,
     `You are ${name}.`,
@@ -220,6 +220,7 @@ test("runOnboard builds session with systemPromptOverride from harbor-master bod
       "onboarding_progress",
       "onboarding_dispatch_hint",
       "onboarding_finalize",
+      "onboarding_check_mailbox",
       "task",
     ]);
     expect(promptCalls.length).toBe(1);

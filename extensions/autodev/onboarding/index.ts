@@ -12,6 +12,7 @@
 import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { ConversationEntry } from "./harbor-log.js";
+import { register as registerMailbox } from "./mailbox.js";
 
 // ---------------------------------------------------------------------------
 // PHASE_KEYWORDS — floor check heuristic only
@@ -334,4 +335,7 @@ export function register(pi: ExtensionAPI): void {
     parameters: Type.Object({}),
     execute: async (_toolCallId, _params) => executeOnboardingFinalize(_params),
   });
+
+  // --- onboarding_check_mailbox (crew observer mailbox) --------------------
+  registerMailbox(pi);
 }

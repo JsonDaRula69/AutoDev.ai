@@ -28,6 +28,7 @@ import type {
 import { analyzeOnboardingIntent } from "../extensions/autodev/intent-gate/index.js";
 import { setConversationLog, analyzeCoverage } from "../extensions/autodev/onboarding/index.js";
 import { writeHarborLog, writeHarborLogSummary } from "../extensions/autodev/onboarding/harbor-log.js";
+import { startOnboardingTeam, endOnboardingTeam } from "../extensions/autodev/onboarding/mailbox.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,6 +54,7 @@ const HM_TOOLS_ALLOWLIST: readonly string[] = [
   "onboarding_progress",
   "onboarding_dispatch_hint",
   "onboarding_finalize",
+  "onboarding_check_mailbox",
   "task",
 ];
 
@@ -174,6 +176,10 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   const conversationLog: Array<{ role: string; content: string; timestamp: string }> = [];
   setConversationLog(conversationLog);
 
+  // 3b. Start the onboarding team mailbox so crew observers (Conseil, Metis,
+  // Momus) can post observations without interrupting the conversation.
+  startOnboardingTeam();
+
   // 4. Resolve the pi SDK (production) or use injected deps (tests).
   const sdk = await resolvePiSdk(opts);
   const agentDir = sdk.getAgentDir();
@@ -214,6 +220,7 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   } finally {
     unsubscribe();
     safeDispose(session);
+    endOnboardingTeam();
   }
 
   // 11. Write Harbor Log artifacts.
