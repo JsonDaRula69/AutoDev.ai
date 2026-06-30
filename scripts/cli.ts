@@ -466,7 +466,7 @@ async function cmdUninstall(): Promise<number> {
   return failed.length > 0 ? 1 : 0;
 }
 
-async function cmdUpdate(): Promise<number> {
+async function cmdUpdate(postUpdate: boolean = false): Promise<number> {
   notify("AutoDev Update", "info");
   notify("============================================", "info");
 
@@ -493,30 +493,81 @@ async function cmdUpdate(): Promise<number> {
   }
   notify(`Current version: ${currentVersion}`, "info");
 
-  // 2. Check npm registry for latest version.
-  // Clear npm cache first to avoid stale version data.
-  try {
-    execSync("npm cache clean --force 2>/dev/null", { encoding: "utf-8", timeout: 15_000 });
-  } catch {
-  }
-  let latestVersion: string;
-  try {
-    const result = execSync("npm view autodev-ai version 2>/dev/null", { encoding: "utf-8", timeout: 15_000 }).trim();
-    latestVersion = result || currentVersion;
-  } catch {
-    notify("Could not reach npm registry. Check your network connection.", "warning");
-    return 1;
-  }
-  notify(`Latest version:  ${latestVersion}`, "info");
+  if (!postUpdate) {
+    // 2. Check npm registry for latest version.
+    try {
+      execSync("npm cache clean --force 2>/dev/null", { encoding: "utf-8", timeout: 15_000 });
+    } catch {
+    }
+    let latestVersion: string;
+    try {
+      const result = execSync("npm view autodev-ai version 2>/dev/null", { encoding: "utf-8", timeout: 15_000 }).trim();
+      latestVersion = result || currentVersion;
+    } catch {
+      notify("Could not reach npm registry. Check your network connection.", "warning");
+      return 1;
+    }
+    notify(`Latest version:  ${latestVersion}`, "info");
 
-  // 3. Compare versions.
-  const { compareSemver } = await import("../extensions/autodev/installer/migrations.js");
-  if (compareSemver(latestVersion, currentVersion) <= 0) {
-    notify("Already up to date.", "info");
+    // 3. Compare versions.
+    const { compareSemver } = await import("../extensions/autodev/installer/migrations.js");
+    if (compareSemver(latestVersion, currentVersion) <= 0) {
+      notify("Already up to date.", "info");
+      return 0;
+    }
+
+    // 4. Self-update the package FIRST (update the updater before running migrations).
+    notify("\nUpdating autodev-ai...", "info");
+    const home = process.env.HOME ?? "~";
+    const bunCacheDir = join(home, ".bun", "install", "cache");
+    if (existsSync(bunCacheDir)) {
+      try {
+        execSync(`rm -rf "${bunCacheDir}"`, { stdio: "pipe", timeout: 10_000 });
+        notify("Cleared bun global cache.", "info");
+      } catch {
+      }
+    }
+
+    let updateCommand: string | null = null;
+    try {
+      const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
+        getSelfUpdateCommand: (pkg: string) => { display: string } | undefined;
+      };
+      const cmd = configModule.getSelfUpdateCommand("autodev-ai");
+      if (cmd) {
+        updateCommand = cmd.display;
+      }
+    } catch {
+    }
+
+    if (updateCommand === null) {
+      updateCommand = `bun install -g autodev-ai@${latestVersion}`;
+    }
+    notify(`Running: ${updateCommand}`, "info");
+
+    try {
+      execSync(updateCommand, { stdio: "inherit", timeout: 120_000 });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify(`Update failed: ${msg}`, "error");
+      notify("You may need to update manually.", "warning");
+      return 1;
+    }
+
+    // 5. Re-exec from the NEW code to run migrations + verify.
+    notify("\nRe-launching from updated code to run migrations...", "info");
+    const { execSync: reExec } = require("node:child_process") as { execSync: (cmd: string, opts: { stdio: string }) => void };
+    try {
+      reExec("autodev update --post-update", { stdio: "inherit" });
+    } catch {
+      notify("Post-update re-exec failed. Migrations may not have run.", "warning");
+      notify("Run 'autodev update --post-update' manually.", "info");
+    }
     return 0;
   }
 
-  // 4. Resolve agent dir for migrations.
+  // Post-update phase: running from the NEW code after self-update.
+  // 6. Resolve agent dir for migrations.
   let agentDir: string;
   try {
     const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
@@ -525,12 +576,12 @@ async function cmdUpdate(): Promise<number> {
     agentDir = join(process.env.HOME ?? "~", ".AutoDev", "agent");
   }
 
-  // 5. Run migrations between current and target version.
+  // 7. Run migrations using the NEW code's MIGRATIONS array.
   const { MIGRATIONS, getLastMigratedVersion, writeCurrentVersion, selectMigrations, runMigrations } =
     await import("../extensions/autodev/installer/migrations.js");
 
   const lastMigrated = getLastMigratedVersion(agentDir);
-  const pendingMigrations = selectMigrations(MIGRATIONS, lastMigrated ?? currentVersion, latestVersion);
+  const pendingMigrations = selectMigrations(MIGRATIONS, lastMigrated ?? "0.0.0", currentVersion);
 
   if (pendingMigrations.length > 0) {
     notify(`\nRunning ${pendingMigrations.length} migration(s)...`, "info");
@@ -541,71 +592,19 @@ async function cmdUpdate(): Promise<number> {
     }
     const failedMigrations = migrationResults.filter((r) => !r.ok);
     if (failedMigrations.length > 0) {
-      notify(`${failedMigrations.length} migration(s) failed. Aborting update.`, "error");
+      notify(`${failedMigrations.length} migration(s) failed.`, "error");
       return 1;
     }
-    writeCurrentVersion(agentDir, latestVersion);
+    writeCurrentVersion(agentDir, currentVersion);
     notify("Migrations complete.", "info");
   } else {
     notify("No migrations needed for this update.", "info");
-    writeCurrentVersion(agentDir, latestVersion);
+    writeCurrentVersion(agentDir, currentVersion);
   }
 
-  // 6. Self-update via the package manager.
-  notify("\nUpdating autodev-ai...", "info");
-
-  // Clear bun's global cache to avoid serving a stale older version.
-  const home = process.env.HOME ?? "~";
-  const bunCacheDir = join(home, ".bun", "install", "cache");
-  if (existsSync(bunCacheDir)) {
-    try {
-      execSync(`rm -rf "${bunCacheDir}"`, { stdio: "pipe", timeout: 10_000 });
-      notify("Cleared bun global cache.", "info");
-    } catch {
-      // Non-fatal — cache clear is best-effort
-    }
-  }
-
-  let updateCommand: string | null = null;
-  try {
-    const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
-      getSelfUpdateCommand: (pkg: string) => { display: string } | undefined;
-    };
-    const cmd = configModule.getSelfUpdateCommand("autodev-ai");
-    if (cmd) {
-      updateCommand = cmd.display;
-    }
-  } catch {
-  }
-
-  if (updateCommand === null) {
-    updateCommand = `bun install -g autodev-ai@${latestVersion}`;
-  }
-  notify(`Running: ${updateCommand}`, "info");
-
-  try {
-    execSync(updateCommand, { stdio: "inherit", timeout: 120_000 });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    notify(`Update failed: ${msg}`, "error");
-    notify("You may need to update manually.", "warning");
-    return 1;
-  }
-
-  // 7. Post-update verification.
-  notify("\nVerifying update...", "info");
-  try {
-    const pkg = require("../../package.json") as { version?: string };
-    const newVersion = pkg.version ?? "unknown";
-    notify(`Updated to version ${newVersion}.`, "info");
-    if (newVersion === currentVersion) {
-      notify("Warning: version unchanged after update. You may need to restart your shell.", "warning");
-    }
-  } catch {
-    notify("Could not verify new version. Run 'autodev doctor' to check health.", "info");
-  }
-
-  notify("\nUpdate complete. Run 'autodev doctor' to verify your setup.", "info");
+  // 8. Post-update verification.
+  notify(`\nUpdated to version ${currentVersion}.`, "info");
+  notify("Update complete. Run 'autodev doctor' to verify your setup.", "info");
   return 0;
 }
 
@@ -657,7 +656,7 @@ async function main(): Promise<number> {
       return cmdUninstall();
 
     case "update":
-      return cmdUpdate();
+      return cmdUpdate(rest.includes("--post-update"));
 
     default:
       notify(`Unknown subcommand: ${subcommand}`, "error");
