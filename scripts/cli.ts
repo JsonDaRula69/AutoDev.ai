@@ -194,7 +194,8 @@ async function cmdConfig(parts: string[]): Promise<number> {
   const authPath = await resolveAuthPath();
   const subcommands = parts.length > 0 ? [parts[0]] : ["llm", "voyage", "discord", "github"];
 
-  if (parts.length > 0 && !["llm", "voyage", "discord", "github"].includes(parts[0])) {
+  const first = parts[0];
+  if (first !== undefined && !["llm", "voyage", "discord", "github"].includes(first)) {
     notify("Usage: autodev config <sub-command>", "info");
     notify("", "info");
     notify("Sub-commands:", "info");

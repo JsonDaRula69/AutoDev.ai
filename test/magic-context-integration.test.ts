@@ -281,8 +281,8 @@ test("config: dreamer.tasks has per-task schedule format", () => {
   const cfg = parseJsonc(readFileSync(CONFIG_PATH, "utf8"));
   const dreamer = cfg["dreamer"] as { tasks: Record<string, { schedule: string }> };
   expect(dreamer.tasks).toBeDefined();
-  expect(dreamer.tasks["verify"].schedule).toBe("0 3 * * *");
-  expect(dreamer.tasks["maintain-docs"].schedule).toBe("");
+  expect(dreamer.tasks["verify"]?.schedule).toBe("0 3 * * *");
+  expect(dreamer.tasks["maintain-docs"]?.schedule).toBe("");
 });
 
 test("config: sidekick.enabled is true", () => {

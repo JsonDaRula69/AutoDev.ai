@@ -21,7 +21,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import type { FallbackConfig } from "./types.js";
 import { classifyError } from "./classifier.js";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { parseFrontmatter, parseCommaList, getCentralAgentsDir } from "../shared/agent-parser.js";
 
 /** Allowlist of approved models (loaded from .autodev/config/models.json). */
 export type ModelAllowlist = readonly string[];
@@ -48,56 +48,6 @@ export interface FallbackResolution {
   readonly reason: string;
 }
 
-/**
- * Parse the YAML frontmatter block from a pi agent .md file.
- * Returns the raw key:value lines (without the `---` fences).
- */
-function parseFrontmatter(text: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (match === null || match[1] === undefined) return result;
-  for (const line of match[1].split("\n")) {
-    const idx = line.indexOf(":");
-    if (idx === -1) continue;
-    const key = line.slice(0, idx).trim();
-    const value = line.slice(idx + 1).trim();
-    result[key] = value;
-  }
-  return result;
-}
-
-/**
- * Parse a comma-separated `fallback_models` frontmatter value into a list.
- * Returns an empty array when the field is missing or empty.
- */
-function parseFallbackModels(raw: string): readonly string[] {
-  return raw
-    .split(",")
-    .map((m) => m.trim())
-    .filter((m) => m.length > 0);
-}
-
-/**
- * Resolve the central agent definitions directory.
- *
- * Agents live at `join(getAgentDir(), "..", "agents")` — the sibling
- * `agents/` directory of the pi agent config dir. `getAgentDir()` honors
- * the `PI_CODING_AGENT_DIR` env override for tests.
- */
-function getCentralAgentsDir(): string {
-  return join(getAgentDir(), "..", "agents");
-}
-
-/**
- * Load per-agent fallback chains from the central `agents/*.md` frontmatter.
- *
- * Each agent file may declare a `fallback_models` field in its YAML
- * frontmatter (comma-separated model strings). Files without the field
- * are skipped. The `projectRoot` parameter is accepted for API
- * compatibility but is not used for resolution — agents are a global
- * per-user resource. Missing central `agents/` directory returns an
- * empty config.
- */
 export function loadAgentFallbackChains(_projectRoot: string): FallbackConfig {
   const dir = getCentralAgentsDir();
   if (!existsSync(dir)) return {};
@@ -115,7 +65,7 @@ export function loadAgentFallbackChains(_projectRoot: string): FallbackConfig {
       const agentName = fm["name"];
       const raw = fm["fallback_models"];
       if (agentName !== undefined && raw !== undefined) {
-        const models = parseFallbackModels(raw);
+        const models = parseCommaList(raw);
         if (models.length > 0) {
           chains[agentName] = { fallback_models: models };
         }

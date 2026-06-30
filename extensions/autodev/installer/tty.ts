@@ -14,9 +14,9 @@
 import { openSync } from "node:fs";
 import { createWriteStream } from "node:fs";
 import { ReadStream as TtyReadStream } from "node:tty";
-import { createInterface, type Interface as ReadlineInterface } from "node:readline";
+import type { Readable, Writable } from "node:stream";
 import type { Prompter } from "./prompts.js";
-import { createPrompterFromRl } from "./prompts.js";
+import { createPrompterFromStreams } from "./prompts.js";
 
 /** TTY device path for the current platform. */
 export const TTY_DEVICE: string =
@@ -57,20 +57,19 @@ export function reopenTty(deps: ReopenTtyDeps = {}): Prompter | null {
     return deps.prompterOverride;
   }
 
-  const createRs = deps.createReadStreamOverride ?? ((path: string, opts: { fd: number }) => new TtyReadStream(opts.fd, { encoding: "utf-8" }));
+  const createRs = deps.createReadStreamOverride ?? ((path: string, opts: { fd: number }) => new TtyReadStream(opts.fd, { encoding: "utf-8" } as ConstructorParameters<typeof TtyReadStream>[1]));
   const createWs = deps.createWriteStreamOverride ?? createWriteStream;
 
-  let input: NodeJS.ReadableStream;
-  let output: NodeJS.WritableStream;
+  let input: Readable;
+  let output: Writable;
   try {
-    input = createRs(TTY_DEVICE, { fd });
-    output = createWs(TTY_DEVICE, { fd });
+    input = createRs(TTY_DEVICE, { fd }) as Readable;
+    output = createWs(TTY_DEVICE, { fd }) as Writable;
   } catch {
     return null;
   }
 
-  const rl = createInterface({ input, output });
-  return createPrompterFromRl(rl);
+  return createPrompterFromStreams(input, output);
 }
 
 /** Reopen-and-prompt helper: reopen TTY, call `fn(prompter)`, close regardless. */

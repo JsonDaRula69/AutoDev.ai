@@ -5,11 +5,12 @@
  * `prompt()` and `confirm()` methods. Tests can inject a custom readline
  * interface or use the `MockPrompter` class.
  */
-import { createInterface, type Interface as ReadlineInterface } from "node:readline";
+import { createInterface } from "node:readline";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { openSync } from "node:fs";
 import { createWriteStream } from "node:fs";
 import { ReadStream as TtyReadStream } from "node:tty";
+import type { Readable, Writable } from "node:stream";
 import { select as clackSelect, text as clackText, confirm as clackConfirm, isCancel } from "@clack/prompts";
 
 export interface SelectOption {
@@ -21,7 +22,7 @@ export interface SelectOption {
 export interface Prompter {
   prompt(question: string): Promise<string>;
   confirm(question: string, defaultYes?: boolean): Promise<boolean>;
-  select(message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol>;
+  select(message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol | undefined>;
   close(): void;
 }
 
@@ -36,10 +37,10 @@ export function createPrompter(): Prompter {
 function createTtyPrompter(): Prompter {
   try {
     const fd = openSync("/dev/tty", "r+");
-    const input = new TtyReadStream(fd, { encoding: "utf-8" });
+    const input = new TtyReadStream(fd, { encoding: "utf-8" } as ConstructorParameters<typeof TtyReadStream>[1]);
     input.isRaw = false;
     const output = createWriteStream("/dev/tty", { fd });
-    return createClackPrompter(input as unknown as ReadableStream<Uint8Array>, output as unknown as WritableStream<Uint8Array>);
+    return createClackPrompter(input, output);
   } catch {
     return createNoTtyPrompter();
   }
@@ -54,11 +55,11 @@ function createNoTtyPrompter(): Prompter {
   };
 }
 
-export function createPrompterFromRl(rl: ReadlineInterface): Prompter {
-  return createClackPrompter(rl.input as ReadableStream<Uint8Array>, rl.output as WritableStream<Uint8Array>);
+export function createPrompterFromStreams(input: Readable, output: Writable): Prompter {
+  return createClackPrompter(input, output);
 }
 
-function createClackPrompter(input: ReadableStream<Uint8Array>, output: WritableStream<Uint8Array>): Prompter {
+function createClackPrompter(input: Readable, output: Writable): Prompter {
   return {
     prompt: async (question: string): Promise<string> => {
       const result = await clackText({ message: question, input, output });
@@ -70,10 +71,14 @@ function createClackPrompter(input: ReadableStream<Uint8Array>, output: Writable
       if (isCancel(result)) return false;
       return Boolean(result);
     },
-    select: async (message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol> => {
+    select: async (message: string, options: SelectOption[], initialValue?: string): Promise<string | symbol | undefined> => {
       const result = await clackSelect({
         message,
-        options: options.map((o) => ({ value: o.value, label: o.label, hint: o.hint })),
+        options: options.map((o) => ({
+          value: o.value,
+          label: o.label,
+          ...(o.hint !== undefined ? { hint: o.hint } : {}),
+        })),
         initialValue: initialValue ?? options[0]?.value,
         input,
         output,

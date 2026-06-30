@@ -203,36 +203,54 @@ async function handleVoyage(deps: ConfigModuleDeps): Promise<ConfigResult> {
     return { subcommand: "voyage", step: STEP_VOYAGE, status: "skipped", message: "Already configured." };
   }
 
-  const apiKey = await deps.prompter.prompt(
-    "Enter your VoyageAI API key for semantic embeddings (press Enter to skip → ONNX fallback):",
-  );
-
   const envPath = agentEnvPath(deps);
 
-  if (apiKey === "") {
-    deps.notify("No VoyageAI key — using local ONNX embeddings (slower, ~90MB download on first use).", "info");
-    await setEnvVars(deps.projectRoot, [["VOYAGE_API_KEY", ""]], envPath);
-    await markStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE);
-    return {
-      subcommand: "voyage",
-      step: STEP_VOYAGE,
-      status: "warning",
-      message: "VoyageAI key not set. Using ONNX fallback embeddings.",
-    };
-  }
-
-  deps.notify("Validating VoyageAI API key...", "info");
-  const validation = await validateVoyageKey(apiKey, {
-    ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
-  });
-
-  if (!validation.valid) {
-    deps.notify(`VoyageAI key validation failed: ${validation.error}`, "warning");
-    const shouldSkip = await deps.prompter.confirm(
-      "VoyageAI key is invalid. Skip and use local ONNX embeddings instead?",
-      true,
+  while (true) {
+    const apiKey = await deps.prompter.prompt(
+      "Enter your VoyageAI API key for semantic embeddings (press Enter to skip → ONNX fallback):",
     );
-    if (shouldSkip) {
+
+    if (apiKey === "") {
+      deps.notify("No VoyageAI key — using local ONNX embeddings (slower, ~90MB download on first use).", "info");
+      await setEnvVars(deps.projectRoot, [["VOYAGE_API_KEY", ""]], envPath);
+      await markStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE);
+      return {
+        subcommand: "voyage",
+        step: STEP_VOYAGE,
+        status: "warning",
+        message: "VoyageAI key not set. Using ONNX fallback embeddings.",
+      };
+    }
+
+    deps.notify("Validating VoyageAI API key...", "info");
+    const validation = await validateVoyageKey(apiKey, {
+      ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
+    });
+
+    if (validation.valid) {
+      deps.notify("VoyageAI API key validated.", "info");
+      await setEnvVars(deps.projectRoot, [["VOYAGE_API_KEY", apiKey]], envPath);
+      await markStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE);
+      return {
+        subcommand: "voyage",
+        step: STEP_VOYAGE,
+        status: "ok",
+        message: "VoyageAI key configured.",
+      };
+    }
+
+    deps.notify(`VoyageAI key validation failed: ${validation.error}`, "warning");
+    const choice = await deps.prompter.select(
+      "VoyageAI key is invalid. What would you like to do?",
+      [
+        { value: "retry", label: "Re-enter the API key" },
+        { value: "skip", label: "Skip and use local ONNX embeddings" },
+        { value: "abort", label: "Abort configuration" },
+      ],
+      "retry",
+    );
+
+    if (choice === "skip") {
       deps.notify("Using local ONNX embeddings (slower, ~90MB download on first use).", "info");
       await setEnvVars(deps.projectRoot, [["VOYAGE_API_KEY", ""]], envPath);
       await markStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE);
@@ -243,23 +261,16 @@ async function handleVoyage(deps: ConfigModuleDeps): Promise<ConfigResult> {
         message: "VoyageAI key invalid. Using ONNX fallback embeddings.",
       };
     }
-    return {
-      subcommand: "voyage",
-      step: STEP_VOYAGE,
-      status: "error",
-      message: `VoyageAI key invalid: ${validation.error}`,
-    };
-  }
 
-  deps.notify("VoyageAI API key validated.", "info");
-  await setEnvVars(deps.projectRoot, [["VOYAGE_API_KEY", apiKey]], envPath);
-  await markStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE);
-  return {
-    subcommand: "voyage",
-    step: STEP_VOYAGE,
-    status: "ok",
-    message: "VoyageAI key configured.",
-  };
+    if (choice === "abort" || choice === undefined) {
+      return {
+        subcommand: "voyage",
+        step: STEP_VOYAGE,
+        status: "error",
+        message: `VoyageAI key invalid: ${validation.error}`,
+      };
+    }
+  }
 }
 
 async function handleDiscord(deps: ConfigModuleDeps): Promise<ConfigResult> {
