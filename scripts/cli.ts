@@ -513,7 +513,8 @@ async function cmdUpdate(postUpdate: boolean = false): Promise<number> {
     const { compareSemver } = await import("../extensions/autodev/installer/migrations.js");
     if (compareSemver(latestVersion, currentVersion) <= 0) {
       notify("Already up to date.", "info");
-      return 0;
+      // Still run pending migrations in case a previous update didn't run them.
+      return cmdUpdate(true);
     }
 
     // 4. Self-update the package FIRST (update the updater before running migrations).
