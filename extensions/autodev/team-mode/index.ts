@@ -1,12 +1,11 @@
 /**
  * team-mode — parallel multi-agent coordination for AutoDev.
  *
- * Registers 12 team_* tools via `pi.registerTool()`. The tools are callable
- * and schema-validated today; real coordination (shared mailbox, tasklist,
- * member lifecycle, hyperplan/hostile-critic orchestration) arrives in a
- * later sub-plan.
+ * Registers 12 team_* tools via `pi.registerTool()`, backed by an in-memory
+ * team store (store.ts) that holds team runs, members, a shared mailbox, and
+ * a tasklist. All coordination state is in-process and ephemeral.
  *
- * Adapted for AutoDev's three trigger points:
+ * Three AutoDev-specific adaptations build on this foundation:
  *  - Hyperplan after onboarding (5 hostile critics critique onboarding results)
  *  - Always-watching during work (members observe and flag via mailbox)
  *  - Mailbox during onboarding (other agents chime in without interrupting)
