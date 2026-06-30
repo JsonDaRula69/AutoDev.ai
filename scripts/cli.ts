@@ -473,18 +473,14 @@ async function cmdUpdate(): Promise<number> {
   // 1. Detect current version from installed package.json.
   let currentVersion: string = "0.0.0";
   try {
-    const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
-      getPackageDir: () => string;
-    };
-    const pkgDir = configModule.getPackageDir();
-    const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8"));
+    const pkg = require("../../package.json") as { version?: string };
     currentVersion = pkg.version ?? "0.0.0";
   } catch {
     try {
-      const { dirname, join: pathJoin } = require("node:path") as { dirname: (p: string) => string; join: (...p: string[]) => string };
+      const { dirname } = require("node:path") as { dirname: (p: string) => string };
       let dir = dirname(__dirname);
       while (dir !== dirname(dir)) {
-        const pkgPath = pathJoin(dir, "package.json");
+        const pkgPath = join(dir, "package.json");
         if (existsSync(pkgPath)) {
           const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
           currentVersion = pkg.version ?? "0.0.0";
@@ -492,9 +488,7 @@ async function cmdUpdate(): Promise<number> {
         }
         dir = dirname(dir);
       }
-      if (currentVersion === undefined) currentVersion = "0.0.0";
     } catch {
-      currentVersion = "0.0.0";
     }
   }
   notify(`Current version: ${currentVersion}`, "info");
@@ -584,11 +578,7 @@ async function cmdUpdate(): Promise<number> {
   // 7. Post-update verification.
   notify("\nVerifying update...", "info");
   try {
-    const configModule = require("@earendil-works/pi-coding-agent/dist/config.js") as {
-      getPackageDir: () => string;
-    };
-    const pkgDir = configModule.getPackageDir();
-    const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf-8"));
+    const pkg = require("../../package.json") as { version?: string };
     const newVersion = pkg.version ?? "unknown";
     notify(`Updated to version ${newVersion}.`, "info");
     if (newVersion === currentVersion) {
