@@ -22,7 +22,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO_FULL_NAME: ${{ github.event.repository.full_name }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
           if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_SECRET" ]; then
             echo "❌ HERMES_WEBHOOK_URL or HERMES_WEBHOOK_SECRET not set"
@@ -53,20 +53,32 @@ jobs:
           # Compute HMAC-SHA256 signature
           SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')
 
-          # Send to Hermes webhook (use --insecure as fallback for TLS issues)
+          # Send to Hermes webhook (try with SSL, fallback to insecure)
           echo "Triggering Hermes review for PR #$PR_NUMBER: $PR_TITLE"
+
+          RESPONSE=""
+          HTTP_CODE="000"
+
+          # First try with full SSL verification
           RESPONSE=$(curl -s --connect-timeout 10 -w "\n%{http_code}" -X POST \
             "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: pull_request" \
             -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
-            -d "$PAYLOAD" 2>&1) || \
-          RESPONSE=$(curl -s -k --connect-timeout 10 -w "\n%{http_code}" -X POST \
-            "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -H "X-GitHub-Event: pull_request" \
-            -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
-            -d "$PAYLOAD" 2>&1)
+            -d "$PAYLOAD" 2>&1) && true
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+          # If SSL failed (exit 35/60), retry with --insecure
+          if [ "$HTTP_CODE" = "000" ] || [ -z "$HTTP_CODE" ]; then
+            echo "SSL verification failed, retrying with --insecure..."
+            RESPONSE=$(curl -s -k --connect-timeout 10 -w "\n%{http_code}" -X POST \
+              "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -H "X-GitHub-Event: pull_request" \
+              -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+              -d "$PAYLOAD" 2>&1) && true
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          fi
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
