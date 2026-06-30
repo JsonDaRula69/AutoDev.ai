@@ -29,6 +29,7 @@ import { analyzeOnboardingIntent } from "../extensions/autodev/intent-gate/index
 import { setConversationLog, analyzeCoverage } from "../extensions/autodev/onboarding/index.js";
 import { writeHarborLog, writeHarborLogSummary } from "../extensions/autodev/onboarding/harbor-log.js";
 import { startOnboardingTeam, endOnboardingTeam } from "../extensions/autodev/onboarding/mailbox.js";
+import { runHyperplan, type SpawnCriticDeps } from "../extensions/autodev/onboarding/hyperplan.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -85,6 +86,7 @@ export interface OnboardOptions {
    * production calls `analyzeOnboardingIntent`.
    */
   readonly analyzeOnboardingIntentOverride?: (text: string) => OnboardingIntentAnalysis;
+  readonly skipHyperplan?: boolean;
 }
 
 /** Minimal shape of a Harbor Master agent definition returned by loadAgent. */
@@ -232,6 +234,50 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     notify(`Warning: could not write Harbor Log: ${msg}`, "warning");
+  }
+
+  // 12. Run hyperplan — 5 hostile critics cross-examine onboarding results.
+  if (!opts.skipHyperplan) {
+    try {
+      notify("Launching hyperplan — 5 critics reviewing onboarding results...", "info");
+      const { runHyperplan: runHp } = await import("../extensions/autodev/onboarding/hyperplan.js");
+      const criticDeps: SpawnCriticDeps = {
+        prompt: async (criticId: string, systemPrompt: string, userPrompt: string): Promise<string> => {
+          const criticSessionManager = sdk.SessionManager.inMemory();
+          const { session: criticSession } = await sdk.createAgentSession({
+            model,
+            thinkingLevel: "low",
+            tools: [],
+            sessionManager: criticSessionManager,
+            resourceLoader,
+            modelRegistry,
+            authStorage,
+          } as never) as { session: { prompt: (p: string) => Promise<void>; messages?: Array<{ role?: string; content?: string }>; dispose?: () => void } };
+          try {
+            const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+            await criticSession.prompt(fullPrompt);
+            const messages = criticSession.messages ?? [];
+            const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+            return lastAssistant?.content ?? "(no response)";
+          } finally {
+            criticSession.dispose?.();
+          }
+        },
+      };
+      const hpResult = await runHp(projectRoot, conversationLog, criticDeps);
+      const icon = hpResult.verdict === "pass" ? "✓" : hpResult.verdict === "revise" ? "⚠" : "✗";
+      notify(`  ${icon} Hyperplan verdict: ${hpResult.verdict.toUpperCase()}`, hpResult.verdict === "pass" ? "info" : "warning");
+      notify(`  ${hpResult.critiques.length} critics reviewed. ${hpResult.summary}`, "info");
+      if (hpResult.verdictPath) {
+        notify(`  Verdict written to: ${hpResult.verdictPath}`, "info");
+      }
+      if (hpResult.verdict === "block") {
+        notify("  Onboarding has critical misunderstandings. Consider re-running 'autodev onboard'.", "warning");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify(`Warning: hyperplan failed (non-fatal): ${msg}`, "warning");
+    }
   }
 
   return 0;

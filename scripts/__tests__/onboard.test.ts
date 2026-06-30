@@ -190,15 +190,13 @@ test("runOnboard builds session with systemPromptOverride from harbor-master bod
     });
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      notify: () => {},
-      piSdkOverride: deps,
-      loadAgentOverride: () =>
-        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
-      analyzeOnboardingIntentOverride: () =>
-        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    notify: () => {},
+    piSdkOverride: deps,
+    loadAgentOverride: () =>
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+    analyzeOnboardingIntentOverride: () =>
+      ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
     const createCall = deps.calls.find((c: any) => c.method === "createAgentSession");
@@ -239,23 +237,21 @@ test("runOnboard calls analyzeOnboardingIntent and injects results into opening 
 
     const analyzeCalls: any[] = [];
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      initialText: "We are building a financial dashboard. Security is critical.",
-      notify: () => {},
-      piSdkOverride: deps,
-      loadAgentOverride: () =>
-        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
-      analyzeOnboardingIntentOverride: (text: string) => {
-        analyzeCalls.push(text);
-        return {
-          hiddenIntentions: [{ theme: "security", evidence: "mentions critical", question: "What compliance regime?" }],
-          probingQuestions: ["What is the blast radius?"],
-          stake: "critical",
-          technicalDepth: "technical",
-        };
-      },
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    initialText: "We are building a financial dashboard. Security is critical.",
+    notify: () => {},
+    piSdkOverride: deps,
+    loadAgentOverride: () =>
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+    analyzeOnboardingIntentOverride: (text: string) => {
+      analyzeCalls.push(text);
+      return {
+        hiddenIntentions: [{ theme: "security", evidence: "mentions critical", question: "What compliance regime?" }],
+        probingQuestions: ["What is the blast radius?"],
+        stake: "critical",
+        technicalDepth: "technical",
+      };
+    }, });
 
     expect(code).toBe(0);
     expect(analyzeCalls.length).toBe(1);
@@ -288,15 +284,13 @@ test("runOnboard prefers SessionManager.create and falls back to inMemory on fai
     const messages: any[] = [];
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      notify: (msg, level) => messages.push({ msg, level }),
-      piSdkOverride: deps,
-      loadAgentOverride: () =>
-        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
-      analyzeOnboardingIntentOverride: () =>
-        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    notify: (msg, level) => messages.push({ msg, level }),
+    piSdkOverride: deps,
+    loadAgentOverride: () =>
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+    analyzeOnboardingIntentOverride: () =>
+      ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
     expect(deps.SessionManager.create).toHaveBeenCalled();
@@ -323,15 +317,13 @@ test("runOnboard throws descriptive error when both find and getDefault return n
 
     const { runOnboard } = await importOnboardModule();
     await expect(
-      runOnboard({
-        projectRoot,
-        notify: (msg, level) => messages.push({ msg, level }),
-        piSdkOverride: deps,
-        loadAgentOverride: () =>
-          ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
-        analyzeOnboardingIntentOverride: () =>
-          ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-      }),
+      runOnboard({ skipHyperplan: true, projectRoot,
+      notify: (msg, level) => messages.push({ msg, level }),
+      piSdkOverride: deps,
+      loadAgentOverride: () =>
+        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      analyzeOnboardingIntentOverride: () =>
+        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), }),
     ).rejects.toThrow(/No usable model found for Harbor Master onboarding/i);
   } finally {
     cleanupTempDir(projectRoot);
@@ -351,15 +343,13 @@ test("runOnboard accumulates assistant text from message_end into conversationLo
     });
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      notify: () => {},
-      piSdkOverride: deps,
-      loadAgentOverride: () =>
-        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
-      analyzeOnboardingIntentOverride: () =>
-        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    notify: () => {},
+    piSdkOverride: deps,
+    loadAgentOverride: () =>
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+    analyzeOnboardingIntentOverride: () =>
+      ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
     expect(promptCalls.length).toBe(1);
@@ -397,15 +387,13 @@ test("runOnboard accumulates assistant text from message_end into conversationLo
     );
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      notify: () => {},
-      piSdkOverride: deps,
-      loadAgentOverride: () =>
-        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
-      analyzeOnboardingIntentOverride: () =>
-        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    notify: () => {},
+    piSdkOverride: deps,
+    loadAgentOverride: () =>
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+    analyzeOnboardingIntentOverride: () =>
+      ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
     const createCall = deps.calls.find((c: any) => c.method === "createAgentSession");
@@ -436,15 +424,13 @@ test("runOnboard still returns 0 when session ends with error and writes harbor 
     const messages: any[] = [];
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      notify: (msg, level) => messages.push({ msg, level }),
-      piSdkOverride: deps,
-      loadAgentOverride: () =>
-        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
-      analyzeOnboardingIntentOverride: () =>
-        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    notify: (msg, level) => messages.push({ msg, level }),
+    piSdkOverride: deps,
+    loadAgentOverride: () =>
+      ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+    analyzeOnboardingIntentOverride: () =>
+      ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
     expect(messages.some((m) => m.level === "warning" && m.msg.includes("session ended with error"))).toBe(true);
@@ -462,14 +448,12 @@ test("runOnboard returns 1 and skips session when loadAgent returns undefined", 
     const messages: any[] = [];
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      notify: (msg, level) => messages.push({ msg, level }),
-      piSdkOverride: deps,
-      loadAgentOverride: () => undefined,
-      analyzeOnboardingIntentOverride: () =>
-        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    notify: (msg, level) => messages.push({ msg, level }),
+    piSdkOverride: deps,
+    loadAgentOverride: () => undefined,
+    analyzeOnboardingIntentOverride: () =>
+      ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(1);
     expect(messages.some((m) => m.level === "warning" && m.msg.includes("Harbor Master"))).toBe(true);
@@ -503,13 +487,11 @@ test("runOnboard default path loads harbor-master agent body from file", async (
     );
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({
-      projectRoot,
-      notify: () => {},
-      piSdkOverride: deps,
-      analyzeOnboardingIntentOverride: () =>
-        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
-    });
+    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    notify: () => {},
+    piSdkOverride: deps,
+    analyzeOnboardingIntentOverride: () =>
+      ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
     const createCall = deps.calls.find((c: any) => c.method === "createAgentSession");
