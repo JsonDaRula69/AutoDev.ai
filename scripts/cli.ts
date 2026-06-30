@@ -416,8 +416,21 @@ async function cmdDocs(parts: string[]): Promise<number> {
     return 1;
   }
 
+  if (sub === "sources") {
+    if (process.stdin.isTTY !== true) {
+      notify("'autodev docs sources' requires an interactive terminal.", "warning");
+      return 1;
+    }
+    const { runDocsSourcesCommand } = await import(
+      "../extensions/autodev/installer/docs-sources.js"
+    );
+    const home = process.env.HOME ?? "~";
+    const yamlPath = join(home, ".AutoDev", "config", "docs-sources.yaml");
+    return runDocsSourcesCommand({ yamlPath });
+  }
+
   notify(
-    "Usage: autodev docs query <text> | autodev docs rebuild <central|project>",
+    "Usage: autodev docs query <text> | autodev docs rebuild <central|project> | autodev docs sources",
     "info",
   );
   return 0;
@@ -668,7 +681,7 @@ async function main(): Promise<number> {
 
 /** Canonical subcommand list for help text. */
 export const HELP_SUBCOMMANDS =
-  "AutoDev subcommands: init, onboard, doctor, config, status, stop, update, uninstall, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation";
+  "AutoDev subcommands: init, onboard, doctor, config, status, stop, update, uninstall, docs query, docs rebuild central, docs rebuild project, docs sources, debate start, debate status, stop-continuation";
 
 if (import.meta.main) {
   main()
