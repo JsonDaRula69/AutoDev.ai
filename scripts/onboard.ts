@@ -527,14 +527,27 @@ function subscribeToAssistantMessages(
       }
     }
     if (event.type === "message_end") {
-      if (currentAssistantText.length > 0) {
+      let text = currentAssistantText;
+      if (text.length === 0 && event.message) {
+        const msg = event.message;
+        const content = msg.content;
+        if (typeof content === "string") {
+          text = content;
+        } else if (Array.isArray(content)) {
+          text = content
+            .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+            .map((part: any) => part.text)
+            .join("");
+        }
+      }
+      if (text.length > 0) {
         conversationLog.push({
           role: "assistant",
-          content: currentAssistantText,
+          content: text,
           timestamp: new Date().toISOString(),
         });
-        currentAssistantText = "";
       }
+      currentAssistantText = "";
     }
   });
 }
