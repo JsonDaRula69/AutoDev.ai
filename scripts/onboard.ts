@@ -527,6 +527,10 @@ function subscribeToAssistantMessages(
       }
     }
     if (event.type === "message_end") {
+      if (event.message && event.message.role !== "assistant") {
+        currentAssistantText = "";
+        return;
+      }
       let text = currentAssistantText;
       if (text.length === 0 && event.message) {
         const msg = event.message;
