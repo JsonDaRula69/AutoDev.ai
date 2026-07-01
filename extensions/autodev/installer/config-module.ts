@@ -43,6 +43,66 @@ const STEP_VOYAGE = 4;
 const STEP_DISCORD = 5;
 const STEP_GITHUB = -1;
 
+async function llmCredentialsValid(deps: ConfigModuleDeps): Promise<boolean> {
+  try {
+    const envPath = agentEnvPath(deps);
+    const existing = await readEnv(deps.projectRoot, envPath);
+    const { tryImportAuth } = await import("./auth.js");
+    const auth = tryImportAuth(deps.authPath, deps.authPath, "ollama-cloud", "OLLAMA_API_KEY", envPath, deps.projectRoot);
+    if (!auth) return false;
+    const apiKey = existing.get("OLLAMA_API_KEY") ?? "";
+    if (!apiKey || apiKey.startsWith("$")) return false;
+    const validation = await validateLlmKey("ollama-cloud", apiKey, {
+      ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
+    });
+    return validation.valid;
+  } catch {
+    return false;
+  }
+}
+
+async function voyageCredentialsValid(deps: ConfigModuleDeps): Promise<boolean> {
+  try {
+    const envPath = agentEnvPath(deps);
+    const existing = await readEnv(deps.projectRoot, envPath);
+    const apiKey = existing.get("VOYAGE_API_KEY") ?? "";
+    if (!apiKey || apiKey.startsWith("$")) return false;
+    const validation = await validateVoyageKey(apiKey, {
+      ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
+    });
+    return validation.valid;
+  } catch {
+    return false;
+  }
+}
+
+async function discordCredentialsValid(deps: ConfigModuleDeps): Promise<boolean> {
+  try {
+    const envPath = agentEnvPath(deps);
+    const existing = await readEnv(deps.projectRoot, envPath);
+    const token = existing.get("DISCORD_BOT_TOKEN") ?? "";
+    const channelId = existing.get("DISCORD_CHANNEL_ID") ?? "";
+    if (!token || !channelId) return false;
+    const validation = await validateDiscordToken(token, {
+      ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
+    });
+    return validation.valid;
+  } catch {
+    return false;
+  }
+}
+
+async function githubCredentialsValid(deps: ConfigModuleDeps): Promise<boolean> {
+  try {
+    const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+    if (!token) return false;
+    const validation = validateGithubToken(token);
+    return validation.valid;
+  } catch {
+    return false;
+  }
+}
+
 function execSyncFn(
   deps: ConfigModuleDeps,
   command: string,
@@ -61,7 +121,7 @@ export async function runConfig(
   deps: ConfigModuleDeps,
   subcommand?: string,
 ): Promise<ConfigResult[]> {
-  const handlers: ReadonlyArray<[string, (d: ConfigModuleDeps) => Promise<ConfigResult>]> = [
+  const handlers: ReadonlyArray<[string, (d: ConfigModuleDeps, force: boolean) => Promise<ConfigResult>]> = [
     ["llm", handleLlm],
     ["voyage", handleVoyage],
     ["discord", handleDiscord],
@@ -80,19 +140,22 @@ export async function runConfig(
         message: `Unknown config sub-command: ${subcommand}`,
       }];
     }
-    return [await match[1](deps)];
+    return [await match[1](deps, true)];
   }
 
   const results: ConfigResult[] = [];
   for (const [, handler] of handlers) {
-    results.push(await handler(deps));
+    results.push(await handler(deps, false));
   }
   return results;
 }
 
-async function handleLlm(deps: ConfigModuleDeps): Promise<ConfigResult> {
-  if (await isStepCompleted(deps.projectRoot, STEP_LLM, CONFIG_SCOPE)) {
-    return { subcommand: "llm", step: STEP_LLM, status: "skipped", message: "Already configured." };
+async function handleLlm(deps: ConfigModuleDeps, force: boolean): Promise<ConfigResult> {
+  if (!force && await isStepCompleted(deps.projectRoot, STEP_LLM, CONFIG_SCOPE)) {
+    if (await llmCredentialsValid(deps)) {
+      return { subcommand: "llm", step: STEP_LLM, status: "skipped", message: "Already configured." };
+    }
+    deps.notify("LLM credentials invalid — reconfiguring.", "warning");
   }
 
   const PROVIDERS = [
@@ -199,9 +262,12 @@ async function handleLlm(deps: ConfigModuleDeps): Promise<ConfigResult> {
   };
 }
 
-async function handleVoyage(deps: ConfigModuleDeps): Promise<ConfigResult> {
-  if (await isStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE)) {
-    return { subcommand: "voyage", step: STEP_VOYAGE, status: "skipped", message: "Already configured." };
+async function handleVoyage(deps: ConfigModuleDeps, force: boolean): Promise<ConfigResult> {
+  if (!force && await isStepCompleted(deps.projectRoot, STEP_VOYAGE, CONFIG_SCOPE)) {
+    if (await voyageCredentialsValid(deps)) {
+      return { subcommand: "voyage", step: STEP_VOYAGE, status: "skipped", message: "Already configured." };
+    }
+    deps.notify("VoyageAI credentials invalid — reconfiguring.", "warning");
   }
 
   const envPath = agentEnvPath(deps);
@@ -274,7 +340,13 @@ async function handleVoyage(deps: ConfigModuleDeps): Promise<ConfigResult> {
   }
 }
 
-async function handleDiscord(deps: ConfigModuleDeps): Promise<ConfigResult> {
+async function handleDiscord(deps: ConfigModuleDeps, force: boolean): Promise<ConfigResult> {
+  if (!force && await isStepCompleted(deps.projectRoot, STEP_DISCORD, CONFIG_SCOPE)) {
+    if (await discordCredentialsValid(deps)) {
+      return { subcommand: "discord", step: STEP_DISCORD, status: "skipped", message: "Already configured." };
+    }
+    deps.notify("Discord credentials invalid — reconfiguring.", "warning");
+  }
   const setupText = `Do you want to set up Discord integration?
 
 AutoDev uses Discord as its crew-to-liaison bridge. To create and invite a bot:
@@ -338,9 +410,12 @@ Full setup guide: ~/.AutoDev/reference/discord-setup.md`;
   return { subcommand: "discord", step: STEP_DISCORD, status: "ok", message: "Discord integration configured." };
 }
 
-async function handleGithub(deps: ConfigModuleDeps): Promise<ConfigResult> {
-  if (await isStepCompleted(deps.projectRoot, STEP_GITHUB, CONFIG_SCOPE)) {
-    return { subcommand: "github", step: STEP_GITHUB, status: "skipped", message: "Already configured." };
+async function handleGithub(deps: ConfigModuleDeps, force: boolean): Promise<ConfigResult> {
+  if (!force && await isStepCompleted(deps.projectRoot, STEP_GITHUB, CONFIG_SCOPE)) {
+    if (await githubCredentialsValid(deps)) {
+      return { subcommand: "github", step: STEP_GITHUB, status: "skipped", message: "Already configured." };
+    }
+    deps.notify("GitHub credentials invalid — reconfiguring.", "warning");
   }
 
   const envPath = agentEnvPath(deps);
@@ -423,7 +498,7 @@ Paste your token here (or press Enter to use interactive \`gh auth login --web\`
   return { subcommand: "github", step: STEP_GITHUB, status: "ok", message: "GitHub token configured and verified." };
 }
 
-async function handleVerbose(deps: ConfigModuleDeps): Promise<ConfigResult> {
+async function handleVerbose(deps: ConfigModuleDeps, _force: boolean): Promise<ConfigResult> {
   const { resolveVerboseConfig, writeVerboseConfig } = await import("./verbose-config.js");
   const agentDir = dirname(deps.authPath);
   const current = resolveVerboseConfig(agentDir);

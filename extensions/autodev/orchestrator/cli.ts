@@ -232,14 +232,18 @@ async function handleInit(parts: string[], ctx: ExtensionCommandContext): Promis
 }
 
 async function handleConfig(parts: string[], ctx: ExtensionCommandContext): Promise<void> {
-  const subSubcommand = parts[0] ?? "";
+  const validSubs = ["llm", "voyage", "discord", "github", "verbose"];
+  const explicitSubs = parts
+    .map((p) => p.startsWith("--") ? p.slice(2) : p)
+    .filter((p) => validSubs.includes(p));
 
-  if (subSubcommand === "") {
-    ctx.ui.notify("Usage: autodev config <sub-command>", "info");
-    ctx.ui.notify("Sub-commands: llm, voyage, discord, github, verbose", "info");
-    ctx.ui.notify("Run `autodev config` with no sub-command to configure all in sequence.", "info");
+  if (parts.length > 0 && explicitSubs.length === 0) {
+    ctx.ui.notify("Usage: autodev config [--llm|--voyage|--discord|--github|--verbose]", "info");
+    ctx.ui.notify("Run `autodev config` with no flags to validate all and reconfigure any invalid.", "info");
     return;
   }
+
+  const subcommands = explicitSubs.length > 0 ? explicitSubs : ["llm", "voyage", "discord", "github", "verbose"];
 
   const projectRoot = ctx.cwd ?? process.cwd();
   let authPath: string;
@@ -254,15 +258,17 @@ async function handleConfig(parts: string[], ctx: ExtensionCommandContext): Prom
   const { createPrompter } = await import("../installer/prompts.js");
   const prompter = createPrompter();
   try {
-    await runConfig(
-      {
-        projectRoot,
-        authPath,
-        prompter,
-        notify: (message, level) => ctx.ui.notify(message, level),
-      },
-      subSubcommand,
-    );
+    for (const sub of subcommands) {
+      await runConfig(
+        {
+          projectRoot,
+          authPath,
+          prompter,
+          notify: (message, level) => ctx.ui.notify(message, level),
+        },
+        sub,
+      );
+    }
   } finally {
     prompter.close();
   }
