@@ -61,6 +61,16 @@ const HM_TOOLS_ALLOWLIST: readonly string[] = [
   "onboarding_finalize",
   "onboarding_check_mailbox",
   "task",
+  "search_docs",
+  "search_lore",
+  "suggest_lore",
+  "session_list",
+  "session_read",
+  "session_search",
+  "team_send_message",
+  "team_task_create",
+  "team_task_list",
+  "team_status",
 ];
 
 // ---------------------------------------------------------------------------
