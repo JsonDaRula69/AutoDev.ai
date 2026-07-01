@@ -248,7 +248,32 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
     notify(`Resuming onboarding session (${existingEntries.length} messages, last activity ${timeStr} ago).`, "info");
   }
 
-  // 7b. Build background research deps — fires subagents during onboarding.
+  // 7b. Background research deps — built after session creation (see step 8).
+  
+  // 8. Create the session with the full extension active.
+  process.stdout.write(formatSessionHeader(projectRoot, isResuming));
+  const { session } = await sdk.createAgentSession({
+    cwd: projectRoot,
+    model,
+    thinkingLevel: "medium",
+    tools: HM_TOOLS_ALLOWLIST,
+    sessionManager,
+    resourceLoader,
+    modelRegistry,
+    authStorage,
+  } as never);
+
+  // 8b. Build background research deps — fires crew subagents during onboarding.
+  // Findings are posted to the team mailbox AND injected into the HM session
+  // so the Harbor Master sees them mid-conversation without checking mailbox.
+  const AGENT_LABELS: Record<string, string> = {
+    "explore": "Explore",
+    "conseil": "Conseil",
+    "metis": "Metis",
+    "momus": "Momus",
+    "aronnax": "Aronnax",
+  };
+
   const bgDeps: BackgroundResearchDeps = {
     projectRoot,
     createSession: async (prompt: string, systemPrompt: string, modelId: string) => {
@@ -274,21 +299,17 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
       if (vlog.active) {
         vlog.logToolCall("harbor-master", "mailbox", { from, kind, preview: content.slice(0, 100) });
       }
+      const agentLabel = AGENT_LABELS[from] ?? from;
+      const taskLabel = kind === "flag" ? "risk assessment" : kind === "blocker" ? "blocker report" : "research";
+      const firstLine = content.split("\n")[0]?.slice(0, 100) ?? "";
+      const notification = `[${agentLabel} completed ${taskLabel}: ${firstLine}... View full results with onboarding_check_mailbox.]`;
+      try {
+        (session as any).sendUserMessage?.(notification, { deliverAs: "steer" });
+      } catch {
+        // Session may be disposed or API unavailable — mailbox is the fallback
+      }
     },
   };
-
-  // 8. Create the session with the full extension active.
-  process.stdout.write(formatSessionHeader(projectRoot, isResuming));
-  const { session } = await sdk.createAgentSession({
-    cwd: projectRoot,
-    model,
-    thinkingLevel: "medium",
-    tools: HM_TOOLS_ALLOWLIST,
-    sessionManager,
-    resourceLoader,
-    modelRegistry,
-    authStorage,
-  } as never);
 
   // 9. Subscribe to message_end to accumulate assistant messages into the log.
   const unsubscribe = subscribeToAssistantMessages(session, conversationLog);
