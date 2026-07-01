@@ -62,6 +62,7 @@ async function makeHarness(prompter: Prompter): Promise<Harness> {
       notifyCalls.push({ message, level });
     },
     fetchOverride: async () => ({ status: 200 } as Response),
+    execSyncOverride: (() => Buffer.from("Logged in to github.com")) as never,
   };
   return { projectRoot, authPath, envPath, notifyCalls, deps };
 }
@@ -253,6 +254,147 @@ test("handleDiscord confirm defaults to false (skip)", async () => {
     const { runConfig } = await import("../config-module.js");
     await runConfig(h.deps, "discord");
     expect(receivedDefault).toBe(false);
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tests: credential validation functions
+// ---------------------------------------------------------------------------
+
+test("llmCredentialsValid: valid key in .env → returns true", async () => {
+  const h = await makeHarness(new MockPrompter());
+  try {
+    const { setEnvVars } = await import("../env.js");
+    const { writeAuth } = await import("../auth.js");
+    await writeAuth(h.authPath, { "ollama-cloud": { type: "api_key", key: "$OLLAMA_API_KEY" } });
+    await setEnvVars(h.projectRoot, [["OLLAMA_API_KEY", "test-key-123"]], h.envPath);
+    const { markStepCompleted } = await import("../state.js");
+    await markStepCompleted(h.projectRoot, 2, "config");
+
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps);
+    const llmResult = results.find((r) => r.subcommand === "llm");
+    expect(llmResult?.status).toBe("skipped");
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+test("llmCredentialsValid: missing key → returns false, reconfigures", async () => {
+  const h = await makeHarness(new MockPrompter());
+  h.deps = { ...h.deps, fetchOverride: async () => ({ status: 401 } as Response) };
+  try {
+    const { markStepCompleted } = await import("../state.js");
+    await markStepCompleted(h.projectRoot, 2, "config");
+
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps);
+    const llmResult = results.find((r) => r.subcommand === "llm");
+    expect(llmResult?.status).not.toBe("skipped");
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+test("llmCredentialsValid: $-prefixed key → returns false (env var ref, not literal)", async () => {
+  const h = await makeHarness(new MockPrompter());
+  try {
+    const { setEnvVars } = await import("../env.js");
+    await setEnvVars(h.projectRoot, [["OLLAMA_API_KEY", "$OLLAMA_API_KEY"]], h.envPath);
+    const { markStepCompleted } = await import("../state.js");
+    await markStepCompleted(h.projectRoot, 2, "config");
+
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps);
+    const llmResult = results.find((r) => r.subcommand === "llm");
+    expect(llmResult?.status).not.toBe("skipped");
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+test("voyageCredentialsValid: valid key → skips", async () => {
+  const h = await makeHarness(new MockPrompter());
+  try {
+    const { setEnvVars } = await import("../env.js");
+    await setEnvVars(h.projectRoot, [["VOYAGE_API_KEY", "voy-test-key"]], h.envPath);
+    const { markStepCompleted } = await import("../state.js");
+    await markStepCompleted(h.projectRoot, 4, "config");
+
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps);
+    const voyageResult = results.find((r) => r.subcommand === "voyage");
+    expect(voyageResult?.status).toBe("skipped");
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+test("discordCredentialsValid: valid token + channel → skips", async () => {
+  const h = await makeHarness(new MockPrompter());
+  try {
+    const { setEnvVars } = await import("../env.js");
+    await setEnvVars(h.projectRoot, [
+      ["DISCORD_BOT_TOKEN", "discord-token-xyz"],
+      ["DISCORD_CHANNEL_ID", "123456"],
+    ], h.envPath);
+    const { markStepCompleted } = await import("../state.js");
+    await markStepCompleted(h.projectRoot, 5, "config");
+
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps);
+    const discordResult = results.find((r) => r.subcommand === "discord");
+    expect(discordResult?.status).toBe("skipped");
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+test("githubCredentialsValid: valid token in .env → skips", async () => {
+  const h = await makeHarness(new MockPrompter());
+  try {
+    const { setEnvVars } = await import("../env.js");
+    await setEnvVars(h.projectRoot, [["GH_TOKEN", "ghp_1234567890"]], h.envPath);
+
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps);
+    const ghResult = results.find((r) => r.subcommand === "github");
+    expect(ghResult?.status).not.toBe("error");
+    expect(ghResult?.status).not.toBe("warning");
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+test("githubCredentialsValid: missing token → reconfigures", async () => {
+  const h = await makeHarness(new MockPrompter());
+  try {
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps);
+    const ghResult = results.find((r) => r.subcommand === "github");
+    expect(ghResult?.status).not.toBe("skipped");
+  } finally {
+    cleanupTempDir(h.projectRoot);
+  }
+});
+
+test("force flag bypasses skip gate: --llm re-prompts even when step completed + valid", async () => {
+  const prompter = new MockPrompter();
+  prompter.answers = ["ollama-cloud", "test-key-123"];
+  const h = await makeHarness(prompter);
+  try {
+    const { setEnvVars } = await import("../env.js");
+    const { writeAuth } = await import("../auth.js");
+    await writeAuth(h.authPath, { "ollama-cloud": { type: "api_key", key: "$OLLAMA_API_KEY" } });
+    await setEnvVars(h.projectRoot, [["OLLAMA_API_KEY", "test-key-123"]], h.envPath);
+    const { markStepCompleted } = await import("../state.js");
+    await markStepCompleted(h.projectRoot, 2, "config");
+
+    const { runConfig } = await import("../config-module.js");
+    const results = await runConfig(h.deps, "llm");
+    expect(results[0].status).not.toBe("skipped");
   } finally {
     cleanupTempDir(h.projectRoot);
   }
