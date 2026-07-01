@@ -18,7 +18,7 @@ AutoDev runs as a single in-process runtime. Pi is the agent runtime. The AutoDe
 │   │                    pi Runtime                                │    │
 │   │   createAgentSession() per crew role                          │    │
 │   │   SessionManager.inMemory() for subagents                     │    │
-│   │   SessionManager.create() for persistent sessions            │    │
+│   │   SessionManager.continueRecent() for persistent sessions   │    │
 │   │   ExtensionAPI for tools, commands, events                   │    │
 │   │                                                              │    │
 │   │   ┌──────────────────────────────────────────────────────┐   │    │
@@ -110,7 +110,7 @@ Implemented by T13 in the pi-foundation plan.
 
 ## 4. Agent Session Architecture
 
-Each crew role gets its own pi AgentSession with a dedicated model, tool set, and system prompt. Sessions are created in-process via `createAgentSession()`. Subagent sessions use `SessionManager.inMemory()` for ephemeral work. Persistent sessions use `SessionManager.create()` for state that must survive across runs.
+Each crew role gets its own pi AgentSession with a dedicated model, tool set, and system prompt. Sessions are created in-process via `createAgentSession()`. Subagent sessions use `SessionManager.inMemory()` for ephemeral work. Persistent sessions use `SessionManager.continueRecent()` for state that survives across runs.
 
 Agent definitions live in `.pi/agents/` as Markdown files with YAML frontmatter. Each file declares name, description, tools, and model. The system prompt body follows the frontmatter and uses the `narrative:` field from the corresponding `src-agents/*.yaml` file, with the `constraints:` and `capabilities:` lists appended as a bulleted appendix. The Engineer identity (from `src-agents/engineer.yaml`) is shared by quartermaster, boatswain, navigator, and watch-officer. The Explore agent has no source file and is authored from scratch using the AGENTS.md crew table and ARCHITECTURE.md §4 as spec.
 
@@ -762,7 +762,7 @@ GitHub issue labeled autodev-request
   Response delivered
         |
         v
-  Session disposed (or persisted via SessionManager.create)
+  Session disposed (or persisted via SessionManager.continueRecent)
 ```
 
 ---

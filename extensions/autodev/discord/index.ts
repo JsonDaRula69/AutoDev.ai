@@ -77,15 +77,11 @@ export function register(pi: ExtensionAPI): void {
     if (!content) return null;
 
     try {
-      const piAny = pi as any;
-      if (typeof piAny.sendUserMessage === "function") {
-        piAny.sendUserMessage(content);
-        return null;
-      }
-      return "Agent session not available for message routing.";
+      pi.sendUserMessage(content);
+      return null;
     } catch (err) {
       console.error(`[discord] Failed to route message to session: ${err}`);
-      return `Error processing message: ${err instanceof Error ? err.message : String(err)}`;
+      return "Sorry, I could not process that message. Please try again.";
     }
   };
 
