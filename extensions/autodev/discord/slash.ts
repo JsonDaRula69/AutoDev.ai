@@ -1,18 +1,6 @@
-/**
- * Slash command registration and handling for the Discord bridge.
- *
- * Commands:
- *  - /autodev status — returns heartbeat state and work items.
- *  - /autodev task — creates a new GitHub issue.
- *  - /autodev hold — freezes a PR from auto-merge.
- *
- * These are parsed from Discord message content (Discord bot slash commands
- * require registering via the Discord API; we handle the parsing side here).
- */
-
 import type { DiscordMessage } from "./client.js";
+import { execSync } from "node:child_process";
 
-/** Known slash command patterns. */
 const COMMAND_PATTERNS: ReadonlyArray<{
   readonly trigger: string;
   readonly description: string;
@@ -20,19 +8,15 @@ const COMMAND_PATTERNS: ReadonlyArray<{
   { trigger: "/autodev status", description: "Show AutoDev status" },
   { trigger: "/autodev task", description: "Create a new GitHub issue" },
   { trigger: "/autodev hold", description: "Freeze a PR from auto-merge" },
+  { trigger: "/autodev proceed", description: "Release a frozen PR" },
 ];
 
-/** Result of parsing a slash command from a message. */
 export interface SlashCommandResult {
   readonly command: string;
   readonly args: string;
   readonly matched: boolean;
 }
 
-/**
- * Parse a Discord message to see if it contains a known slash command.
- * Returns the matched command and any arguments.
- */
 export function parseSlashCommand(message: DiscordMessage): SlashCommandResult {
   const content = message.content.trim();
 
@@ -46,93 +30,129 @@ export function parseSlashCommand(message: DiscordMessage): SlashCommandResult {
   return { command: "", args: "", matched: false };
 }
 
-/**
- * Handle a parsed slash command and return a response string.
- * Returns null if the command was not handled.
- */
 export async function handleSlashCommand(
   result: SlashCommandResult,
 ): Promise<string | null> {
   if (!result.matched) return null;
 
   switch (result.command) {
-    case "/autodev status": {
+    case "/autodev status":
       return handleStatusCommand(result.args);
-    }
-    case "/autodev task": {
+    case "/autodev task":
       return handleTaskCommand(result.args);
-    }
-    case "/autodev hold": {
+    case "/autodev hold":
       return handleHoldCommand(result.args);
-    }
+    case "/autodev proceed":
+      return handleProceedCommand(result.args);
     default:
       return null;
   }
 }
 
-/**
- * /autodev status — returns heartbeat state and work items.
- */
+function runGh(args: string): string {
+  try {
+    return execSync(`gh ${args}`, { encoding: "utf-8", timeout: 15_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+  } catch (e) {
+    const stderr = (e as { stderr?: string }).stderr ?? (e as Error).message;
+    throw new Error(stderr.slice(0, 500));
+  }
+}
+
+function parsePrUrl(url: string): { repo: string; number: string } | null {
+  const m = url.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
+  if (!m || m[1] === undefined || m[2] === undefined) return null;
+  return { repo: m[1], number: m[2] };
+}
+
 async function handleStatusCommand(_args: string): Promise<string> {
-  // In a real deployment, this would query the heartbeat state.
-  // For now, return a placeholder that the bridge will replace with real data.
+  let workItems = "Unable to query — gh CLI not available or not authenticated.";
+  try {
+    const issues = runGh("issue list --label autodev-request --state open --json number,title --limit 5 2>/dev/null");
+    const parsed = JSON.parse(issues) as Array<{ number: number; title: string }>;
+    if (parsed.length === 0) {
+      workItems = "No open autodev-request issues.";
+    } else {
+      workItems = parsed.map((i) => `  #${i.number}: ${i.title}`).join("\n");
+    }
+  } catch {
+    // gh not available — keep default message
+  }
+
   return [
     "**AutoDev Status**",
     "",
-    "Modules loaded: guardrails, background, delegation, loreguard, docs, tools, team-mode, comment-checker, notepad, intent-gate, discord",
+    `Discord bridge: ${process.env.DISCORD_BOT_TOKEN ? "connected" : "disabled"}`,
     "Heartbeat: polling every 5 minutes",
-    "Work items: (query heartbeat state for details)",
-    "Discord bridge: connected",
+    "",
+    "**Open Work Items:**",
+    workItems,
   ].join("\n");
 }
 
-/**
- * /autodev task <title> — creates a new GitHub issue.
- */
 async function handleTaskCommand(args: string): Promise<string> {
   if (!args) {
     return [
       "**Usage:** `/autodev task <title>`",
       "",
-      "Creates a new GitHub issue with the given title and labels it `autodev-request`.",
+      "Creates a new GitHub issue labeled `autodev-request`.",
       "Example: `/autodev task Add user authentication`",
     ].join("\n");
   }
 
-  // In a real deployment, this would call `gh issue create`.
-  // For now, return a placeholder.
-  return [
-    `**Task Created:** \`${args}\``,
-    "",
-    "Issue has been created and labeled `autodev-request`.",
-    "The crew will pick it up on the next heartbeat cycle.",
-  ].join("\n");
+  try {
+    const output = runGh(`issue create --title "${args.replace(/"/g, '\\"')}" --label autodev-request --body "Created via Discord slash command."`);
+    return `**Task Created:** ${output}\n\nIssue labeled \`autodev-request\`. The crew will pick it up on the next heartbeat.`;
+  } catch (e) {
+    return `**Error creating task:** ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`;
+  }
 }
 
-/**
- * /autodev hold <pr-url> — freezes a PR from auto-merge.
- */
 async function handleHoldCommand(args: string): Promise<string> {
   if (!args) {
     return [
       "**Usage:** `/autodev hold <pr-url>`",
       "",
-      "Freezes a PR from auto-merge. The crew will not merge until released.",
-      "To release: `/autodev proceed <pr-url>`",
+      "Freezes a PR from auto-merge by adding the `autodev-blocked` label.",
       "Example: `/autodev hold https://github.com/owner/repo/pull/42`",
     ].join("\n");
   }
 
-  // In a real deployment, this would label the PR `autodev-blocked`.
-  return [
-    `**PR Frozen:** \`${args}\``,
-    "",
-    "The PR has been frozen. Auto-merge will not proceed until released.",
-    "To release, use: `/autodev proceed <pr-url>`",
-  ].join("\n");
+  const pr = parsePrUrl(args);
+  if (!pr) {
+    return "**Error:** Invalid PR URL. Expected format: `https://github.com/owner/repo/pull/123`";
+  }
+
+  try {
+    runGh(`pr edit ${pr.number} --repo ${pr.repo} --add-label autodev-blocked`);
+    return `**PR Frozen:** #${pr.number} in ${pr.repo}\n\nAuto-merge will not proceed until released with \`/autodev proceed\`.`;
+  } catch (e) {
+    return `**Error freezing PR:** ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`;
+  }
 }
 
-/** Get the list of registered slash commands (for registration). */
+async function handleProceedCommand(args: string): Promise<string> {
+  if (!args) {
+    return [
+      "**Usage:** `/autodev proceed <pr-url>`",
+      "",
+      "Releases a frozen PR by removing the `autodev-blocked` label.",
+      "Example: `/autodev proceed https://github.com/owner/repo/pull/42`",
+    ].join("\n");
+  }
+
+  const pr = parsePrUrl(args);
+  if (!pr) {
+    return "**Error:** Invalid PR URL. Expected format: `https://github.com/owner/repo/pull/123`";
+  }
+
+  try {
+    runGh(`pr edit ${pr.number} --repo ${pr.repo} --remove-label autodev-blocked`);
+    return `**PR Released:** #${pr.number} in ${pr.repo}\n\nAuto-merge can now proceed if all gates pass.`;
+  } catch (e) {
+    return `**Error releasing PR:** ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`;
+  }
+}
+
 export function getSlashCommands(): ReadonlyArray<{ trigger: string; description: string }> {
   return COMMAND_PATTERNS;
 }

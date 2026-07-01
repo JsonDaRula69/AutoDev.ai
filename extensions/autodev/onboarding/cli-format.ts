@@ -132,11 +132,7 @@ export function formatSessionHeader(projectRoot: string, isResuming: boolean): s
 }
 
 export function formatPrompt(label: string): string {
-  return `${BOLD}${GREEN}> ${RESET}`;
-}
-
-export function formatDivider(): string {
-  return `${GRAY}${"─".repeat(60)}${RESET}\n`;
+  return `${BOLD}${GREEN}> ${label}${RESET}\n`;
 }
 
 export function formatVerboseEvent(agent: string, event: any, config: { showToolCalls: boolean; showThinking: boolean; showReasoning: boolean }): string | null {

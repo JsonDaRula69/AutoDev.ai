@@ -106,9 +106,10 @@ export function createBridge(
 
     if (content.length === 0) return;
 
-    void client.sendMessage(config.channelId, truncateResponse(content)).then((sent) => {
+    const targetChannel = config.liaisonChannelId ?? config.channelId;
+    void client.sendMessage(targetChannel, truncateResponse(content)).then((sent) => {
       if (sent) {
-        const sessionKey = `${config.channelId}:main`;
+        const sessionKey = `${targetChannel}:main`;
         const tracked = sessions.get(sessionKey);
         if (tracked) {
           tracked.lastMessageId = sent.id;
@@ -172,6 +173,9 @@ export function createBridge(
         clearInterval(timer);
       }
       replyPollTimers.length = 0;
+      if (gateway) {
+        gateway.disconnect();
+      }
     },
   };
 }
