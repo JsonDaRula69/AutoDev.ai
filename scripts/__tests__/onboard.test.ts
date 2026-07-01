@@ -86,6 +86,7 @@ function makeFakeSession(options: {
         });
       }
     }),
+    sendUserMessage: mock((_content: string, _opts?: any) => {}),
     subscribe: mock((fn: (event: any) => void) => {
       session._subscribers.push(fn);
       return () => {
@@ -221,6 +222,16 @@ test("runOnboard builds session with systemPromptOverride from harbor-master bod
       "onboarding_finalize",
       "onboarding_check_mailbox",
       "task",
+      "search_docs",
+      "search_lore",
+      "suggest_lore",
+      "session_list",
+      "session_read",
+      "session_search",
+      "team_send_message",
+      "team_task_create",
+      "team_task_list",
+      "team_status",
     ]);
     expect(promptCalls.length).toBe(1);
     expect(promptCalls[0]).toContain("The visitor just arrived");
@@ -584,6 +595,56 @@ test("runOnboard starts fresh when no existing entries", async () => {
 
     expect(code).toBe(0);
     expect(messages.some((m) => m.msg.includes("Resuming"))).toBe(false);
+  } finally {
+    cleanupTempDir(projectRoot);
+  }
+});
+
+test("runOnboard steer: sendUserMessage called when background research posts to mailbox", async () => {
+  const projectRoot = createTempDir();
+  try {
+    const deps = makeFakeDeps(projectRoot);
+    const { session } = makeFakeSession();
+    const sendUserMessageCalls: string[] = [];
+    (session as any).sendUserMessage = mock((content: string, _opts?: any) => {
+      sendUserMessageCalls.push(content);
+    });
+
+    let bgCallCount = 0;
+    deps.createAgentSession = mock(async (args: any) => {
+      bgCallCount++;
+      if (bgCallCount === 1) {
+        return { session };
+      }
+      const bgSession = {
+        prompt: mock(async () => {}),
+        subscribe: mock((fn: (event: any) => void) => {
+          fn({ type: "message_end", message: { role: "assistant", content: "Found a Python project with FastAPI" } });
+          return () => {};
+        }),
+        dispose: () => {},
+      };
+      return { session: bgSession };
+    });
+
+    const { runOnboard } = await importOnboardModule();
+    const code = await runOnboard({
+      skipHyperplan: true,
+      skipBackgroundResearch: false,
+      projectRoot,
+      notify: () => {},
+      piSdkOverride: deps,
+      loadAgentOverride: () =>
+        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      analyzeOnboardingIntentOverride: () =>
+        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
+    });
+
+    expect(code).toBe(0);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(sendUserMessageCalls.length).toBeGreaterThan(0);
+    expect(sendUserMessageCalls.some((c) => c.includes("Explore"))).toBe(true);
+    expect(sendUserMessageCalls.some((c) => c.includes("onboarding_check_mailbox"))).toBe(true);
   } finally {
     cleanupTempDir(projectRoot);
   }

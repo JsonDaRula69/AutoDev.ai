@@ -31,3 +31,4 @@ dist/
 
 # Docs corpus (generated, not source)
 docs-corpus/
+.autodev/work-items/
