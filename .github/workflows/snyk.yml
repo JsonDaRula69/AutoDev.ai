@@ -22,8 +22,9 @@ jobs:
 
       - run: bun install
 
-      # Generate package-lock.json for Snyk SCA (Bun lockfile not supported)
-      - run: npm install --package-lock-only
+      # Generate package-lock.json for Snyk SCA (Bun lockfile not supported by Snyk)
+      # --legacy-peer-deps: npm is stricter than bun about peer deps
+      - run: npm install --package-lock-only --legacy-peer-deps --legacy-peer-deps
 
       - uses: snyk/actions/setup@0.4.0
 
@@ -101,7 +102,7 @@ jobs:
 
       - run: bun install
 
-      - run: npm install --package-lock-only
+      - run: npm install --package-lock-only --legacy-peer-deps
 
       - uses: snyk/actions/setup@0.4.0
 
