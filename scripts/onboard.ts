@@ -33,6 +33,7 @@ import { runHyperplan, type SpawnCriticDeps } from "../extensions/autodev/onboar
 import { createVerboseLogger, createSubAgentLogger, resolveVerboseConfig, type VerboseLogger } from "../extensions/autodev/onboarding/verbose.js";
 import { fireCodebaseExploration, fireTargetedResearch, fireRiskAssessment, type BackgroundResearchDeps } from "../extensions/autodev/onboarding/background-research.js";
 import { postObservation } from "../extensions/autodev/onboarding/mailbox.js";
+import { formatMessage, formatSessionHeader, formatVerboseEvent } from "../extensions/autodev/onboarding/cli-format.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -277,6 +278,7 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
   };
 
   // 8. Create the session with the full extension active.
+  process.stdout.write(formatSessionHeader(projectRoot, isResuming));
   const { session } = await sdk.createAgentSession({
     cwd: projectRoot,
     model,
@@ -312,9 +314,9 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
 
       const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
       if (lastAssistant) {
-        process.stdout.write(`\n${lastAssistant.content}\n\n`);
+        process.stdout.write(formatMessage("agent", lastAssistant.content, { agent: "harbor-master" }));
       } else if (vlog.active) {
-        console.error("[verbose:harbor-master] no assistant message found in conversation log after opening prompt");
+        process.stderr.write(formatMessage("warning", "No assistant message found after opening prompt", { agent: "harbor-master" }));
       }
     } else {
       conversationLog.push({ role: "user", content: resumeContext, timestamp: new Date().toISOString() });
@@ -328,7 +330,7 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
 
       const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
       if (lastAssistant) {
-        process.stdout.write(`\n${lastAssistant.content}\n\n`);
+        process.stdout.write(formatMessage("agent", lastAssistant.content, { agent: "harbor-master" }));
       }
     }
 
@@ -346,7 +348,7 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
 
       const askQuestion = (): Promise<string> =>
         new Promise((resolve) => {
-          rl.question("> ", (answer) => resolve(answer));
+          rl.question("\x1b[1m\x1b[32m> \x1b[0m", (answer) => resolve(answer));
         });
 
       while (true) {
@@ -367,7 +369,7 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
             notify("Onboarding finalized — all coverage requirements met.", "info");
             break;
           } else {
-            notify(`Not ready yet. Missing: ${details.missing.join(", ")}`, "warning");
+            process.stdout.write(formatMessage("warning", `Not ready yet. Missing: ${details.missing.join(", ")}`));
             continue;
           }
         }
@@ -396,7 +398,7 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
         const newEntries = conversationLog.slice(logLengthBefore);
         const newAssistant = newEntries.filter((e) => e.role === "assistant");
         for (const msg of newAssistant) {
-          process.stdout.write(`\n${msg.content}\n\n`);
+          process.stdout.write(formatMessage("agent", msg.content, { agent: "harbor-master" }));
         }
       }
 
