@@ -7,29 +7,33 @@
  *  - DISCORD_LIAISON_CHANNEL_ID (optional — separate channel for liaison)
  *
  * Exports `register(pi)` which wires the bridge into the pi runtime.
+ * Uses both REST API (client.ts) and Gateway WebSocket (gateway.ts) for
+ * real-time message events and online presence.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { DiscordClient } from "./client.js";
+import { DiscordGateway } from "./gateway.js";
 import { createBridge, type BridgeConfig } from "./bridge.js";
 
-/** Module-level reference so tests can inspect state. */
 let bridgeHandle: { stop: () => void } | null = null;
 let registerCount = 0;
 let discordClient: DiscordClient | null = null;
+let discordGateway: DiscordGateway | null = null;
 let enabled = false;
 
-/** Whether the bridge is currently enabled. */
 export function isEnabled(): boolean {
   return enabled;
 }
 
-/** Get the Discord client instance (for tests). */
 export function getClient(): DiscordClient | null {
   return discordClient;
 }
 
-/** Get the bridge handle (for tests). */
+export function getGateway(): DiscordGateway | null {
+  return discordGateway;
+}
+
 export function getBridgeHandle(): { stop: () => void } | null {
   return bridgeHandle;
 }
@@ -59,13 +63,14 @@ export function register(pi: ExtensionAPI): void {
 
   enabled = true;
   discordClient = new DiscordClient(token);
+  discordGateway = new DiscordGateway(token);
 
   const config: BridgeConfig = {
     channelId,
     liaisonChannelId: liaisonChannelId || undefined,
   };
 
-  bridgeHandle = createBridge(pi, discordClient, config);
+  bridgeHandle = createBridge(pi, discordClient, config, discordGateway);
 
   registerCount++;
   if (registerCount === 1) {
@@ -74,5 +79,6 @@ export function register(pi: ExtensionAPI): void {
         liaisonChannelId ? `, Liaison channel: ${liaisonChannelId}` : ""
       }`,
     );
+    void discordGateway.connect();
   }
 }

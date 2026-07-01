@@ -11,6 +11,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { DiscordClient, type DiscordMessage } from "./client.js";
+import { DiscordGateway } from "./gateway.js";
 import { parseSlashCommand, handleSlashCommand } from "./slash.js";
 
 const MAX_INPUT_CHARS = 10_000;
@@ -34,6 +35,7 @@ export function createBridge(
   pi: ExtensionAPI,
   client: DiscordClient,
   config: BridgeConfig,
+  gateway?: DiscordGateway,
   inboundHandler?: InboundHandler,
 ): { stop: () => void } {
   const sessions = new Map<string, TrackedSession>();
@@ -55,6 +57,15 @@ export function createBridge(
       return;
     }
 
+    const sessionKey = `${message.channel_id}:main`;
+    let tracked = sessions.get(sessionKey);
+    if (!tracked) {
+      tracked = { channelId: message.channel_id, lastMessageId: message.id };
+      sessions.set(sessionKey, tracked);
+    } else {
+      tracked.lastMessageId = message.id;
+    }
+
     if (inboundHandler) {
       try {
         const response = await inboundHandler(message);
@@ -71,15 +82,6 @@ export function createBridge(
           { replyTo: message.id },
         );
       }
-    }
-
-    const sessionKey = `${message.channel_id}:main`;
-    let tracked = sessions.get(sessionKey);
-    if (!tracked) {
-      tracked = { channelId: message.channel_id, lastMessageId: message.id };
-      sessions.set(sessionKey, tracked);
-    } else {
-      tracked.lastMessageId = message.id;
     }
   }
 
@@ -104,10 +106,38 @@ export function createBridge(
 
     if (content.length === 0) return;
 
-    void client.sendMessage(config.channelId, truncateResponse(content));
+    void client.sendMessage(config.channelId, truncateResponse(content)).then((sent) => {
+      if (sent) {
+        const sessionKey = `${config.channelId}:main`;
+        const tracked = sessions.get(sessionKey);
+        if (tracked) {
+          tracked.lastMessageId = sent.id;
+        }
+      }
+    });
+  }
+
+  // Wire gateway real-time events if available.
+  if (gateway) {
+    gateway.onMessage((msg: any) => {
+      if (stopped) return;
+      if (msg.author?.bot) return;
+
+      const discordMsg: DiscordMessage = {
+        id: msg.id,
+        channel_id: msg.channel_id,
+        content: msg.content,
+        author: msg.author ?? { id: "", username: "", bot: false },
+        timestamp: msg.timestamp ?? new Date().toISOString(),
+        referenced_message: msg.referenced_message ?? null,
+      };
+      void handleInboundMessage(discordMsg);
+    });
   }
 
   function startReplyPolling(): void {
+    if (gateway) return;
+
     const timer = setInterval(async () => {
       if (stopped) return;
 
