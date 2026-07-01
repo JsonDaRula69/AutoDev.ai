@@ -9,12 +9,14 @@
  * Exports `register(pi)` which wires the bridge into the pi runtime.
  * Uses both REST API (client.ts) and Gateway WebSocket (gateway.ts) for
  * real-time message events and online presence.
+ *
+ * Inbound messages are routed to a pi agent session via the extension API.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { DiscordClient } from "./client.js";
 import { DiscordGateway } from "./gateway.js";
-import { createBridge, type BridgeConfig } from "./bridge.js";
+import { createBridge, type BridgeConfig, type InboundHandler } from "./bridge.js";
 
 let bridgeHandle: { stop: () => void } | null = null;
 let registerCount = 0;
@@ -70,7 +72,24 @@ export function register(pi: ExtensionAPI): void {
     liaisonChannelId: liaisonChannelId || undefined,
   };
 
-  bridgeHandle = createBridge(pi, discordClient, config, discordGateway);
+  const inboundHandler: InboundHandler = async (message) => {
+    const content = message.content.trim();
+    if (!content) return null;
+
+    try {
+      const piAny = pi as any;
+      if (typeof piAny.sendUserMessage === "function") {
+        piAny.sendUserMessage(content);
+        return null;
+      }
+      return "Agent session not available for message routing.";
+    } catch (err) {
+      console.error(`[discord] Failed to route message to session: ${err}`);
+      return `Error processing message: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  };
+
+  bridgeHandle = createBridge(pi, discordClient, config, discordGateway, inboundHandler);
 
   registerCount++;
   if (registerCount === 1) {
