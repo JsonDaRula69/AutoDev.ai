@@ -30,6 +30,7 @@ import { setConversationLog, analyzeCoverage } from "../extensions/autodev/onboa
 import { writeHarborLog, writeHarborLogSummary } from "../extensions/autodev/onboarding/harbor-log.js";
 import { startOnboardingTeam, endOnboardingTeam } from "../extensions/autodev/onboarding/mailbox.js";
 import { runHyperplan, type SpawnCriticDeps } from "../extensions/autodev/onboarding/hyperplan.js";
+import { createVerboseLogger, createSubAgentLogger, resolveVerboseConfig, type VerboseLogger } from "../extensions/autodev/onboarding/verbose.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -87,6 +88,7 @@ export interface OnboardOptions {
    */
   readonly analyzeOnboardingIntentOverride?: (text: string) => OnboardingIntentAnalysis;
   readonly skipHyperplan?: boolean;
+  readonly verbose?: boolean;
 }
 
 /** Minimal shape of a Harbor Master agent definition returned by loadAgent. */
@@ -185,6 +187,8 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   // 4. Resolve the pi SDK (production) or use injected deps (tests).
   const sdk = await resolvePiSdk(opts);
   const agentDir = sdk.getAgentDir();
+  const verboseConfig = resolveVerboseConfig(agentDir);
+  const vlog = createVerboseLogger({ ...(opts.verbose !== undefined ? { cliFlag: opts.verbose } : {}), config: verboseConfig });
   const authStorage = sdk.AuthStorage.create(join(agentDir, "auth.json"));
 
   const modelRegistry = sdk.ModelRegistry.create(authStorage, join(agentDir, "models.json"));
@@ -212,23 +216,9 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   // 9. Subscribe to message_end to accumulate assistant messages into the log.
   const unsubscribe = subscribeToAssistantMessages(session, conversationLog);
 
-  // Also subscribe to all events for debugging when AUTODEV_DEBUG is set.
-  if (process.env.AUTODEV_DEBUG === "true") {
+  if (vlog.active) {
     session.subscribe((event: any) => {
-      if (event.type === "message_end") {
-        const msg = event.message;
-        const role = msg?.role;
-        const contentType = typeof msg?.content;
-        const isArray = Array.isArray(msg?.content);
-        const contentPreview = isArray
-          ? JSON.stringify(msg?.content?.slice(0, 2))
-          : typeof msg?.content === "string"
-            ? msg?.content?.slice(0, 200)
-            : String(msg?.content)?.slice(0, 200);
-        console.error(`[debug] message_end: role=${role}, content type=${contentType}, isArray=${isArray}, preview=${contentPreview}`);
-      } else if (event.type !== "message_update") {
-        console.error(`[debug] event: ${event.type}`);
-      }
+      vlog.logEvent("harbor-master", event);
     });
   }
 
@@ -236,21 +226,16 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   const openingPrompt = buildOpeningPrompt(intentAnalysis);
   try {
     conversationLog.push({ role: "user", content: openingPrompt, timestamp: new Date().toISOString() });
-    if (process.env.AUTODEV_DEBUG === "true") {
-      console.error(`[debug] sending opening prompt (${openingPrompt.length} chars)`);
-    }
+    vlog.logPrompt("harbor-master", openingPrompt.length);
     await session.prompt(openingPrompt);
-    if (process.env.AUTODEV_DEBUG === "true") {
-      console.error(`[debug] prompt returned, log has ${conversationLog.length} entries`);
-      console.error(`[debug] assistant entries: ${conversationLog.filter(e => e.role === "assistant").length}`);
-    }
+    vlog.logPromptResult("harbor-master", conversationLog.length, conversationLog.filter(e => e.role === "assistant").length);
 
     // Print the Harbor Master's opening response.
     const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
     if (lastAssistant) {
       process.stdout.write(`\n${lastAssistant.content}\n\n`);
-    } else if (process.env.AUTODEV_DEBUG === "true") {
-      console.error("[debug] no assistant message found in conversation log after opening prompt");
+    } else if (vlog.active) {
+      console.error("[verbose:harbor-master] no assistant message found in conversation log after opening prompt");
     }
 
     // 10b. Interactive readline loop — let the user converse with the Harbor Master.
@@ -295,13 +280,9 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
 
         conversationLog.push({ role: "user", content: trimmed, timestamp: new Date().toISOString() });
         const logLengthBefore = conversationLog.length;
-        if (process.env.AUTODEV_DEBUG === "true") {
-          console.error(`[debug] sending user prompt: "${trimmed}"`);
-        }
+        vlog.logPrompt("harbor-master", trimmed.length);
         await session.prompt(trimmed);
-        if (process.env.AUTODEV_DEBUG === "true") {
-          console.error(`[debug] prompt returned, new entries: ${conversationLog.length - logLengthBefore}`);
-        }
+        vlog.logPromptResult("harbor-master", conversationLog.length - logLengthBefore, conversationLog.slice(logLengthBefore).filter(e => e.role === "assistant").length);
 
         // Print any new assistant messages from this prompt.
         const newEntries = conversationLog.slice(logLengthBefore);
@@ -353,12 +334,20 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
             resourceLoader,
             modelRegistry,
             authStorage,
-          } as never) as { session: { prompt: (p: string) => Promise<void>; messages?: Array<{ role?: string; content?: string }>; dispose?: () => void } };
+          } as never) as { session: { prompt: (p: string) => Promise<void>; messages?: Array<{ role?: string; content?: string }>; dispose?: () => void; subscribe?: (fn: (e: any) => void) => () => void } };
           try {
+            if (vlog.active) {
+              const subLogger = createSubAgentLogger(vlog, verboseConfig);
+              criticSession.subscribe?.((event: any) => {
+                subLogger.logEvent(criticId, event);
+              });
+            }
             const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+            vlog.logPrompt(criticId, fullPrompt.length);
             await criticSession.prompt(fullPrompt);
             const messages = criticSession.messages ?? [];
             const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+            vlog.logPromptResult(criticId, messages.length, lastAssistant ? 1 : 0);
             return lastAssistant?.content ?? "(no response)";
           } finally {
             criticSession.dispose?.();

@@ -66,6 +66,7 @@ export async function runConfig(
     ["voyage", handleVoyage],
     ["discord", handleDiscord],
     ["github", handleGithub],
+    ["verbose", handleVerbose],
   ];
 
   if (subcommand !== undefined) {
@@ -420,6 +421,26 @@ Paste your token here (or press Enter to use interactive \`gh auth login --web\`
 
   await markStepCompleted(deps.projectRoot, STEP_GITHUB, CONFIG_SCOPE);
   return { subcommand: "github", step: STEP_GITHUB, status: "ok", message: "GitHub token configured and verified." };
+}
+
+async function handleVerbose(deps: ConfigModuleDeps): Promise<ConfigResult> {
+  const { resolveVerboseConfig, writeVerboseConfig } = await import("./verbose-config.js");
+  const agentDir = dirname(deps.authPath);
+  const current = resolveVerboseConfig(agentDir);
+
+  const enabled = await deps.prompter.confirm(
+    `Verbose mode is currently ${current.enabled ? "ON" : "OFF"}. Toggle to ${current.enabled ? "OFF" : "ON"}?`,
+    !current.enabled,
+  );
+
+  if (!enabled) {
+    return { subcommand: "verbose", step: 0, status: "skipped", message: "Verbose mode unchanged." };
+  }
+
+  const newConfig = { ...current, enabled: !current.enabled };
+  writeVerboseConfig(agentDir, newConfig);
+  deps.notify(`Verbose mode ${newConfig.enabled ? "enabled" : "disabled"}.`, "info");
+  return { subcommand: "verbose", step: 0, status: "ok", message: `Verbose mode ${newConfig.enabled ? "enabled" : "disabled"}.` };
 }
 
 const PROVIDER_MODEL_DEFS: Record<string, { api: string; baseUrl: string; models: { id: string; name: string; context: number; output: number }[] }> = {

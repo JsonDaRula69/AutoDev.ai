@@ -64,9 +64,12 @@ export function registerCommands(pi: ExtensionAPI): void {
           stopAllLoops();
           ctx.ui.notify("All continuation loops stopped.", "info");
           break;
+        case "verbose":
+          await handleVerbose(ctx);
+          break;
         default:
           ctx.ui.notify(
-            "AutoDev subcommands: init, onboard, doctor, config, status, stop, install-provider, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation",
+            "AutoDev subcommands: init, onboard, doctor, config, status, stop, install-provider, docs query, docs rebuild central, docs rebuild project, debate start, debate status, stop-continuation, verbose",
             "info",
           );
       }
@@ -233,7 +236,7 @@ async function handleConfig(parts: string[], ctx: ExtensionCommandContext): Prom
 
   if (subSubcommand === "") {
     ctx.ui.notify("Usage: autodev config <sub-command>", "info");
-    ctx.ui.notify("Sub-commands: llm, voyage, discord, github", "info");
+    ctx.ui.notify("Sub-commands: llm, voyage, discord, github, verbose", "info");
     ctx.ui.notify("Run `autodev config` with no sub-command to configure all in sequence.", "info");
     return;
   }
@@ -394,5 +397,24 @@ async function handleDebate(parts: string[], ctx: ExtensionCommandContext): Prom
     ctx.ui.notify("Debate status: no active debates.", "info");
   } else {
     ctx.ui.notify("Usage: autodev debate start <topic> | autodev debate status", "info");
+  }
+}
+
+async function handleVerbose(ctx: ExtensionCommandContext): Promise<void> {
+  let agentDir: string;
+  try {
+    const { getAgentDir } = await import("@earendil-works/pi-coding-agent");
+    agentDir = getAgentDir();
+  } catch {
+    agentDir = join(process.env.HOME ?? "~", ".AutoDev", "agent");
+  }
+
+  const { resolveVerboseConfig, writeVerboseConfig } = await import("../onboarding/verbose.js");
+  const current = resolveVerboseConfig(agentDir);
+  const newState = !current.enabled;
+  writeVerboseConfig(agentDir, { ...current, enabled: newState });
+  ctx.ui.notify(`Verbose mode ${newState ? "enabled" : "disabled"}.`, "info");
+  if (newState) {
+    ctx.ui.notify("Tool calls, thinking, and sub-agent activity will be shown during onboarding.", "info");
   }
 }
