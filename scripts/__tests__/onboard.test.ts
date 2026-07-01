@@ -154,6 +154,7 @@ function makeFakeDeps(projectRoot: string): any {
     },
     SessionManager: {
       create: mock((dir: string) => ({ dir, kind: "persistent" })),
+      continueRecent: mock((_cwd: string, _dir?: string) => ({ kind: "persistent" })),
       inMemory: mock(() => ({ kind: "in-memory" })),
     },
     DefaultResourceLoader: DefaultResourceLoaderClass,
@@ -271,11 +272,11 @@ test("runOnboard calls analyzeOnboardingIntent and injects results into opening 
   }
 });
 
-test("runOnboard prefers SessionManager.create and falls back to inMemory on failure", async () => {
+test("runOnboard prefers SessionManager.continueRecent and falls back to inMemory on failure", async () => {
   const projectRoot = createTempDir();
   try {
     const deps = makeFakeDeps(projectRoot);
-    deps.SessionManager.create = mock(() => {
+    (deps.SessionManager as any).continueRecent = mock(() => {
       throw new Error("unwritable path");
     });
     const { session } = makeFakeSession();
@@ -295,7 +296,7 @@ test("runOnboard prefers SessionManager.create and falls back to inMemory on fai
       ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
-    expect(deps.SessionManager.create).toHaveBeenCalled();
+    expect((deps.SessionManager as any).continueRecent).toHaveBeenCalled();
     expect(deps.SessionManager.inMemory).toHaveBeenCalled();
     expect(messages.some((m) => m.level === "warning" && m.msg.includes("in-memory"))).toBe(true);
 
@@ -507,6 +508,83 @@ test("runOnboard default path loads harbor-master agent body from file", async (
     } else {
       delete process.env.PI_CODING_AGENT_DIR;
     }
+    cleanupTempDir(projectRoot);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Tests: persistent session resume
+// ---------------------------------------------------------------------------
+
+test("runOnboard resumes existing session when entries exist", async () => {
+  const projectRoot = createTempDir();
+  try {
+    const deps = makeFakeDeps(projectRoot);
+    const fakeEntries = [
+      { type: "message", id: "1", parentId: null, timestamp: new Date(Date.now() - 3 * 3600_000).toISOString(), message: { role: "user", content: "I need a trading bot" } },
+      { type: "message", id: "2", parentId: "1", timestamp: new Date(Date.now() - 3 * 3600_000).toISOString(), message: { role: "assistant", content: "Welcome! Tell me more." } },
+      { type: "message", id: "3", parentId: "2", timestamp: new Date(Date.now() - 2 * 3600_000).toISOString(), message: { role: "user", content: "It should have a database" } },
+    ];
+    deps.SessionManager.continueRecent = mock(() => ({
+      kind: "persistent",
+      getEntries: () => fakeEntries,
+    }));
+    const { session } = makeFakeSession();
+    deps.createAgentSession = mock(async (args: any) => {
+      deps.calls.push({ method: "createAgentSession", args });
+      return { session };
+    });
+    const messages: any[] = [];
+
+    const { runOnboard } = await importOnboardModule();
+    const code = await runOnboard({
+      skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
+      notify: (msg, level) => messages.push({ msg, level }),
+      piSdkOverride: deps,
+      loadAgentOverride: () =>
+        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      analyzeOnboardingIntentOverride: () =>
+        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
+    });
+
+    expect(code).toBe(0);
+    expect(messages.some((m) => m.msg.includes("Resuming onboarding session"))).toBe(true);
+    const createCall = deps.calls.find((c: any) => c.method === "createAgentSession");
+    expect(createCall.args.sessionManager.kind).toBe("persistent");
+  } finally {
+    cleanupTempDir(projectRoot);
+  }
+});
+
+test("runOnboard starts fresh when no existing entries", async () => {
+  const projectRoot = createTempDir();
+  try {
+    const deps = makeFakeDeps(projectRoot);
+    deps.SessionManager.continueRecent = mock(() => ({
+      kind: "persistent",
+      getEntries: () => [],
+    }));
+    const { session } = makeFakeSession();
+    deps.createAgentSession = mock(async (args: any) => {
+      deps.calls.push({ method: "createAgentSession", args });
+      return { session };
+    });
+    const messages: any[] = [];
+
+    const { runOnboard } = await importOnboardModule();
+    const code = await runOnboard({
+      skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
+      notify: (msg, level) => messages.push({ msg, level }),
+      piSdkOverride: deps,
+      loadAgentOverride: () =>
+        ({ name: "harbor-master", systemPrompt: "You are the Harbor Master.", model: "ollama-cloud/glm-5.2:cloud", tools: [] }),
+      analyzeOnboardingIntentOverride: () =>
+        ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }),
+    });
+
+    expect(code).toBe(0);
+    expect(messages.some((m) => m.msg.includes("Resuming"))).toBe(false);
+  } finally {
     cleanupTempDir(projectRoot);
   }
 });
