@@ -1,16 +1,4 @@
-/**
- * Proactive background research during onboarding.
- *
- * The Harbor Master presents a calm, unhurried surface to the user — but
- * behind the scenes, the crew is furiously mapping the codebase, searching
- * for context, and flagging risks. This module fires explore/research
- * agents between user messages so the crew builds understanding in parallel
- * with the interview.
- *
- * Findings are posted to the onboarding team mailbox, which the Harbor
- * Master can check via the `onboarding_check_mailbox` tool.
- */
-import type { AgentSession, SessionManager, ModelRegistry, AuthStorage } from "@earendil-works/pi-coding-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 
 export interface BackgroundResearchDeps {
   createSession: (prompt: string, systemPrompt: string, model: string) => Promise<{ session: AgentSession; dispose: () => void }>;
@@ -18,20 +6,47 @@ export interface BackgroundResearchDeps {
   projectRoot: string;
 }
 
-export interface BackgroundResearchResult {
-  agent: string;
-  findings: string;
+function extractContent(event: any): string {
+  if (event.type !== "message_end" || event.message?.role !== "assistant") return "";
+  const content = event.message.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return content.map((p: any) => p?.text ?? "").join("");
+  return "";
 }
 
-/**
- * Fire background explore agents to map the project codebase.
- * Runs in parallel with the onboarding conversation.
- */
+async function runBackgroundAgent(
+  deps: BackgroundResearchDeps,
+  from: string,
+  kind: "note" | "flag" | "question" | "blocker",
+  prompt: string,
+  systemPrompt: string,
+  model: string,
+): Promise<void> {
+  let dispose: (() => void) | undefined;
+  try {
+    const result = await deps.createSession(prompt, systemPrompt, model);
+    dispose = result.dispose;
+    let capturedContent = "";
+    result.session.subscribe((event: any) => {
+      const text = extractContent(event);
+      if (text.trim()) capturedContent = text;
+    });
+    await result.session.prompt(prompt);
+    if (capturedContent.trim()) {
+      deps.postToMailbox(from, kind, capturedContent);
+    }
+  } catch {
+    // Background research is best-effort — never block onboarding
+  } finally {
+    dispose?.();
+  }
+}
+
 export async function fireCodebaseExploration(
   deps: BackgroundResearchDeps,
   conversationContext: string,
 ): Promise<void> {
-  const explorePrompt = `You are the Explore agent. The Harbor Master is onboarding a new project at ${deps.projectRoot}.
+  const prompt = `You are the Explore agent. The Harbor Master is onboarding a new project at ${deps.projectRoot}.
 
 Context from the onboarding conversation so far:
 ${conversationContext}
@@ -45,35 +60,16 @@ Your job: explore the project directory and map what's there. Run \`ls\`, \`read
 
 Be thorough. Take shots in the dark — better to investigate and find nothing than to miss something. Post your findings as a mailbox message.`;
 
-  try {
-    const { session, dispose } = await deps.createSession(
-      explorePrompt,
-      "You are Explore, the Investigator. Map the codebase, identify patterns, report concrete findings with file paths. Be proactive — investigate everything, report what you find. If a directory is empty, say so. If a file is interesting, read it.",
-      "ollama-cloud/deepseek-v4-flash:cloud",
-    );
-    session.subscribe((event: any) => {
-      if (event.type === "message_end" && event.message?.role === "assistant") {
-        const content = typeof event.message.content === "string"
-          ? event.message.content
-          : Array.isArray(event.message.content)
-            ? event.message.content.map((p: any) => p?.text ?? "").join("")
-            : "";
-        if (content.trim()) {
-          deps.postToMailbox("explore", "note", `[Codebase Map]\n${content}`);
-        }
-        dispose();
-      }
-    });
-    await session.prompt(explorePrompt);
-  } catch {
-    // Background research is best-effort — never block onboarding
-  }
+  await runBackgroundAgent(
+    deps,
+    "explore",
+    "note",
+    prompt,
+    "You are Explore, the Investigator. Map the codebase, identify patterns, report concrete findings with file paths. Be proactive — investigate everything, report what you find. If a directory is empty, say so. If a file is interesting, read it.",
+    "ollama-cloud/deepseek-v4-flash:cloud",
+  );
 }
 
-/**
- * Fire targeted research based on what the user just said.
- * Looks for keywords in the user's response and dispatches relevant agents.
- */
 export async function fireTargetedResearch(
   deps: BackgroundResearchDeps,
   userMessage: string,
@@ -81,10 +77,11 @@ export async function fireTargetedResearch(
 ): Promise<void> {
   const lowerMsg = userMessage.toLowerCase();
 
-  const triggers: Array<{ keywords: string[]; agent: string; systemPrompt: string; prompt: string }> = [
+  const triggers: Array<{ keywords: string[]; agent: string; kind: "note" | "flag"; systemPrompt: string; prompt: string }> = [
     {
       keywords: ["api", "endpoint", "rest", "graphql", "server", "backend"],
       agent: "conseil",
+      kind: "note",
       systemPrompt: "You are Conseil, the Steward. You search for existing knowledge, check reference docs, and retrieve relevant lore. Be thorough in your search.",
       prompt: `The user mentioned APIs/backend during onboarding. Search the project at ${deps.projectRoot} for:
 - Existing API routes or endpoints
@@ -97,6 +94,7 @@ Report what you find as a mailbox message.`,
     {
       keywords: ["database", "db", "sql", "postgres", "mysql", "sqlite", "redis", "mongo"],
       agent: "conseil",
+      kind: "note",
       systemPrompt: "You are Conseil, the Steward. You search for existing knowledge, check reference docs, and retrieve relevant lore. Be thorough.",
       prompt: `The user mentioned databases during onboarding. Search the project at ${deps.projectRoot} for:
 - Database configuration files
@@ -109,6 +107,7 @@ Report what you find as a mailbox message.`,
     {
       keywords: ["test", "testing", "ci", "coverage", "jest", "pytest", "vitest"],
       agent: "conseil",
+      kind: "note",
       systemPrompt: "You are Conseil, the Steward. You search for existing knowledge and report findings.",
       prompt: `The user mentioned testing/CI during onboarding. Search the project at ${deps.projectRoot} for:
 - Test files and test framework
@@ -121,6 +120,7 @@ Report what you find as a mailbox message.`,
     {
       keywords: ["security", "auth", "token", "secret", "vulnerability", "encrypt"],
       agent: "metis",
+      kind: "flag",
       systemPrompt: "You are Metis, the Strategist. You surface hidden intentions, detect risks, and flag ambiguities. Be proactive — identify what the user might be missing.",
       prompt: `The user mentioned security/auth during onboarding. Analyze the project at ${deps.projectRoot} for:
 - Existing auth mechanisms
@@ -133,6 +133,7 @@ Flag any risks or gaps you notice as a mailbox message.`,
     {
       keywords: ["deploy", "deployment", "docker", "kubernetes", "k8s", "cloud", "aws", "gcp"],
       agent: "metis",
+      kind: "flag",
       systemPrompt: "You are Metis, the Strategist. You surface hidden intentions and identify risks in deployment architecture.",
       prompt: `The user mentioned deployment during onboarding. Analyze the project at ${deps.projectRoot} for:
 - Docker/containerization files
@@ -145,40 +146,10 @@ Flag any deployment risks or gaps as a mailbox message.`,
   ];
 
   const matched = triggers.filter((t) => t.keywords.some((k) => lowerMsg.includes(k)));
-
-  const tasks = matched.map(async (trigger) => {
-    try {
-      const { session, dispose } = await deps.createSession(
-        trigger.prompt,
-        trigger.systemPrompt,
-        "ollama-cloud/deepseek-v4-flash:cloud",
-      );
-      session.subscribe((event: any) => {
-        if (event.type === "message_end" && event.message?.role === "assistant") {
-          const content = typeof event.message.content === "string"
-            ? event.message.content
-            : Array.isArray(event.message.content)
-              ? event.message.content.map((p: any) => p?.text ?? "").join("")
-              : "";
-          if (content.trim()) {
-            deps.postToMailbox(trigger.agent, trigger.agent === "metis" ? "flag" : "note", content);
-          }
-          dispose();
-        }
-      });
-      await session.prompt(trigger.prompt);
-    } catch {
-      // Best-effort
-    }
-  });
-
+  const tasks = matched.map((t) => runBackgroundAgent(deps, t.agent, t.kind, t.prompt, t.systemPrompt, "ollama-cloud/deepseek-v4-flash:cloud"));
   await Promise.allSettled(tasks);
 }
 
-/**
- * Fire a risk assessment based on the full conversation so far.
- * Metis reviews what the user has said and flags potential issues.
- */
 export async function fireRiskAssessment(
   deps: BackgroundResearchDeps,
   conversationContext: string,
@@ -197,27 +168,12 @@ Identify:
 Be proactive. Take shots in the dark. Better to flag a non-issue than to miss a real one.
 Post your assessment as a mailbox message.`;
 
-  try {
-    const { session, dispose } = await deps.createSession(
-      prompt,
-      "You are Metis, the Strategist. You surface hidden intentions, detect risks, and flag ambiguities. Be proactive and direct.",
-      "ollama-cloud/deepseek-v4-flash:cloud",
-    );
-    session.subscribe((event: any) => {
-      if (event.type === "message_end" && event.message?.role === "assistant") {
-        const content = typeof event.message.content === "string"
-          ? event.message.content
-          : Array.isArray(event.message.content)
-            ? event.message.content.map((p: any) => p?.text ?? "").join("")
-            : "";
-        if (content.trim()) {
-          deps.postToMailbox("metis", "flag", content);
-        }
-        dispose();
-      }
-    });
-    await session.prompt(prompt);
-  } catch {
-    // Best-effort
-  }
+  await runBackgroundAgent(
+    deps,
+    "metis",
+    "flag",
+    prompt,
+    "You are Metis, the Strategist. You surface hidden intentions, detect risks, and flag ambiguities. Be proactive and direct.",
+    "ollama-cloud/deepseek-v4-flash:cloud",
+  );
 }
