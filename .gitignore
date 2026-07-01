@@ -30,4 +30,5 @@ dist/
 .opencode/
 
 # Docs corpus (generated, not source)
-docs-corpus/.autodev/work-items/
+docs-corpus/
+.autodev/work-items/

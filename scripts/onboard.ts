@@ -314,7 +314,7 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
       const firstLine = content.split("\n")[0]?.slice(0, 100) ?? "";
       const notification = `[${agentLabel} completed ${taskLabel}: ${firstLine}... View full results with onboarding_check_mailbox.]`;
       try {
-        (session as any).sendUserMessage?.(notification, { deliverAs: "steer" });
+        (session as { sendUserMessage?: (content: string, opts?: { deliverAs?: string }) => void }).sendUserMessage?.(notification, { deliverAs: "steer" });
       } catch {
         // Session may be disposed or API unavailable — mailbox is the fallback
       }
