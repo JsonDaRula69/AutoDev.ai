@@ -1,0 +1,169 @@
+name: Hermes PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  hermes-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    steps:
+      - name: Trigger Hermes Review
+        env:
+          WEBHOOK_URL: ${{ secrets.HERMES_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.HERMES_WEBHOOK_SECRET }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO_FULL_NAME: ${{ github.event.repository.full_name }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_SECRET" ]; then
+            echo "❌ HERMES_WEBHOOK_URL or HERMES_WEBHOOK_SECRET not set"
+            exit 1
+          fi
+
+          # Construct the webhook payload as JSON
+          PAYLOAD=$(jq -n \
+            --arg action "$PR_ACTION" \
+            --argjson number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" \
+            --arg user "$PR_USER" \
+            --arg sha "$PR_HEAD_SHA" \
+            --arg repo "$REPO_FULL_NAME" \
+            '{
+              action: $action,
+              pull_request: {
+                number: $number,
+                title: $title,
+                user: { login: $user },
+                head: { sha: $sha }
+              },
+              repository: {
+                full_name: $repo
+              }
+            }')
+
+          # Compute HMAC-SHA256 signature
+          SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $2}')
+
+          # Send to Hermes webhook
+          # Use --insecure: Tailscale Funnel's TLS may not be trusted by
+          # GitHub Actions runners. HMAC signature provides authentication.
+          echo "Triggering Hermes review for PR #$PR_NUMBER: $PR_TITLE"
+          RESPONSE=$(curl -s -k --connect-timeout 15 --max-time 30 -w "\n%{http_code}" -X POST \
+            "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: pull_request" \
+            -H "X-Hub-Signature-256: sha256=$SIGNATURE" \
+            -d "$PAYLOAD" 2>&1)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response: $BODY"
+          echo "HTTP Status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "❌ Failed to trigger Hermes review"
+            exit 1
+          fi
+
+          echo "✅ Hermes review triggered, waiting for review..."
+
+      - name: Wait for Hermes Review
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO_FULL_NAME: ${{ github.event.repository.full_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+
+          MAX_ATTEMPTS=60
+          SLEEP_INTERVAL=15
+          REVIEWER="Traderbot-Auto-Dev"
+
+          echo "Polling for Hermes PR review on PR #$PR_NUMBER..."
+          echo "Looking for review from $REVIEWER on commit $PR_HEAD_SHA"
+
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Attempt $i/$MAX_ATTEMPTS..."
+
+            REVIEWS=$(gh api repos/$REPO_FULL_NAME/pulls/$PR_NUMBER/reviews 2>/dev/null)
+
+            if [ -n "$REVIEWS" ] && [ "$REVIEWS" != "[]" ]; then
+              REVIEW_STATE=$(echo "$REVIEWS" | jq -r \
+                --arg sha "$PR_HEAD_SHA" \
+                --arg reviewer "$REVIEWER" \
+                '.[] | select(.user.login == $reviewer and .commit_id == $sha) | .state' \
+                | tail -1)
+
+              if [ -n "$REVIEW_STATE" ]; then
+                echo "Found review: $REVIEW_STATE"
+
+                case "$REVIEW_STATE" in
+                  "APPROVED")
+                    echo "✅ Hermes approved the PR"
+                    exit 0
+                    ;;
+                  "CHANGES_REQUESTED")
+                    echo "❌ Hermes requested changes on the PR"
+                    REVIEW_BODY=$(echo "$REVIEWS" | jq -r \
+                      --arg sha "$PR_HEAD_SHA" \
+                      --arg reviewer "$REVIEWER" \
+                      '.[] | select(.user.login == $reviewer and .commit_id == $sha) | .body' \
+                      | tail -1)
+                    echo "Review: $REVIEW_BODY"
+                    exit 1
+                    ;;
+                  "COMMENTED")
+                    echo "Hermes posted a comment review (informational). Continuing poll..."
+                    ;;
+                  *)
+                    echo "Unknown review state: $REVIEW_STATE"
+                    ;;
+                esac
+              fi
+            fi
+
+            COMMENTS=$(gh api "repos/$REPO_FULL_NAME/issues/$PR_NUMBER/comments?per_page=10&sort=created&direction=desc" 2>/dev/null)
+
+            if [ -n "$COMMENTS" ] && [ "$COMMENTS" != "[]" ]; then
+              COMMENT_VERDICT=$(echo "$COMMENTS" | jq -r \
+                --arg reviewer "$REVIEWER" \
+                '.[] | select(.user.login == $reviewer) | .body' \
+                | grep -oP 'Verdict:\s*\K(APPROVED|REQUEST CHANGES)' \
+                | tail -1)
+
+              if [ -n "$COMMENT_VERDICT" ]; then
+                COMMENT_TIMESTAMP=$(echo "$COMMENTS" | jq -r \
+                  --arg reviewer "$REVIEWER" \
+                  '.[] | select(.user.login == $reviewer and (.body | test("Verdict:"))) | .created_at' \
+                  | tail -1)
+                echo "Found Hermes review comment with verdict: $COMMENT_VERDICT (posted $COMMENT_TIMESTAMP)"
+
+                case "$COMMENT_VERDICT" in
+                  "APPROVED")
+                    echo "✅ Hermes approved the PR (via comment)"
+                    exit 0
+                    ;;
+                  "REQUEST CHANGES")
+                    echo "❌ Hermes requested changes (via comment)"
+                    exit 1
+                    ;;
+                esac
+              fi
+            fi
+
+            sleep $SLEEP_INTERVAL
+          done
+
+          echo "❌ Timed out waiting for Hermes review (15 minutes)"
+          echo "The review may still be processing. Check the PR comments manually."
+          exit 1
