@@ -334,7 +334,7 @@ test("createBridge inbound message with handler sends response", async () => {
   const pi = mockPi() as any;
   const client = new DiscordClient("test-token");
   const inboundHandler = async () => "Response from handler";
-  const bridge = createBridge(pi, client, { channelId: "ch-1" }, inboundHandler);
+  const bridge = createBridge(pi, client, { channelId: "ch-1" }, undefined, inboundHandler);
 
   // The bridge handles inbound messages via the reply poller.
   // We can verify the bridge is set up correctly by checking the client.
