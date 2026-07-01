@@ -25,7 +25,7 @@ jobs:
       # Generate package-lock.json for Snyk SCA (Bun lockfile not supported)
       - run: npm install --package-lock-only
 
-      - uses: snyk/actions/setup@master
+      - uses: snyk/actions/setup@0.4.0
 
       # SCA: dependency vulnerability scanning — block on HIGH/CRITICAL fixable
       - name: Snyk test (SCA)
@@ -48,16 +48,16 @@ jobs:
             --sarif-file-output=snyk-code.sarif \
             || true
 
-      # Upload SARIF to GitHub Security tab
+      # Upload SARIF to GitHub Security tab (only if file exists)
       - name: Upload SCA SARIF
-        if: always()
+        if: always() && hashFiles('snyk-sca.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-sca.sarif
           category: snyk-sca
 
       - name: Upload SAST SARIF
-        if: always()
+        if: always() && hashFiles('snyk-code.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-code.sarif
@@ -103,7 +103,7 @@ jobs:
 
       - run: npm install --package-lock-only
 
-      - uses: snyk/actions/setup@master
+      - uses: snyk/actions/setup@0.4.0
 
       # Establish continuous monitoring baseline
       - name: Snyk monitor
@@ -120,14 +120,14 @@ jobs:
           snyk code test --severity-threshold=low --sarif-file-output=snyk-code.sarif || true
 
       - name: Upload SCA SARIF
-        if: always()
+        if: always() && hashFiles('snyk-sca.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-sca.sarif
           category: snyk-sca-main
 
       - name: Upload SAST SARIF
-        if: always()
+        if: always() && hashFiles('snyk-code.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-code.sarif

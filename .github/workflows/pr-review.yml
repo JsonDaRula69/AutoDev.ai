@@ -21,7 +21,6 @@ jobs:
           PR_USER: ${{ github.event.pull_request.user.login }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO_FULL_NAME: ${{ github.event.repository.full_name }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
 
@@ -58,7 +57,7 @@ jobs:
           # Use --insecure: Tailscale Funnel's TLS may not be trusted by
           # GitHub Actions runners. HMAC signature provides authentication.
           echo "Triggering Hermes review for PR #$PR_NUMBER: $PR_TITLE"
-          RESPONSE=$(curl -s -k --connect-timeout 15 -w "\n%{http_code}" -X POST \
+          RESPONSE=$(curl -s -k --connect-timeout 15 --max-time 30 -w "\n%{http_code}" -X POST \
             "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -H "X-GitHub-Event: pull_request" \
