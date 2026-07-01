@@ -109,7 +109,7 @@ export function formatMessage(channel: OutputChannel, content: string, opts?: Fo
   return `${style.color}${content}${RESET}\n`;
 }
 
-function wrapText(text: string, width: number): string {
+export function wrapText(text: string, width: number): string {
   const words = text.split(" ");
   const result: string[] = [];
   let line = "";
