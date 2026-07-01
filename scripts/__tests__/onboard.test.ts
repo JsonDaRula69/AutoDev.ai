@@ -190,7 +190,7 @@ test("runOnboard builds session with systemPromptOverride from harbor-master bod
     });
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     notify: () => {},
     piSdkOverride: deps,
     loadAgentOverride: () =>
@@ -238,7 +238,7 @@ test("runOnboard calls analyzeOnboardingIntent and injects results into opening 
 
     const analyzeCalls: any[] = [];
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     initialText: "We are building a financial dashboard. Security is critical.",
     notify: () => {},
     piSdkOverride: deps,
@@ -286,7 +286,7 @@ test("runOnboard prefers SessionManager.create and falls back to inMemory on fai
     const messages: any[] = [];
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     notify: (msg, level) => messages.push({ msg, level }),
     piSdkOverride: deps,
     loadAgentOverride: () =>
@@ -319,7 +319,7 @@ test("runOnboard throws descriptive error when both find and getDefault return n
 
     const { runOnboard } = await importOnboardModule();
     await expect(
-      runOnboard({ skipHyperplan: true, projectRoot,
+      runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
       notify: (msg, level) => messages.push({ msg, level }),
       piSdkOverride: deps,
       loadAgentOverride: () =>
@@ -345,7 +345,7 @@ test("runOnboard accumulates assistant text from message_end into conversationLo
     });
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     notify: () => {},
     piSdkOverride: deps,
     loadAgentOverride: () =>
@@ -389,7 +389,7 @@ test("runOnboard accumulates assistant text from message_end into conversationLo
     );
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     notify: () => {},
     piSdkOverride: deps,
     loadAgentOverride: () =>
@@ -426,7 +426,7 @@ test("runOnboard still returns 0 when session ends with error and writes harbor 
     const messages: any[] = [];
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     notify: (msg, level) => messages.push({ msg, level }),
     piSdkOverride: deps,
     loadAgentOverride: () =>
@@ -450,7 +450,7 @@ test("runOnboard returns 1 and skips session when loadAgent returns undefined", 
     const messages: any[] = [];
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     notify: (msg, level) => messages.push({ msg, level }),
     piSdkOverride: deps,
     loadAgentOverride: () => undefined,
@@ -489,7 +489,7 @@ test("runOnboard default path loads harbor-master agent body from file", async (
     );
 
     const { runOnboard } = await importOnboardModule();
-    const code = await runOnboard({ skipHyperplan: true, projectRoot,
+    const code = await runOnboard({ skipHyperplan: true, skipBackgroundResearch: true, projectRoot,
     notify: () => {},
     piSdkOverride: deps,
     analyzeOnboardingIntentOverride: () =>

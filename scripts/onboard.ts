@@ -31,6 +31,8 @@ import { writeHarborLog, writeHarborLogSummary } from "../extensions/autodev/onb
 import { startOnboardingTeam, endOnboardingTeam } from "../extensions/autodev/onboarding/mailbox.js";
 import { runHyperplan, type SpawnCriticDeps } from "../extensions/autodev/onboarding/hyperplan.js";
 import { createVerboseLogger, createSubAgentLogger, resolveVerboseConfig, type VerboseLogger } from "../extensions/autodev/onboarding/verbose.js";
+import { fireCodebaseExploration, fireTargetedResearch, fireRiskAssessment, type BackgroundResearchDeps } from "../extensions/autodev/onboarding/background-research.js";
+import { postObservation } from "../extensions/autodev/onboarding/mailbox.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -89,6 +91,7 @@ export interface OnboardOptions {
   readonly analyzeOnboardingIntentOverride?: (text: string) => OnboardingIntentAnalysis;
   readonly skipHyperplan?: boolean;
   readonly verbose?: boolean;
+  readonly skipBackgroundResearch?: boolean;
 }
 
 /** Minimal shape of a Harbor Master agent definition returned by loadAgent. */
@@ -201,6 +204,35 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   // 7. Build the session manager (try persistent, fall back to in-memory on failure).
   const sessionManager = buildSessionManager(sdk, agentDir, notify);
 
+  // 7b. Build background research deps — fires subagents during onboarding.
+  const bgDeps: BackgroundResearchDeps = {
+    projectRoot,
+    createSession: async (prompt: string, systemPrompt: string, modelId: string) => {
+      const bgModel = resolveModel(modelRegistry, modelId);
+      const bgSessionManager = sdk.SessionManager.inMemory();
+      const { session: bgSession } = await sdk.createAgentSession({
+        cwd: projectRoot,
+        model: bgModel,
+        thinkingLevel: "medium",
+        tools: ["read", "bash", "grep", "glob"],
+        sessionManager: bgSessionManager,
+        resourceLoader,
+        modelRegistry,
+        authStorage,
+      } as never);
+      return {
+        session: bgSession,
+        dispose: () => { try { bgSession.dispose(); } catch { /* ignore */ } },
+      };
+    },
+    postToMailbox: (from: string, kind: "note" | "flag" | "question" | "blocker", content: string) => {
+      postObservation(from, kind, content);
+      if (vlog.active) {
+        vlog.logToolCall("harbor-master", "mailbox", { from, kind, preview: content.slice(0, 100) });
+      }
+    },
+  };
+
   // 8. Create the session with the full extension active.
   const { session } = await sdk.createAgentSession({
     cwd: projectRoot,
@@ -229,6 +261,11 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
     vlog.logPrompt("harbor-master", openingPrompt.length);
     await session.prompt(openingPrompt);
     vlog.logPromptResult("harbor-master", conversationLog.length, conversationLog.filter(e => e.role === "assistant").length);
+
+    // Fire background codebase exploration — don't await, let it run in parallel.
+    if (!opts.skipBackgroundResearch) {
+      fireCodebaseExploration(bgDeps, openingPrompt.slice(0, 500)).catch(() => {});
+    }
 
     // Print the Harbor Master's opening response.
     const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
@@ -281,8 +318,22 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
         conversationLog.push({ role: "user", content: trimmed, timestamp: new Date().toISOString() });
         const logLengthBefore = conversationLog.length;
         vlog.logPrompt("harbor-master", trimmed.length);
+
+        // Fire background research based on user's response — runs in parallel with the HM's reply.
+        const conversationContext = conversationLog.map(e => `${e.role}: ${e.content.slice(0, 200)}`).join("\n");
+        if (!opts.skipBackgroundResearch) {
+          fireTargetedResearch(bgDeps, trimmed, conversationContext).catch(() => {});
+        }
+
         await session.prompt(trimmed);
         vlog.logPromptResult("harbor-master", conversationLog.length - logLengthBefore, conversationLog.slice(logLengthBefore).filter(e => e.role === "assistant").length);
+
+        // Fire risk assessment every 3rd user message.
+        const userMsgCount = conversationLog.filter(e => e.role === "user").length;
+        if (userMsgCount % 3 === 0 && !opts.skipBackgroundResearch) {
+          const ctx = conversationLog.map(e => `${e.role}: ${e.content.slice(0, 200)}`).join("\n");
+          fireRiskAssessment(bgDeps, ctx).catch(() => {});
+        }
 
         // Print any new assistant messages from this prompt.
         const newEntries = conversationLog.slice(logLengthBefore);
