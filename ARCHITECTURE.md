@@ -18,7 +18,7 @@ AutoDev runs as a single in-process runtime. Pi is the agent runtime. The AutoDe
 │   │                    pi Runtime                                │    │
 │   │   createAgentSession() per crew role                          │    │
 │   │   SessionManager.inMemory() for subagents                     │    │
-│   │   SessionManager.create() for persistent sessions            │    │
+│   │   SessionManager.continueRecent() for persistent sessions   │    │
 │   │   ExtensionAPI for tools, commands, events                   │    │
 │   │                                                              │    │
 │   │   ┌──────────────────────────────────────────────────────┐   │    │
@@ -762,7 +762,7 @@ GitHub issue labeled autodev-request
   Response delivered
         |
         v
-  Session disposed (or persisted via SessionManager.create)
+  Session disposed (or persisted via SessionManager.continueRecent)
 ```
 
 ---

@@ -33,7 +33,7 @@ import { runHyperplan, type SpawnCriticDeps } from "../extensions/autodev/onboar
 import { createVerboseLogger, createSubAgentLogger, resolveVerboseConfig, type VerboseLogger } from "../extensions/autodev/onboarding/verbose.js";
 import { fireCodebaseExploration, fireTargetedResearch, fireRiskAssessment, type BackgroundResearchDeps } from "../extensions/autodev/onboarding/background-research.js";
 import { postObservation } from "../extensions/autodev/onboarding/mailbox.js";
-import { formatMessage, formatSessionHeader, formatVerboseEvent } from "../extensions/autodev/onboarding/cli-format.js";
+import { formatMessage, formatSessionHeader, formatPrompt } from "../extensions/autodev/onboarding/cli-format.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -348,7 +348,7 @@ Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh
 
       const askQuestion = (): Promise<string> =>
         new Promise((resolve) => {
-          rl.question("\x1b[1m\x1b[32m> \x1b[0m", (answer) => resolve(answer));
+          rl.question(formatPrompt(""), (answer) => resolve(answer));
         });
 
       while (true) {

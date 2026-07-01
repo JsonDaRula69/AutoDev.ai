@@ -132,7 +132,7 @@ export function formatSessionHeader(projectRoot: string, isResuming: boolean): s
 }
 
 export function formatPrompt(label: string): string {
-  return `${BOLD}${GREEN}> ${RESET}`;
+  return `${BOLD}${GREEN}> ${label}${RESET}\n`;
 }
 
 export function formatDivider(): string {
