@@ -15,7 +15,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { isStepCompleted, markStepCompleted } from "./state.js";
 import { setEnvVars, readEnv } from "./env.js";
-import { setProviderKey, tryImportAuth, providerToEnvVar } from "./auth.js";
+import { setProviderKey, tryImportAuth, providerToEnvVar, readAuth } from "./auth.js";
 import type { Prompter } from "./prompts.js";
 import { validateLlmKey, validateVoyageKey, validateGithubToken, validateDiscordToken } from "./key-validator.js";
 
@@ -43,16 +43,31 @@ const STEP_VOYAGE = 4;
 const STEP_DISCORD = 5;
 const STEP_GITHUB = -1;
 
+const SUPPORTED_PROVIDERS = ["ollama-cloud", "openai", "anthropic", "google"] as const;
+
+async function detectConfiguredProvider(
+  authPath: string,
+  envMap: Map<string, string>,
+): Promise<string> {
+  const auth = await readAuth(authPath);
+  for (const p of SUPPORTED_PROVIDERS) {
+    if (auth[p] !== undefined) return p;
+  }
+  for (const p of SUPPORTED_PROVIDERS) {
+    if ((envMap.get(providerToEnvVar(p)) ?? "") !== "") return p;
+  }
+  return "ollama-cloud";
+}
+
 async function llmCredentialsValid(deps: ConfigModuleDeps): Promise<boolean> {
   try {
     const envPath = agentEnvPath(deps);
     const existing = await readEnv(deps.projectRoot, envPath);
-    const { tryImportAuth } = await import("./auth.js");
-    const auth = tryImportAuth(deps.authPath, deps.authPath, "ollama-cloud", "OLLAMA_API_KEY", envPath, deps.projectRoot);
-    if (!auth) return false;
-    const apiKey = existing.get("OLLAMA_API_KEY") ?? "";
+    const provider = await detectConfiguredProvider(deps.authPath, existing);
+    const envVarName = providerToEnvVar(provider);
+    const apiKey = existing.get(envVarName) ?? "";
     if (!apiKey || apiKey.startsWith("$")) return false;
-    const validation = await validateLlmKey("ollama-cloud", apiKey, {
+    const validation = await validateLlmKey(provider, apiKey, {
       ...(deps.fetchOverride ? { fetchOverride: deps.fetchOverride } : {}),
     });
     return validation.valid;
@@ -94,9 +109,13 @@ async function discordCredentialsValid(deps: ConfigModuleDeps): Promise<boolean>
 
 async function githubCredentialsValid(deps: ConfigModuleDeps): Promise<boolean> {
   try {
-    const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+    const envPath = agentEnvPath(deps);
+    const existing = await readEnv(deps.projectRoot, envPath);
+    const token = existing.get("GH_TOKEN") ?? existing.get("GITHUB_TOKEN") ?? "";
     if (!token) return false;
-    const validation = validateGithubToken(token);
+    const validation = validateGithubToken(token, {
+      ...(deps.execSyncOverride ? { execSyncOverride: deps.execSyncOverride as never } : {}),
+    });
     return validation.valid;
   } catch {
     return false;
