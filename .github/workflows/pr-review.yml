@@ -139,7 +139,7 @@ jobs:
                 --arg reviewer "$REVIEWER" \
                 '.[] | select(.user.login == $reviewer) | .body' \
                 | grep -oP 'Verdict:\s*\K(APPROVED|REQUEST CHANGES)' \
-                | tail -1)
+                | tail -1 || true)
 
               if [ -n "$COMMENT_VERDICT" ]; then
                 COMMENT_TIMESTAMP=$(echo "$COMMENTS" | jq -r \
