@@ -221,6 +221,16 @@ test("runOnboard builds session with systemPromptOverride from harbor-master bod
       "onboarding_finalize",
       "onboarding_check_mailbox",
       "task",
+      "search_docs",
+      "search_lore",
+      "suggest_lore",
+      "session_list",
+      "session_read",
+      "session_search",
+      "team_send_message",
+      "team_task_create",
+      "team_task_list",
+      "team_status",
     ]);
     expect(promptCalls.length).toBe(1);
     expect(promptCalls[0]).toContain("The visitor just arrived");
