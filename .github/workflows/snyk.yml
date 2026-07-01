@@ -1,0 +1,134 @@
+name: Snyk Security
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  snyk-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      # Generate package-lock.json for Snyk SCA (Bun lockfile not supported)
+      - run: npm install --package-lock-only
+
+      - uses: snyk/actions/setup@master
+
+      # SCA: dependency vulnerability scanning — block on HIGH/CRITICAL fixable
+      - name: Snyk test (SCA)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk test \
+            --severity-threshold=high \
+            --fail-on=upgradable \
+            --sarif-file-output=snyk-sca.sarif \
+            || true
+
+      # SAST: static analysis — block on HIGH findings
+      - name: Snyk code (SAST)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk code test \
+            --severity-threshold=high \
+            --sarif-file-output=snyk-code.sarif \
+            || true
+
+      # Upload SARIF to GitHub Security tab
+      - name: Upload SCA SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-sca.sarif
+          category: snyk-sca
+
+      - name: Upload SAST SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code
+
+      # Re-run tests with strict exit to actually fail the job
+      - name: Snyk SCA gate
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk test --severity-threshold=high --fail-on=upgradable --json-file-output=sca-results.json
+          EXIT=$?
+          if [ -f sca-results.json ]; then
+            VULNS=$(jq '.vulnerabilities | length' sca-results.json 2>/dev/null || echo "0")
+            echo "Found $VULNS HIGH/CRITICAL fixable vulnerabilities"
+          fi
+          exit $EXIT
+
+      - name: Snyk SAST gate
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk code test --severity-threshold=high --json-file-output=code-results.json
+          EXIT=$?
+          if [ -f code-results.json ]; then
+            ISSUES=$(jq '.results | length' code-results.json 2>/dev/null || echo "0")
+            echo "Found $ISSUES HIGH SAST findings"
+          fi
+          exit $EXIT
+
+  snyk-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - run: npm install --package-lock-only
+
+      - uses: snyk/actions/setup@master
+
+      # Establish continuous monitoring baseline
+      - name: Snyk monitor
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk monitor --project-name=AutoDev.ai || true
+
+      # Full scan — warn only (don't block)
+      - name: Snyk test (full, warn only)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk test --severity-threshold=low --sarif-file-output=snyk-sca.sarif || true
+          snyk code test --severity-threshold=low --sarif-file-output=snyk-code.sarif || true
+
+      - name: Upload SCA SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-sca.sarif
+          category: snyk-sca-main
+
+      - name: Upload SAST SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code-main
