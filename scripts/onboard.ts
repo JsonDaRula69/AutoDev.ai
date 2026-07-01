@@ -201,8 +201,51 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
   const resourceLoader = buildResourceLoader(sdk, projectRoot, agentDir, agentDef.systemPrompt);
   await resourceLoader.reload();
 
-  // 7. Build the session manager (try persistent, fall back to in-memory on failure).
-  const sessionManager = buildSessionManager(sdk, agentDir, notify);
+  // 7. Build the session manager — resumes most recent session if one exists.
+  const sessionManager = buildSessionManager(sdk, agentDir, projectRoot, notify);
+
+  // 7a. Check if resuming an existing session — aware of time elapsed and onboarding progress.
+  const existingEntries = sessionManager.getEntries?.() ?? [];
+  const isResuming = existingEntries.length > 0;
+  let resumeContext = "";
+  if (isResuming) {
+    const lastEntry = existingEntries[existingEntries.length - 1];
+    const lastTimestamp = lastEntry?.timestamp ? new Date(lastEntry.timestamp).getTime() : 0;
+    const elapsedMs = Date.now() - lastTimestamp;
+    const elapsedHours = Math.floor(elapsedMs / 3_600_000);
+    const elapsedMin = Math.floor(elapsedMs / 60_000);
+    const coverage = analyzeCoverage(existingEntries.map((e: any) => {
+      if (e.type === "message" && e.message) return e.message;
+      return { role: e.type, content: "" };
+    }));
+    const missing = coverage.gaps.length > 0
+      ? `Still need to cover: ${coverage.gaps.join(", ")}.`
+      : "All onboarding coverage areas are filled.";
+    const timeStr = elapsedHours > 0
+      ? `${elapsedHours} hour${elapsedHours > 1 ? "s" : ""}`
+      : elapsedMin > 0
+        ? `${elapsedMin} minute${elapsedMin > 1 ? "s" : ""}`
+        : "moments";
+
+    const recentTopics = existingEntries
+      .filter((e: any) => e.type === "message" && e.message?.role === "user")
+      .slice(-3)
+      .map((e: any) => e.message?.content?.slice(0, 100) ?? "")
+      .filter((c: string) => c.trim());
+
+    resumeContext = `[SYSTEM] The user has returned after ${timeStr}. You are resuming an onboarding session that has ${existingEntries.length} messages.
+
+Onboarding progress:
+${missing}
+
+Recent topics discussed:
+${recentTopics.length > 0 ? recentTopics.map((t: string, i: number) => `${i + 1}. ${t}`).join("\n") : "No recent user messages found."}
+
+Greet the user warmly. Acknowledge the time gap. Provide a brief progress update on what we've covered so far and what's still ahead. Then ask what they'd like to focus on next.
+
+Do NOT repeat the opening onboarding prompt. This is a continuation, not a fresh start.`;
+    notify(`Resuming onboarding session (${existingEntries.length} messages, last activity ${timeStr} ago).`, "info");
+  }
 
   // 7b. Build background research deps — fires subagents during onboarding.
   const bgDeps: BackgroundResearchDeps = {
@@ -254,25 +297,39 @@ export async function runOnboard(opts: OnboardOptions): Promise<number> {
     });
   }
 
-  // 10. Build and send the opening prompt, then enter interactive loop.
+  // 10. Send opening prompt (only for fresh sessions), then enter interactive loop.
   const openingPrompt = buildOpeningPrompt(intentAnalysis);
   try {
-    conversationLog.push({ role: "user", content: openingPrompt, timestamp: new Date().toISOString() });
-    vlog.logPrompt("harbor-master", openingPrompt.length);
-    await session.prompt(openingPrompt);
-    vlog.logPromptResult("harbor-master", conversationLog.length, conversationLog.filter(e => e.role === "assistant").length);
+    if (!isResuming) {
+      conversationLog.push({ role: "user", content: openingPrompt, timestamp: new Date().toISOString() });
+      vlog.logPrompt("harbor-master", openingPrompt.length);
+      await session.prompt(openingPrompt);
+      vlog.logPromptResult("harbor-master", conversationLog.length, conversationLog.filter(e => e.role === "assistant").length);
 
-    // Fire background codebase exploration — don't await, let it run in parallel.
-    if (!opts.skipBackgroundResearch) {
-      fireCodebaseExploration(bgDeps, openingPrompt.slice(0, 500)).catch(() => {});
-    }
+      if (!opts.skipBackgroundResearch) {
+        fireCodebaseExploration(bgDeps, openingPrompt.slice(0, 500)).catch(() => {});
+      }
 
-    // Print the Harbor Master's opening response.
-    const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
-    if (lastAssistant) {
-      process.stdout.write(`\n${lastAssistant.content}\n\n`);
-    } else if (vlog.active) {
-      console.error("[verbose:harbor-master] no assistant message found in conversation log after opening prompt");
+      const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
+      if (lastAssistant) {
+        process.stdout.write(`\n${lastAssistant.content}\n\n`);
+      } else if (vlog.active) {
+        console.error("[verbose:harbor-master] no assistant message found in conversation log after opening prompt");
+      }
+    } else {
+      conversationLog.push({ role: "user", content: resumeContext, timestamp: new Date().toISOString() });
+      vlog.logPrompt("harbor-master", resumeContext.length);
+      await session.prompt(resumeContext);
+      vlog.logPromptResult("harbor-master", conversationLog.length, conversationLog.filter(e => e.role === "assistant").length);
+
+      if (!opts.skipBackgroundResearch) {
+        fireCodebaseExploration(bgDeps, resumeContext.slice(0, 500)).catch(() => {});
+      }
+
+      const lastAssistant = [...conversationLog].reverse().find((e) => e.role === "assistant");
+      if (lastAssistant) {
+        process.stdout.write(`\n${lastAssistant.content}\n\n`);
+      }
     }
 
     // 10b. Interactive readline loop — let the user converse with the Harbor Master.
@@ -543,15 +600,16 @@ function buildResourceLoader(
 function buildSessionManager(
   sdk: PiSdkDeps,
   agentDir: string,
+  projectRoot: string,
   notify: (message: string, level: "info" | "warning" | "error") => void,
 ): SdkSessionManager {
   try {
-    const persistentPath = join(agentDir, "..", "memory", "harbor-master-session");
-    mkdirSync(persistentPath, { recursive: true });
-    return sdk.SessionManager.create(persistentPath);
+    const sessionDir = join(agentDir, "..", "memory", "harbor-master-session");
+    mkdirSync(sessionDir, { recursive: true });
+    return (sdk.SessionManager as any).continueRecent(projectRoot, sessionDir);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    notify(`Warning: could not create persistent session manager (${msg}); using in-memory session.`, "warning");
+    notify(`Warning: could not resume persistent session (${msg}); using in-memory session.`, "warning");
     return sdk.SessionManager.inMemory();
   }
 }

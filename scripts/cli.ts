@@ -16,6 +16,7 @@
  *   autodev doctor             — machine-level health check
  *   autodev config [sub]       — config module (runConfig, created in todo 4)
  *   autodev onboard            — launch Harbor Master onboarding
+ *   autodev resume             — resume existing onboarding session
  *   autodev status             — heartbeat state + active project
  *   autodev stop               — stop heartbeat timer
  *   autodev docs query <text>      — search both project and central docs
@@ -661,6 +662,9 @@ async function main(): Promise<number> {
 
     case "onboard":
       return cmdOnboard(rest);
+
+    case "resume":
+      return cmdOnboard(["--resume", ...rest]);
 
     case "status":
       return cmdStatus();

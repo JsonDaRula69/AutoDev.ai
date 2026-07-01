@@ -154,6 +154,7 @@ function makeFakeDeps(projectRoot: string): any {
     },
     SessionManager: {
       create: mock((dir: string) => ({ dir, kind: "persistent" })),
+      continueRecent: mock((_cwd: string, _dir?: string) => ({ kind: "persistent" })),
       inMemory: mock(() => ({ kind: "in-memory" })),
     },
     DefaultResourceLoader: DefaultResourceLoaderClass,
@@ -271,11 +272,11 @@ test("runOnboard calls analyzeOnboardingIntent and injects results into opening 
   }
 });
 
-test("runOnboard prefers SessionManager.create and falls back to inMemory on failure", async () => {
+test("runOnboard prefers SessionManager.continueRecent and falls back to inMemory on failure", async () => {
   const projectRoot = createTempDir();
   try {
     const deps = makeFakeDeps(projectRoot);
-    deps.SessionManager.create = mock(() => {
+    (deps.SessionManager as any).continueRecent = mock(() => {
       throw new Error("unwritable path");
     });
     const { session } = makeFakeSession();
@@ -295,7 +296,7 @@ test("runOnboard prefers SessionManager.create and falls back to inMemory on fai
       ({ hiddenIntentions: [], probingQuestions: [], stake: "unknown", technicalDepth: "mixed" }), });
 
     expect(code).toBe(0);
-    expect(deps.SessionManager.create).toHaveBeenCalled();
+    expect((deps.SessionManager as any).continueRecent).toHaveBeenCalled();
     expect(deps.SessionManager.inMemory).toHaveBeenCalled();
     expect(messages.some((m) => m.level === "warning" && m.msg.includes("in-memory"))).toBe(true);
 
