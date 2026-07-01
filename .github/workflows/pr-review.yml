@@ -87,8 +87,8 @@ jobs:
           set -uo pipefail
 
           # Poll the PR reviews API for a review from Traderbot-Auto-Dev
-          # Timeout after 10 minutes (40 iterations * 15s sleep)
-          MAX_ATTEMPTS=40
+          # Timeout after 15 minutes (60 iterations * 15s sleep)
+          MAX_ATTEMPTS=60
           SLEEP_INTERVAL=15
 
           echo "Polling for Hermes PR review on PR #$PR_NUMBER..."
@@ -140,6 +140,6 @@ jobs:
             sleep $SLEEP_INTERVAL
           done
 
-          echo "❌ Timed out waiting for Hermes review (10 minutes)"
+          echo "❌ Timed out waiting for Hermes review (15 minutes)"
           echo "The review may still be processing. Check the PR comments manually."
           exit 1
