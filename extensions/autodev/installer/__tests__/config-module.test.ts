@@ -174,7 +174,7 @@ test("handleDiscord no-TTY: prompt returns empty → warns, returns warning", as
   }
 });
 
-test("handleDiscord re-configurable: STEP_DISCORD complete → still prompts (no skip gate)", async () => {
+test("handleDiscord force re-config: --discord bypasses skip gate even when step completed", async () => {
   const prompter = new MockPrompter();
   prompter.answers = ["n"];
   const h = await makeHarness(prompter);
