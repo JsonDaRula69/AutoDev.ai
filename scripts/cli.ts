@@ -193,27 +193,21 @@ export async function cmdDoctor(opts?: {
 async function cmdConfig(parts: string[]): Promise<number> {
   const projectRoot = process.cwd();
   const authPath = await resolveAuthPath();
+  const subcommands = parts.length > 0 ? [parts[0]] : ["llm", "voyage", "discord", "github"];
 
-  const validSubs = ["llm", "voyage", "discord", "github", "verbose"];
-  const explicitSubs = parts
-    .map((p) => p.startsWith("--") ? p.slice(2) : p)
-    .filter((p) => validSubs.includes(p));
-
-  if (parts.length > 0 && explicitSubs.length === 0) {
-    notify("Usage: autodev config [--llm|--voyage|--discord|--github|--verbose]", "info");
+  const first = parts[0];
+  if (first !== undefined && !["llm", "voyage", "discord", "github"].includes(first)) {
+    notify("Usage: autodev config <sub-command>", "info");
     notify("", "info");
     notify("Sub-commands:", "info");
-    notify("  --llm      — configure LLM provider credentials", "info");
-    notify("  --voyage   — configure VoyageAI embeddings API key", "info");
-    notify("  --discord  — configure Discord bot token + channel ID", "info");
-    notify("  --github   — configure GitHub auth (PAT or gh auth login)", "info");
-    notify("  --verbose  — toggle verbose mode (tool calls, thinking, sub-agents)", "info");
+    notify("  llm      — configure LLM provider credentials", "info");
+    notify("  voyage   — configure VoyageAI embeddings API key", "info");
+    notify("  discord  — configure Discord bot token + channel ID", "info");
+    notify("  github   — configure GitHub auth (PAT or gh auth login)", "info");
     notify("", "info");
-    notify("Run `autodev config` with no flags to validate all and reconfigure any invalid.", "info");
+    notify("Run `autodev config` with no sub-command to configure all in sequence.", "info");
     return 1;
   }
-
-  const subcommands = explicitSubs.length > 0 ? explicitSubs : ["llm", "voyage", "discord", "github", "verbose"];
 
   try {
     const { runConfig } = await import(
