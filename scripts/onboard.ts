@@ -606,7 +606,7 @@ function buildSessionManager(
   try {
     const sessionDir = join(agentDir, "..", "memory", "harbor-master-session");
     mkdirSync(sessionDir, { recursive: true });
-    return (sdk.SessionManager as any).continueRecent(projectRoot, sessionDir);
+    return sdk.SessionManager.continueRecent(projectRoot, sessionDir);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     notify(`Warning: could not resume persistent session (${msg}); using in-memory session.`, "warning");

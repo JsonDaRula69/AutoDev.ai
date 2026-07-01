@@ -664,7 +664,7 @@ async function main(): Promise<number> {
       return cmdOnboard(rest);
 
     case "resume":
-      return cmdOnboard(["--resume", ...rest]);
+      return cmdOnboard(rest);
 
     case "status":
       return cmdStatus();
